@@ -161,7 +161,7 @@ jobs:
 
       - name: Create release on public repo
         env:
-          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
 
