@@ -36,25 +36,25 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 	// Print config info
 	paths := config.GetPaths(cfg)
-	log.Printf("\n\U0001F4C1 Base directory: %s\n", cfg.BaseDir)
-	log.Printf("\U0001F4C1 Database: %s\n", paths.Database)
-	log.Printf("\U0001F4C1 Log file: %s/skulto.log\n", cfg.BaseDir)
+	log.Printf("\n📁 Base directory: %s\n", cfg.BaseDir)
+	log.Printf("📁 Database: %s\n", paths.Database)
+	log.Printf("🗂️ Log file: %s/skulto.log\n", cfg.BaseDir)
 
 	if cfg.GitHub.Token != "" {
-		log.Println("\U0001F511 GitHub token: configured")
+		log.Println("\nGitHub token: configured")
 	} else {
-		log.Println("\U0001F511 GitHub token: not set (set GITHUB_TOKEN for higher rate limits)")
+		log.Println("\nGitHub token: not set (set GITHUB_TOKEN for higher rate limits)")
 	}
 
 	// Initialize database
-	log.Println("\n\U0001F4CA Initializing database...")
+	log.Println("\nInitializing database...")
 	database, err := db.New(db.DefaultConfig(paths.Database))
 	if err != nil {
-		return fmt.Errorf("initialize database: %w", err)
+		return fmt.Errorf("\ninitialize database: %w", err)
 	}
 	defer func() {
 		if err := database.Close(); err != nil {
-			log.Errorf("\U000026A0\U0000FE0F  Failed to close database: %v\n", err)
+			log.Errorf("\nFailed to close database: %v\n", err)
 		}
 	}()
 
@@ -74,7 +74,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	// Initialize vector store and background indexer if API key is set
 	var bgIndexer *search.BackgroundIndexer
 	if cfg.Embedding.APIKey != "" {
-		log.Println("\n\U0001F50D Semantic search: enabled (OPENAI_API_KEY found)")
+		log.Println("\nSemantic search: enabled (OPENAI_API_KEY found)")
 
 		vectorDir := cfg.Embedding.DataDir
 		if vectorDir == "" {
@@ -87,7 +87,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 			Model:     cfg.Embedding.Model,
 		})
 		if err != nil {
-			log.Printf("   \U000026A0\U0000FE0F  Could not initialize vector store: %v\n", err)
+			log.Printf("   Could not initialize vector store: %v\n", err)
 			log.Println("   Falling back to keyword-only search")
 		} else {
 			bgIndexer = search.NewBackgroundIndexer(
@@ -104,20 +104,18 @@ func runTUI(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		log.Println("\n\U0001F50D Semantic search: disabled (set OPENAI_API_KEY to enable)")
+		log.Println("\nSemantic search: disabled (set OPENAI_API_KEY to enable)")
 	}
 
 	// Telemetry status
 	if telemetry.IsEnabled() {
-		log.Println("\n\U0001F4CA Telemetry: ON (set SKULTO_TELEMETRY_TRACKING_ENABLED=false to disable)")
+		log.Println("\n📞 Telemetry: ON (set SKULTO_TELEMETRY_TRACKING_ENABLED=false to disable)")
 		log.Printf("   Anon ID: %s\n", database.GetOrCreateTrackingID())
 	} else {
-		log.Println("\n\U0001F4CA Telemetry: OFF")
+		log.Println("\nTelemetry: OFF")
 	}
 
 	log.Println("\n\U0001F480 Launching Skulto TUI...")
-	log.Println("   Press / to search, \u2193 to browse, q to quit")
-
 	return tui.RunWithIndexer(database, cfg, bgIndexer, telemetryClient)
 }
 

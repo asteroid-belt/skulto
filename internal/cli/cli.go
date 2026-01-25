@@ -31,8 +31,13 @@ across multiple platforms (Claude, Cursor, Copilot, Codex, OpenCode, Windsurf).
 Run without arguments to launch the interactive TUI.
 
 Telemetry:
-  Telemetry is disabled by default. To help improve Skulto, opt in with:
-  SKULTO_TELEMETRY_TRACKING_ENABLED=true`,
+  Telemetry is enabled by default, always anonymous, and will never track
+  personal information, custom/local data, or IP addresses.
+
+  It will only be used to improve Skulto.
+
+  Opt-out with:
+  	SKULTO_TELEMETRY_TRACKING_ENABLED=false`,
 	SilenceUsage: true,
 	RunE:         runTUI,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
