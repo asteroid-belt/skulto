@@ -1,6 +1,6 @@
 // Skulto - Cross-Platform AI Skills Management
 //
-// A punk-rock themed, offline-first CLI tool for managing AI coding skills
+// An offline-first CLI tool for managing AI coding skills
 // across multiple platforms (Claude, Cursor, Copilot, Codex, OpenCode, Windsurf).
 package main
 

@@ -786,7 +786,7 @@ func (hv *HomeView) renderHeader() string {
 		Italic(true).
 		PaddingTop(1)
 
-	ver := versionStyle.Render(fmt.Sprintf("v%s", version.Version))
+	ver := versionStyle.Render(version.Version)
 
 	// Combine skull and title
 	header := lipgloss.JoinVertical(lipgloss.Center, skullStyle.Render(skull), ver)
