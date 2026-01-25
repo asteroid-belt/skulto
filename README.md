@@ -19,6 +19,8 @@
    ╚════════════════════════════════════════════════════════╝
 ```
 
+![Skulto Demo](assets/demo.gif)
+
 ## What is Skulto?
 
 Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It provides:
