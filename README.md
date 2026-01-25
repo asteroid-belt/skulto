@@ -29,7 +29,7 @@ Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It 
 2. **Full-text search** - SQLite FTS5-powered search across all indexed skills
 3. **Security scanning** - Detect prompt injection and dangerous code patterns
 4. **Skill installation** - Install skills to AI tool directories via symlinks
-5. **Interactive TUI** - Bubble Tea-powered terminal interface with vim keybindings
+5. **Interactive TUI** - Bubble Tea-powered terminal interface with custom keybindings
 
 ## Features
 
