@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -40,14 +41,14 @@ func RenderSelectedSkill(skill models.Skill, style SkillItemStyle) string {
 // renderSkillItemSimple renders a skill item with title and description only
 func renderSkillItemSimple(skill models.Skill) string {
 	itemStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5")).
+		Foreground(theme.Current.Text).
 		MarginTop(1).
 		MarginLeft(1).
 		MarginRight(2)
 
 	title := lipgloss.NewStyle().Bold(true).Render(skill.Title)
 	desc := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		Render(truncate(skill.Description, 140))
 
@@ -57,7 +58,7 @@ func renderSkillItemSimple(skill models.Skill) string {
 // renderSelectedSkillSimple renders a selected skill item with title and description only
 func renderSelectedSkillSimple(skill models.Skill) string {
 	boxStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(theme.Current.TextHighlight).
 		MarginTop(1).
 		MarginLeft(1).
 		MarginRight(2).
@@ -65,10 +66,10 @@ func renderSelectedSkillSimple(skill models.Skill) string {
 
 	title := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Render(skill.Title)
 	desc := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		Render(truncate(skill.Description, 140))
 
@@ -78,17 +79,17 @@ func renderSelectedSkillSimple(skill models.Skill) string {
 // renderSkillItemDetailed renders a skill item with metadata (title, description, author, category)
 func renderSkillItemDetailed(skill models.Skill) string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(theme.Current.TextHighlight).
 		Bold(true)
 
 	sourceStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5"))
+		Foreground(theme.Current.Text)
 
 	metaStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true)
 
 	itemStyle := lipgloss.NewStyle().
@@ -113,17 +114,17 @@ func renderSkillItemDetailed(skill models.Skill) string {
 // renderSelectedSkillDetailed renders a selected skill item with metadata (title, description, author, category)
 func renderSelectedSkillDetailed(skill models.Skill) string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true)
 
 	sourceStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5"))
+		Foreground(theme.Current.Text)
 
 	metaStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true)
 
 	boxStyle := lipgloss.NewStyle().

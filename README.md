@@ -25,7 +25,7 @@
 
 Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It provides:
 
-1. **Repository management** - Add, sync, and remove skill repositories from GitHub
+1. **Repository management** - Add, sync, and remove skill repositories
 2. **Full-text search** - SQLite FTS5-powered search across all indexed skills
 3. **Security scanning** - Detect prompt injection and dangerous code patterns
 4. **Skill installation** - Install skills to AI tool directories via symlinks
@@ -82,12 +82,14 @@ make build
 ```bash
 # 1. Set your GitHub token for faster syncing (optional but recommended)
 export GITHUB_TOKEN=ghp_your_token_here
+
+# 2. Build app
 make build
 
-# 2. Add a skill repository
+# 3. Add a skill repository
 ./build/skulto add asteroid-belt/skills
 
-# 3. Launch the TUI
+# 4. Launch the TUI
 ./build/skulto
 ```
 
@@ -123,15 +125,15 @@ The home view displays three columns:
 2. **Recently Viewed Skills** - Skills you've recently viewed
 3. **Top Tags** - Popular skill categories
 
-### Skill Details View
+### Skill Details
 
 When you select a skill, you'll see:
 
+- **Install** - Ability to install non-local skills
 - **Metadata** - Author, category, source repository
 - **Tags** - Categorized skill tags
 - **Security status** - Threat level from security scan
 - **Full markdown content** - Rendered with syntax highlighting and scrolling
-- **Favorite toggle** - Press `f` to bookmark a skill
 - **Copy to clipboard** - Press `c` to copy the full skill content
 
 ### CLI Commands
@@ -228,6 +230,7 @@ Skulto stores data in `~/.skulto/`:
 | Path | Purpose |
 | --- | --- |
 | `~/.skulto/skulto.db` | SQLite database |
+| `~/.skulto/skulto.log` | Logfile |
 | `~/.skulto/repositories/` | Cloned git repositories |
 
 ## Development
@@ -298,7 +301,7 @@ To opt-out:
 export SKULTO_TELEMETRY_TRACKING_ENABLED=false
 ```
 
-No personal data, no skill content, no IP addresses are collected.
+No personal data, no IP addresses are collected. See more in [events](./internal/telemetry/events.go).
 
 ## Contributing
 

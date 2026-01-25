@@ -10,6 +10,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/telemetry"
 	"github.com/asteroid-belt/skulto/internal/tui/components"
 	"github.com/asteroid-belt/skulto/internal/tui/design"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/asteroid-belt/skulto/pkg/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -479,7 +480,7 @@ func (hv *HomeView) renderSkillsColumnsWithLimit(maxItems int) string {
 // renderLoading shows a loading message.
 func (hv *HomeView) renderLoading() string {
 	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		Align(lipgloss.Center).
 		Width(hv.width)
@@ -491,7 +492,7 @@ func (hv *HomeView) renderLoading() string {
 // renderWelcome renders the welcome section.
 func (hv *HomeView) renderWelcome() string {
 	welcomeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true).
 		MarginLeft(1).
 		MarginRight(2).
@@ -499,7 +500,7 @@ func (hv *HomeView) renderWelcome() string {
 		MarginBottom(1)
 
 	msgStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5")).
+		Foreground(theme.Current.Text).
 		MarginLeft(1).
 		MarginRight(2).
 		MarginBottom(1)
@@ -511,13 +512,13 @@ func (hv *HomeView) renderWelcome() string {
 // renderRecentSkillsWithLimit renders recent skills with scrolling support.
 func (hv *HomeView) renderRecentSkillsWithLimit(columnActive bool, maxItems int) string {
 	// Make the title brighter if this column is active
-	titleColor := "#6B6B6B"
+	titleColor := theme.Current.TextMuted
 	if columnActive {
-		titleColor = "#F1C40F"
+		titleColor = theme.Current.Accent
 	}
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(titleColor)).
+		Foreground(titleColor).
 		Bold(true).
 		MarginLeft(1).
 		MarginTop(1)
@@ -557,7 +558,7 @@ func (hv *HomeView) renderRecentSkillsWithLimit(columnActive bool, maxItems int)
 	result := title + "\n" + strings.Join(items, "\n")
 	if endIdx < total {
 		moreStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")).
+			Foreground(theme.Current.TextMuted).
 			Italic(true).
 			MarginLeft(2)
 		result += "\n" + moreStyle.Render(fmt.Sprintf("↓ %d more...", total-endIdx))
@@ -569,13 +570,13 @@ func (hv *HomeView) renderRecentSkillsWithLimit(columnActive bool, maxItems int)
 // renderLoadedSkillsWithLimit renders installed skills with scrolling support.
 func (hv *HomeView) renderLoadedSkillsWithLimit(columnActive bool, maxItems int) string {
 	// Make the title brighter if this column is active
-	titleColor := "#6B6B6B"
+	titleColor := theme.Current.TextMuted
 	if columnActive {
-		titleColor = "#F1C40F"
+		titleColor = theme.Current.Accent
 	}
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(titleColor)).
+		Foreground(titleColor).
 		Bold(true).
 		MarginLeft(1).
 		MarginTop(1)
@@ -615,7 +616,7 @@ func (hv *HomeView) renderLoadedSkillsWithLimit(columnActive bool, maxItems int)
 	result := title + "\n" + strings.Join(items, "\n")
 	if endIdx < total {
 		moreStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")).
+			Foreground(theme.Current.TextMuted).
 			Italic(true).
 			MarginLeft(2)
 		result += "\n" + moreStyle.Render(fmt.Sprintf("↓ %d more...", total-endIdx))
@@ -631,13 +632,13 @@ func (hv *HomeView) renderTopTags(isActive bool) string {
 	}
 
 	// Make the title brighter if this column is active
-	titleColor := "#6B6B6B"
+	titleColor := theme.Current.TextMuted
 	if isActive {
-		titleColor = "#F1C40F"
+		titleColor = theme.Current.Accent
 	}
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(titleColor)).
+		Foreground(titleColor).
 		Bold(true).
 		Padding(0, 0, 1, 0).
 		MarginLeft(2).
@@ -651,28 +652,28 @@ func (hv *HomeView) renderTopTags(isActive bool) string {
 	for i, tag := range hv.topTags {
 		var rendered string
 		if isActive && i == hv.selectedIdx {
-			// Render as selected - black background, white foreground
+			// Render as selected - inverted colors
 			tagStyle := lipgloss.NewStyle().
-				Background(lipgloss.Color("#000000")).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(theme.Current.TextHighlight).
+				Foreground(theme.Current.Background).
 				Padding(0, 1).
 				Margin(0, 1, 0, 0).
 				Bold(true)
 			rendered = tagStyle.Render(fmt.Sprintf("%s (%d)", tag.Name, tag.Count))
 		} else if tag.ID == "mine" {
-			// Special styling for "mine" tag - bold with black foreground
+			// Special styling for "mine" tag - bold with contrasting foreground
 			tagStyle := lipgloss.NewStyle().
-				Background(getTagColor(tag.Category)).
-				Foreground(lipgloss.Color("#000000")).
+				Background(theme.GetTagColor(tag.Category)).
+				Foreground(theme.Current.Background).
 				Bold(true).
 				Padding(0, 1).
 				Margin(0, 1, 0, 0)
 			rendered = tagStyle.Render(fmt.Sprintf("%s (%d)", tag.Name, tag.Count))
 		} else {
-			// Normal rendering with black foreground for bright backgrounds
+			// Normal rendering with contrasting foreground for bright backgrounds
 			tagStyle := lipgloss.NewStyle().
-				Background(getTagColor(tag.Category)).
-				Foreground(lipgloss.Color("#000000")).
+				Background(theme.GetTagColor(tag.Category)).
+				Foreground(theme.Current.Background).
 				Padding(0, 1).
 				Margin(0, 1, 0, 0)
 			rendered = tagStyle.Render(fmt.Sprintf("%s (%d)", tag.Name, tag.Count))
@@ -757,7 +758,7 @@ func (hv *HomeView) renderTopTags(isActive bool) string {
 // renderEmptyState renders an empty state message.
 func (hv *HomeView) renderEmptyState(msg string) string {
 	emptyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		MarginLeft(2).
 		MarginTop(2)
@@ -777,12 +778,12 @@ func (hv *HomeView) renderHeader() string {
 
 	// Format skull with punk rock colors
 	skullStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true)
 
 	// Format version
 	versionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		PaddingTop(1)
 
@@ -804,7 +805,7 @@ func (hv *HomeView) renderHeader() string {
 func (hv *HomeView) renderFooterWithHeight(height int) string {
 	// Left: stats
 	leftStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	left := leftStyle.Render(fmt.Sprintf("[ %d skills • %d tags ]",
 		hv.skillCount, hv.tagCount))
@@ -825,7 +826,7 @@ func (hv *HomeView) renderFooterWithHeight(height int) string {
 	// Override with indexing indicator if indexing
 	if hv.indexing {
 		indexStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F1C40F")).
+			Foreground(theme.Current.Accent).
 			Bold(true)
 		center = indexStyle.Render(hv.indexingProgress)
 	}
@@ -844,7 +845,7 @@ func (hv *HomeView) renderFooterWithHeight(height int) string {
 	}
 
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 1).
 		Width(footerWidth).
 		Height(height).
@@ -864,7 +865,7 @@ func (hv *HomeView) renderPullProgress() string {
 	if hv.pullTotal == 0 {
 		// Initial state - show "Starting..."
 		pullStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#10B981")).
+			Foreground(theme.Current.Success).
 			Bold(true)
 		return pullStyle.Render("⚡ Starting pull...")
 	}
@@ -881,14 +882,14 @@ func (hv *HomeView) renderPullProgress() string {
 
 	// Format: ⚡ [████████░░░░] 8/12 repo-name
 	progressStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#10B981")).
+		Foreground(theme.Current.Success).
 		Bold(true)
 
 	barStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#D4A84B"))
+		Foreground(theme.Current.Accent)
 
 	countStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	// Use full repo name since it's now centered with more space
 	repoName := hv.pullRepoName
@@ -906,7 +907,7 @@ func (hv *HomeView) renderScanProgress() string {
 	if hv.scanTotal == 0 {
 		// Initial state
 		scanStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
+			Foreground(theme.Current.Error).
 			Bold(true)
 		return scanStyle.Render("🔒 Starting security scan...")
 	}
@@ -923,14 +924,14 @@ func (hv *HomeView) renderScanProgress() string {
 
 	// Format: 🔒 [████████░░░░] 8/12 Scanning repo-name
 	scanStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF6B6B")).
+		Foreground(theme.Current.Error).
 		Bold(true)
 
 	barStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF9999"))
+		Foreground(theme.Current.Warning)
 
 	countStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	// Truncate repo name if too long
 	repoName := hv.scanRepoName
@@ -944,24 +945,6 @@ func (hv *HomeView) renderScanProgress() string {
 		scanStyle.Render("Scanning "+repoName)
 
 	return result
-}
-
-// getTagColor returns the color for a tag category.
-func getTagColor(category string) lipgloss.Color {
-	switch category {
-	case "language":
-		return lipgloss.Color("#8B5CF6") // Purple
-	case "framework":
-		return lipgloss.Color("#EC4899") // Pink
-	case "tool":
-		return lipgloss.Color("#10B981") // Emerald
-	case "concept":
-		return lipgloss.Color("#F59E0B") // Amber
-	case "mine":
-		return lipgloss.Color("#DC143C") // Crimson (Skulto accent)
-	default:
-		return lipgloss.Color("#F1C40F") // Gold
-	}
 }
 
 // HandleMouse handles mouse events for scrolling.

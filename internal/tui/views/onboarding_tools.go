@@ -4,6 +4,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -109,14 +110,14 @@ func (v *OnboardingToolsView) View() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("196")).
+		Foreground(theme.Current.Primary).
 		MarginBottom(1)
 
 	title := titleStyle.Render("🔧 Select AI Tools to Sync")
 
 	// Subtitle
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(theme.Current.TextMuted).
 		MarginBottom(2)
 
 	subtitle := subtitleStyle.Render("Choose which platforms to export your skills to")
@@ -147,8 +148,8 @@ func (v *OnboardingToolsView) View() string {
 		itemStyle := lipgloss.NewStyle()
 		if i == v.currentSelection {
 			itemStyle = itemStyle.
-				Background(lipgloss.Color("238")).
-				Foreground(lipgloss.Color("220")).
+				Background(theme.Current.Surface).
+				Foreground(theme.Current.Accent).
 				Bold(true).
 				Padding(0, 1)
 		}
@@ -161,7 +162,7 @@ func (v *OnboardingToolsView) View() string {
 
 	// Instructions
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(theme.Current.TextMuted).
 		MarginTop(2)
 
 	instructions := instructionStyle.Render(
@@ -187,7 +188,7 @@ func (v *OnboardingToolsView) View() string {
 
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(theme.Current.Primary).
 		Padding(2, 3).
 		MaxWidth(maxWidth)
 

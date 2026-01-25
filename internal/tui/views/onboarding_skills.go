@@ -7,6 +7,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -263,14 +264,14 @@ func (v *OnboardingSkillsView) View() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("196")).
+		Foreground(theme.Current.Primary).
 		MarginBottom(1)
 
 	title := titleStyle.Render("Select Skills to Install")
 
 	// Subtitle
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(theme.Current.TextMuted).
 		MarginBottom(2)
 
 	subtitle := subtitleStyle.Render("Choose which skills to add to your AI tools")
@@ -298,7 +299,7 @@ func (v *OnboardingSkillsView) View() string {
 
 	// Instructions
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(theme.Current.TextMuted).
 		MarginTop(2)
 
 	var instructions string
@@ -326,7 +327,7 @@ func (v *OnboardingSkillsView) View() string {
 	// Create bordered dialog with responsive width
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(theme.Current.Primary).
 		Padding(2, 3).
 		MaxWidth(maxWidth)
 
@@ -353,7 +354,7 @@ func (v *OnboardingSkillsView) View() string {
 // renderLoading renders the loading state.
 func (v *OnboardingSkillsView) renderLoading() string {
 	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("220")).
+		Foreground(theme.Current.Accent).
 		Italic(true)
 
 	return loadingStyle.Render("Fetching skills from primary repository...")
@@ -362,7 +363,7 @@ func (v *OnboardingSkillsView) renderLoading() string {
 // renderError renders the error state with text wrapping.
 func (v *OnboardingSkillsView) renderError(maxWidth int) string {
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
+		Foreground(theme.Current.Error).
 		Width(maxWidth)
 
 	return errorStyle.Render(fmt.Sprintf("Error: %s", v.errorMsg))
@@ -372,7 +373,7 @@ func (v *OnboardingSkillsView) renderError(maxWidth int) string {
 func (v *OnboardingSkillsView) renderChecklist() string {
 	if len(v.newSkills) == 0 && len(v.installedSkills) == 0 {
 		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
+			Foreground(theme.Current.TextMuted).
 			Italic(true)
 		return emptyStyle.Render("No skills found in the primary repository.")
 	}
@@ -383,7 +384,7 @@ func (v *OnboardingSkillsView) renderChecklist() string {
 	if len(v.newSkills) > 0 {
 		sectionHeader := lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("220")).
+			Foreground(theme.Current.Accent).
 			MarginBottom(1).
 			Render("New Skills")
 
@@ -401,7 +402,7 @@ func (v *OnboardingSkillsView) renderChecklist() string {
 	if len(v.installedSkills) > 0 {
 		sectionHeader := lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("245")).
+			Foreground(theme.Current.TextMuted).
 			MarginTop(1).
 			MarginBottom(1).
 			Render("Already Installed")
@@ -447,13 +448,13 @@ func (v *OnboardingSkillsView) renderSkillItem(item SkillItem, isSelected bool, 
 	itemStyle := lipgloss.NewStyle()
 	if isSelected {
 		itemStyle = itemStyle.
-			Background(lipgloss.Color("238")).
-			Foreground(lipgloss.Color("220")).
+			Background(theme.Current.Surface).
+			Foreground(theme.Current.Accent).
 			Bold(true).
 			Padding(0, 1)
 	} else if isInstalled {
 		itemStyle = itemStyle.
-			Foreground(lipgloss.Color("245"))
+			Foreground(theme.Current.TextMuted)
 	}
 
 	return itemStyle.Render(line)

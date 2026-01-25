@@ -6,6 +6,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -70,7 +71,7 @@ func (hv *HelpView) Update(key string) (bool, bool) {
 func (hv *HelpView) View() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		MarginLeft(1).
 		MarginTop(1).
@@ -83,7 +84,7 @@ func (hv *HelpView) View() string {
 
 	// Section header style
 	sectionHeaderStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true).
 		MarginLeft(1).
 		MarginTop(1)
@@ -98,7 +99,7 @@ func (hv *HelpView) View() string {
 
 	// Footer
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		MarginTop(1).
 		MarginLeft(1)
@@ -167,7 +168,7 @@ func (hv *HelpView) renderCommandTable(commands []Command) string {
 
 	// Header
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true).
 		Padding(0, 1)
 
@@ -183,7 +184,7 @@ func (hv *HelpView) renderCommandTable(commands []Command) string {
 
 	// Separator
 	separatorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 
 	separator := separatorStyle.Render(strings.Repeat("─", hv.width-4))
 
@@ -193,13 +194,13 @@ func (hv *HelpView) renderCommandTable(commands []Command) string {
 	rows = append(rows, separator)
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		Padding(0, 1).
 		Width(keyColWidth)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5")).
+		Foreground(theme.Current.Text).
 		Padding(0, 1).
 		Width(descColWidth)
 

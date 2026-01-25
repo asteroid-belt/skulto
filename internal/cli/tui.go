@@ -38,7 +38,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	paths := config.GetPaths(cfg)
 	log.Printf("\n📁 Base directory: %s\n", cfg.BaseDir)
 	log.Printf("📁 Database: %s\n", paths.Database)
-	log.Printf("🗂️ Log file: %s/skulto.log\n", cfg.BaseDir)
+	log.Printf("🗂️  Log file: %s/skulto.log\n", cfg.BaseDir)
 
 	if cfg.GitHub.Token != "" {
 		log.Println("\nGitHub token: configured")

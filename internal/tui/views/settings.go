@@ -12,6 +12,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -283,7 +284,7 @@ func (sv *SettingsView) renderHeader() string {
 	title := fmt.Sprintf("Settings - %s", sectionNames[sv.section])
 
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00D7FF")).
+		Foreground(theme.Current.Info).
 		Bold(true)
 
 	return headerStyle.Render(title)
@@ -470,16 +471,16 @@ func (sv *SettingsView) renderFooter() string {
 	var telemetryLines string
 	if telemetry.IsEnabled() {
 		trackingID := sv.db.GetOrCreateTrackingID()
-		telemetryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60")) // Green
+		telemetryStyle := lipgloss.NewStyle().Foreground(theme.Current.Success)
 		telemetryLines = telemetryStyle.Render("Telemetry: ON (set SKULTO_TELEMETRY_TRACKING_ENABLED=false to disable)") + "\n" +
 			telemetryStyle.Render(fmt.Sprintf("Anon ID: %s", trackingID))
 	} else {
-		telemetryStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D")) // Gray
+		telemetryStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
 		telemetryLines = telemetryStyle.Render("Telemetry: OFF")
 	}
 
 	// Navigation line
-	navStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D")).
+	navStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted).
 		PaddingTop(1)
 	navLine := navStyle.Render(fmt.Sprintf("%s | %s | %s", positionStr, sectionStr, helpStr))
 

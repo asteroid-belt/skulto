@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -43,22 +44,22 @@ func (c *ConfirmDialog) Toggle() {
 // View renders the confirmation dialog.
 func (c *ConfirmDialog) View() string {
 	yesStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 2)
 
 	noStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 2)
 
 	if c.selected {
 		yesStyle = yesStyle.
-			Background(lipgloss.Color("220")).
-			Foreground(lipgloss.Color("0")).
+			Background(theme.Current.Accent).
+			Foreground(theme.Current.Background).
 			Bold(true)
 	} else {
 		noStyle = noStyle.
-			Background(lipgloss.Color("220")).
-			Foreground(lipgloss.Color("0")).
+			Background(theme.Current.Accent).
+			Foreground(theme.Current.Background).
 			Bold(true)
 	}
 
@@ -73,12 +74,12 @@ func (c *ConfirmDialog) View() string {
 
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
+		BorderForeground(theme.Current.Primary).
 		Padding(1, 2).
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Center,
-				lipgloss.NewStyle().Bold(true).Render(c.title),
+				lipgloss.NewStyle().Bold(true).Foreground(theme.Current.Text).Render(c.title),
 				"",
 				c.message,
 				"",

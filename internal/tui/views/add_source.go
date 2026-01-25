@@ -6,6 +6,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/scraper"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -30,10 +31,10 @@ func NewAddSourceView(database *db.DB, conf *config.Config) *AddSourceView {
 	ti.Width = 40
 
 	// Style the input
-	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E5E5"))
-	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F"))
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#DC143C"))
+	ti.TextStyle = lipgloss.NewStyle().Foreground(theme.Current.Text)
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(theme.Current.Accent)
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(theme.Current.Primary)
 
 	return &AddSourceView{
 		db:    database,
@@ -132,34 +133,34 @@ func (asv *AddSourceView) GetRepositoryURL() string {
 func (asv *AddSourceView) View() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true).
 		MarginBottom(1)
 	title := titleStyle.Render("Add Source Repository")
 
 	// Input label
 	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5")).
+		Foreground(theme.Current.Text).
 		MarginBottom(1)
 	label := labelStyle.Render("Repository URL (owner/repo):")
 
 	// Input field
 	inputStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#F1C40F")).
+		BorderForeground(theme.Current.Accent).
 		Padding(0, 1)
 	inputField := inputStyle.Render(asv.input.View())
 
 	// Example text
 	exampleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		MarginBottom(1)
 	example := exampleStyle.Render("Example: anthropics/anthropic-cookbook")
 
 	// Warning message
 	warningStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Warning).
 		MarginTop(1).
 		MarginBottom(1)
 	warning := warningStyle.Render(
@@ -179,7 +180,7 @@ func (asv *AddSourceView) View() string {
 	// Add error message if present
 	if asv.error != "" {
 		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
+			Foreground(theme.Current.Error).
 			MarginTop(1).
 			Bold(true)
 		contentParts = append(contentParts, errorStyle.Render("✗ "+asv.error))
@@ -187,13 +188,13 @@ func (asv *AddSourceView) View() string {
 
 	// Buttons
 	confirmStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#000000")).
-		Background(lipgloss.Color("#46B450")).
+		Foreground(theme.Current.Background).
+		Background(theme.Current.Success).
 		Padding(0, 2).
 		Bold(true)
 	cancelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#000000")).
-		Background(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Background).
+		Background(theme.Current.Accent).
 		Padding(0, 2).
 		Bold(true)
 
@@ -221,7 +222,7 @@ func (asv *AddSourceView) View() string {
 	// Create bordered dialog
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#DC143C")).
+		BorderForeground(theme.Current.Primary).
 		Padding(2, 3)
 
 	renderedDialog := dialog.Render(content)

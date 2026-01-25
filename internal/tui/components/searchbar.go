@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,11 +19,11 @@ func NewSearchBar() *SearchBar {
 	ti.CharLimit = 100
 	ti.Width = 50
 
-	// Style the input with punk rock theme colors
-	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E5E5"))
-	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1C40F"))
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#DC143C"))
+	// Style the input with theme colors
+	ti.TextStyle = lipgloss.NewStyle().Foreground(theme.Current.Text)
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(theme.Current.Accent)
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(theme.Current.Primary)
 
 	return &SearchBar{
 		input: ti,
@@ -51,7 +52,7 @@ func (sb *SearchBar) Update(msg interface{}) (string, bool) {
 func (sb *SearchBar) View() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#F1C40F")).
+		BorderForeground(theme.Current.Accent).
 		Padding(0, 1)
 
 	input := boxStyle.Render(sb.input.View())

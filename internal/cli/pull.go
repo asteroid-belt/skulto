@@ -113,7 +113,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 		fmt.Println("   ✓ Install state reconciled")
 	}
 
-	fmt.Println("\n💀 Pull complete!")
+	fmt.Println("\n⚡ Pull complete!")
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/search"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -143,23 +144,23 @@ func (ul *UnifiedResultList) View() string {
 
 	// Styles
 	nameTagBadge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#2ECC71")).
+		Foreground(theme.Current.Success).
 		Bold(true)
 	contentBadge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#3498DB")).
+		Foreground(theme.Current.Info).
 		Bold(true)
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(theme.Current.TextHighlight).
 		Bold(true)
 	selectedTitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true)
 	sourceStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B"))
+		Foreground(theme.Current.TextMuted)
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#AAAAAA"))
+		Foreground(theme.Current.Text)
 	snippetIndicator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true)
 	itemStyle := lipgloss.NewStyle().
 		MarginLeft(1).
@@ -168,7 +169,7 @@ func (ul *UnifiedResultList) View() string {
 	// Scroll indicator at top
 	if ul.scrollOffset > 0 {
 		scrollStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")).
+			Foreground(theme.Current.TextMuted).
 			MarginLeft(2)
 		parts = append(parts, scrollStyle.Render(fmt.Sprintf("↑ %d more above", ul.scrollOffset)))
 	}
@@ -237,7 +238,7 @@ func (ul *UnifiedResultList) View() string {
 	remaining := len(ul.Items) - endIdx
 	if remaining > 0 {
 		scrollStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")).
+			Foreground(theme.Current.TextMuted).
 			MarginLeft(2)
 		parts = append(parts, scrollStyle.Render(fmt.Sprintf("↓ %d more below", remaining)))
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/asteroid-belt/skulto/internal/search"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -18,12 +19,12 @@ type SnippetStyles struct {
 func DefaultSnippetStyles() SnippetStyles {
 	return SnippetStyles{
 		Normal: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")),
+			Foreground(theme.Current.TextMuted),
 		Highlight: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F1C40F")).
+			Foreground(theme.Current.Accent).
 			Bold(true),
 		Ellipsis: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")),
+			Foreground(theme.Current.TextMuted),
 	}
 }
 

@@ -3,10 +3,10 @@ package components
 import (
 	"fmt"
 
+	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/asteroid-belt/skulto/internal/models"
 )
 
 // RepoOption represents a single repository option.
@@ -166,12 +166,12 @@ func (d *RepoSelectDialog) View() string {
 	}
 	contentWidth := dialogWidth - 6
 
-	// Colors from design system
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
-	warningColor := lipgloss.Color("#E74C3C")
-	selectedBgColor := lipgloss.Color("#1A1A2E")
+	// Colors from theme
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
+	warningColor := theme.Current.Error
+	selectedBgColor := theme.Current.Surface
 
 	// Title style
 	titleStyle := lipgloss.NewStyle().
@@ -248,7 +248,7 @@ func (d *RepoSelectDialog) View() string {
 		var desc string
 		if opt.InstalledCount > 0 || opt.NotInstalledCount > 0 {
 			// Show detailed counts with colors
-			installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")) // Green
+			installedStyle := lipgloss.NewStyle().Foreground(theme.Current.Success)
 			notInstalledStyle := lipgloss.NewStyle().Foreground(mutedColor)
 
 			installedText := installedStyle.Render(fmt.Sprintf("%d installed", opt.InstalledCount))

@@ -12,6 +12,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/search"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
 	"github.com/asteroid-belt/skulto/internal/tui/components"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -641,7 +642,7 @@ func (sv *SearchView) SetSize(w, h int) {
 // renderLoading shows a loading indicator.
 func (sv *SearchView) renderLoading() string {
 	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Italic(true).
 		MarginLeft(2)
 
@@ -710,7 +711,7 @@ func (sv *SearchView) renderLegacyResults() string {
 // renderSearchFooter shows scrolling information at the bottom.
 func (sv *SearchView) renderSearchFooter() string {
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 1).
 		Width(sv.width)
 
@@ -749,7 +750,7 @@ func (sv *SearchView) renderSearchFooter() string {
 // renderEmptyState renders an empty state message.
 func (sv *SearchView) renderEmptyState(msg string) string {
 	emptyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		MarginLeft(2)
 
@@ -760,7 +761,7 @@ func (sv *SearchView) renderEmptyState(msg string) string {
 func (sv *SearchView) renderTagBrowsingView(layoutParts []string, _, _ int) string {
 	// Title for tag section
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		MarginLeft(2)
 
@@ -772,7 +773,7 @@ func (sv *SearchView) renderTagBrowsingView(layoutParts []string, _, _ int) stri
 
 	// Footer
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 1).
 		Width(sv.width)
 

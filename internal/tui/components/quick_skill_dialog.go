@@ -9,6 +9,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/skillgen"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -85,11 +86,11 @@ func NewNewSkillDialog() *NewSkillDialog {
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ta.FocusedStyle.Base = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#F1C40F")).
+		BorderForeground(theme.Current.Accent).
 		Padding(0, 1)
 	ta.BlurredStyle.Base = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#6B6B6B")).
+		BorderForeground(theme.Current.TextMuted).
 		Padding(0, 1)
 
 	executor := skillgen.NewCLIExecutor()
@@ -482,11 +483,11 @@ func (d *NewSkillDialog) viewInput() string {
 	dialogWidth := min(70, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	// Colors
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
+	// Colors from theme
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
@@ -532,7 +533,7 @@ func (d *NewSkillDialog) viewInput() string {
 			style = style.
 				Foreground(goldColor).
 				Bold(true).
-				Background(lipgloss.Color("#1A1A2E"))
+				Background(theme.Current.Surface)
 		}
 		toolOptions = append(toolOptions, style.Render(string(tool)))
 	}
@@ -542,7 +543,7 @@ func (d *NewSkillDialog) viewInput() string {
 		toolSelector = lipgloss.JoinHorizontal(lipgloss.Left, toolOptions...)
 	} else {
 		toolSelector = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
+			Foreground(theme.Current.Error).
 			Render("No AI tools found")
 	}
 
@@ -553,7 +554,7 @@ func (d *NewSkillDialog) viewInput() string {
 	if d.focusedField == 2 {
 		btnStyle = btnStyle.
 			Background(goldColor).
-			Foreground(lipgloss.Color("#000000")).
+			Foreground(theme.Current.Background).
 			Bold(true)
 	} else {
 		btnStyle = btnStyle.
@@ -610,11 +611,11 @@ func (d *NewSkillDialog) viewLaunching() string {
 	dialogWidth := min(70, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
-	hintBgColor := lipgloss.Color("#1A1A2E")
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
+	hintBgColor := theme.Current.Surface
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(goldColor).
@@ -661,7 +662,7 @@ func (d *NewSkillDialog) viewLaunching() string {
 	// Buttons
 	continueStyle := lipgloss.NewStyle().
 		Background(goldColor).
-		Foreground(lipgloss.Color("#000000")).
+		Foreground(theme.Current.Background).
 		Bold(true).
 		Padding(0, 2)
 	continueBtn := continueStyle.Render("Press Enter to Start")
@@ -697,9 +698,9 @@ func (d *NewSkillDialog) viewGenerating() string {
 	dialogWidth := min(70, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(accentColor).
@@ -766,10 +767,10 @@ func (d *NewSkillDialog) viewPreview() string {
 	dialogWidth := min(80, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	successColor := lipgloss.Color("#10B981")
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	successColor := theme.Current.Success
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(successColor).
@@ -809,7 +810,7 @@ func (d *NewSkillDialog) viewPreview() string {
 	// Buttons
 	saveStyle := lipgloss.NewStyle().
 		Background(goldColor).
-		Foreground(lipgloss.Color("#000000")).
+		Foreground(theme.Current.Background).
 		Bold(true).
 		Padding(0, 2)
 	saveBtn := saveStyle.Render("Save (Ctrl+S)")
@@ -854,9 +855,9 @@ func (d *NewSkillDialog) viewError() string {
 	dialogWidth := min(60, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	errorColor := lipgloss.Color("#FF6B6B")
-	mutedColor := lipgloss.Color("#6B6B6B")
+	accentColor := theme.Current.Primary
+	errorColor := theme.Current.Error
+	mutedColor := theme.Current.TextMuted
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(errorColor).
@@ -906,14 +907,14 @@ func (d *NewSkillDialog) viewResult() string {
 	dialogWidth := min(70, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	successColor := lipgloss.Color("#10B981")
-	warningColor := lipgloss.Color("#F59E0B")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
+	accentColor := theme.Current.Primary
+	successColor := theme.Current.Success
+	warningColor := theme.Current.Warning
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
 
 	var title, message string
-	var titleColor lipgloss.Color
+	var titleColor lipgloss.AdaptiveColor
 
 	if len(d.newSkills) > 0 {
 		titleColor = successColor
@@ -994,10 +995,10 @@ func (d *NewSkillDialog) viewInstall() string {
 	dialogWidth := min(70, d.width-4)
 	contentWidth := dialogWidth - 6
 
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
@@ -1071,11 +1072,11 @@ func (d *NewSkillDialog) renderInstallOptions() string {
 		return ""
 	}
 
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
-	successColor := lipgloss.Color("#10B981")
-	selectedBgColor := lipgloss.Color("#1A1A2E")
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
+	successColor := theme.Current.Success
+	selectedBgColor := theme.Current.Surface
 
 	contentWidth := min(60, d.width-10)
 	var optionViews []string

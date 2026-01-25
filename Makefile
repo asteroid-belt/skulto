@@ -23,7 +23,7 @@ all: build
 
 ## build: Build the binary
 build:
-	@echo "💀 Building $(BINARY_NAME)..."
+	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
@@ -59,7 +59,7 @@ clean-release:
 
 ## dev: Build for development (with race detector, requires CGO)
 dev:
-	@echo "💀 Building $(BINARY_NAME) for development..."
+	@echo "Building $(BINARY_NAME) for development..."
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -race $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 
@@ -129,7 +129,7 @@ ship_it: build lint test
 
 ## help: Show this help
 help:
-	@echo "💀 SKULTO Makefile"
+	@echo "SKULTO Makefile"
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""

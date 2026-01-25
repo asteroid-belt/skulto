@@ -11,6 +11,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/log"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -390,30 +391,29 @@ func (dv *DetailView) renderWarningBanner() string {
 		return ""
 	}
 
-	// Determine color based on threat level
-	var bgColor, fgColor string
+	// Determine color based on threat level using theme semantic colors
+	var bgColor, fgColor lipgloss.AdaptiveColor
 	switch dv.skill.ThreatLevel {
 	case models.ThreatLevelCritical:
-		bgColor = "#8B0000" // Dark red
-		fgColor = "#FFFFFF"
+		bgColor = theme.Current.Error
+		fgColor = theme.Current.TextHighlight
 	case models.ThreatLevelHigh:
-		bgColor = "#FF4500" // Orange red
-		fgColor = "#FFFFFF"
+		bgColor = theme.Current.Warning
+		fgColor = theme.Current.TextHighlight
 	case models.ThreatLevelMedium:
-		bgColor = "#FF8C00" // Dark orange
-		fgColor = "#000000"
+		bgColor = theme.Current.Accent
+		fgColor = theme.Current.Text
 	case models.ThreatLevelLow:
-		bgColor = "#FFD700" // Gold
-		fgColor = "#000000"
+		bgColor = theme.Current.Success
+		fgColor = theme.Current.Text
 	default:
-		// DEBUG: Show cyan banner for skills with no threat level
-		bgColor = "#00CED1" // Dark cyan - debug color
-		fgColor = "#000000"
+		bgColor = theme.Current.Info
+		fgColor = theme.Current.Text
 	}
 
 	bannerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(bgColor)).
-		Foreground(lipgloss.Color(fgColor)).
+		Background(bgColor).
+		Foreground(fgColor).
 		Bold(true).
 		Padding(0, 1).
 		Width(dv.width)
@@ -449,7 +449,7 @@ func (dv *DetailView) Skill() *models.Skill {
 // renderTitle renders the skill title with consistent styling.
 func (dv *DetailView) renderTitle() string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC143C")).
+		Foreground(theme.Current.Primary).
 		Bold(true).
 		Render(dv.skill.Title)
 }
@@ -461,7 +461,7 @@ func (dv *DetailView) renderDescription() string {
 		desc = dv.skill.Summary
 	}
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E5E5")).
+		Foreground(theme.Current.Text).
 		Padding(0, 0, 1, 0).
 		Width(dv.width).
 		Render(desc)
@@ -474,7 +474,7 @@ func (dv *DetailView) renderInstallIndicator() string {
 		installText = "☑ Installed (i to uninstall)"
 	}
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		Render(installText)
 }
@@ -482,14 +482,14 @@ func (dv *DetailView) renderInstallIndicator() string {
 // renderDivider renders a horizontal divider line.
 func (dv *DetailView) renderDivider() string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Render(strings.Repeat("─", dv.width))
 }
 
 // renderMetadataRow renders a row of metadata text in gray.
 func (dv *DetailView) renderMetadataRow(text string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Render(text)
 }
 
@@ -501,7 +501,7 @@ func (dv *DetailView) renderLocalDetails() string {
 
 	// Local skill badge
 	badge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#10B981")).
+		Foreground(theme.Current.Success).
 		Bold(true).
 		Render("Local Skill")
 
@@ -645,9 +645,9 @@ func (dv *DetailView) renderTags() string {
 
 	var tagStrs []string
 	for _, tag := range dv.skill.Tags {
-		color := getTagColor(tag.Category)
+		color := theme.GetTagColor(tag.Category)
 		tagStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#000000")).
+			Foreground(theme.Current.Background).
 			Background(color).
 			Padding(0, 1)
 		tagStrs = append(tagStrs, tagStyle.Render(tag.Name))
@@ -703,7 +703,7 @@ func (dv *DetailView) renderScrollIndicator() string {
 	// If scanning, show scanning status prominently
 	if dv.scanning {
 		scanStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
+			Foreground(theme.Current.Error).
 			Bold(true)
 		return scanStyle.Render("🔒 Scanning skill for security threats...")
 	}
@@ -739,7 +739,7 @@ func (dv *DetailView) renderScrollIndicator() string {
 
 	indicator := strings.Join(indicators, "  •  ")
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		Render(indicator)
 }
@@ -747,7 +747,7 @@ func (dv *DetailView) renderScrollIndicator() string {
 // renderLoading renders a loading indicator.
 func (dv *DetailView) renderLoading() string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Render("Loading skill details...")
 }
 
@@ -760,9 +760,9 @@ func (dv *DetailView) renderError() string {
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#DC143C")).
+		BorderForeground(theme.Current.Primary).
 		Padding(1).
-		Foreground(lipgloss.Color("#DC143C"))
+		Foreground(theme.Current.Primary)
 
 	content := fmt.Sprintf("%s\n\nPress ESC to go back", errMsg)
 	return box.Render(content)

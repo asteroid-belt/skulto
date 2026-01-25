@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/asteroid-belt/skulto/internal/config"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -50,14 +51,14 @@ func (v *OnboardingSetupView) View() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("196")).
+		Foreground(theme.Current.Primary).
 		MarginBottom(1)
 
 	title := titleStyle.Render("⚙️  Environment Setup")
 
 	// Subtitle
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(theme.Current.TextMuted).
 		MarginBottom(2)
 
 	subtitle := subtitleStyle.Render("Configure API access for enhanced functionality")
@@ -67,7 +68,7 @@ func (v *OnboardingSetupView) View() string {
 	openaiStatus := v.checkEnvVar("OPENAI_API_KEY")
 
 	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250"))
+		Foreground(theme.Current.Text)
 
 	statusContent := "Environment Variables:\n\n"
 
@@ -91,7 +92,7 @@ func (v *OnboardingSetupView) View() string {
 
 	// Instructions
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245"))
+		Foreground(theme.Current.TextMuted)
 
 	instructions := instructionStyle.Render(
 		"GITHUB_TOKEN (required for higher rate limits):\n" +
@@ -121,7 +122,7 @@ func (v *OnboardingSetupView) View() string {
 
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(theme.Current.Primary).
 		Padding(2, 3).
 		MaxWidth(maxWidth)
 
@@ -129,7 +130,7 @@ func (v *OnboardingSetupView) View() string {
 
 	// Footer with instructions
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("220")).
+		Foreground(theme.Current.Accent).
 		MarginTop(2)
 
 	footer := footerStyle.Render("Press Enter to continue or Esc to skip")

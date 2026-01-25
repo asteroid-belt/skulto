@@ -365,7 +365,7 @@ func printUpdateReport(result *UpdateResult) {
 	}
 
 	fmt.Println()
-	fmt.Println("💀 Update complete!")
+	fmt.Println("✓ Update complete!")
 }
 
 func getThreatIndicator(level models.ThreatLevel) string {

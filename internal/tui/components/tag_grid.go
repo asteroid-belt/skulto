@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -220,7 +221,7 @@ func (tg *TagGrid) adjustScroll() {
 func (tg *TagGrid) View() string {
 	if len(tg.tags) == 0 {
 		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B6B6B")).
+			Foreground(theme.Current.TextMuted).
 			Italic(true).
 			MarginLeft(2)
 		return emptyStyle.Render("No tags available")
@@ -249,16 +250,16 @@ func (tg *TagGrid) View() string {
 			if tg.focused && i == tg.selectedIdx {
 				// Selected tag
 				tagStyle = lipgloss.NewStyle().
-					Background(lipgloss.Color("#FFFFFF")).
-					Foreground(lipgloss.Color("#000000")).
+					Background(theme.Current.TextHighlight).
+					Foreground(theme.Current.Background).
 					Bold(true).
 					Padding(0, 1).
 					Margin(0, 1, 0, 0)
 			} else {
 				// Normal tag with category color
 				tagStyle = lipgloss.NewStyle().
-					Background(getTagColorForGrid(tag.Category)).
-					Foreground(lipgloss.Color("#000000")).
+					Background(theme.GetTagColor(tag.Category)).
+					Foreground(theme.Current.Background).
 					Padding(0, 1).
 					Margin(0, 1, 0, 0)
 			}
@@ -273,34 +274,14 @@ func (tg *TagGrid) View() string {
 	// Add scroll indicators
 	var result string
 	if tg.scrollOffset > 0 {
-		result = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B")).MarginLeft(2).Render("↑ more tags above") + "\n"
+		result = lipgloss.NewStyle().Foreground(theme.Current.TextMuted).MarginLeft(2).Render("↑ more tags above") + "\n"
 	}
 
 	result += lipgloss.JoinVertical(lipgloss.Left, rows...)
 
 	if endRow < totalRows {
-		result += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B")).MarginLeft(2).Render("↓ more tags below")
+		result += "\n" + lipgloss.NewStyle().Foreground(theme.Current.TextMuted).MarginLeft(2).Render("↓ more tags below")
 	}
 
 	return result
-}
-
-// getTagColorForGrid returns the color for a tag category.
-func getTagColorForGrid(category string) lipgloss.Color {
-	switch category {
-	case "language":
-		return lipgloss.Color("#A855F7") // Purple
-	case "framework":
-		return lipgloss.Color("#EC4899") // Pink
-	case "tool":
-		return lipgloss.Color("#10B981") // Emerald
-	case "concept":
-		return lipgloss.Color("#F59E0B") // Amber
-	case "domain":
-		return lipgloss.Color("#3B82F6") // Blue
-	case "mine":
-		return lipgloss.Color("#DC143C") // Crimson
-	default:
-		return lipgloss.Color("#6B7280") // Gray
-	}
 }

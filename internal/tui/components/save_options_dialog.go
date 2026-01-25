@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -179,13 +180,13 @@ func (d *SaveOptionsDialog) View() string {
 	}
 	contentWidth := dialogWidth - 6 // Account for border and padding
 
-	// Colors from design system
-	accentColor := lipgloss.Color("#DC143C")     // Crimson red
-	goldColor := lipgloss.Color("#F1C40F")       // Gold highlight
-	mutedColor := lipgloss.Color("#6B6B6B")      // Muted gray
-	textColor := lipgloss.Color("#E5E5E5")       // Light text
-	successColor := lipgloss.Color("#10B981")    // Green
-	selectedBgColor := lipgloss.Color("#1A1A2E") // Dark blue-ish background
+	// Colors from theme
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
+	successColor := theme.Current.Success
+	selectedBgColor := theme.Current.Surface
 
 	// Title style
 	titleStyle := lipgloss.NewStyle().
@@ -353,7 +354,7 @@ func (d *SaveOptionsDialog) CenteredView(width, height int) string {
 	bgStyle := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
-		Background(lipgloss.Color("#000000"))
+		Background(theme.Current.Background)
 
 	// Create the centered dialog
 	centeredStyle := lipgloss.NewStyle().

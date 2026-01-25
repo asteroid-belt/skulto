@@ -9,6 +9,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/tui/components"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -306,7 +307,7 @@ func (tv *TagView) View() string {
 func (tv *TagView) renderTagHeader() string {
 	// Tag title
 	tagTitleStyle := lipgloss.NewStyle().
-		Foreground(getTagColor(tv.tag.Category)).
+		Foreground(theme.GetTagColor(tv.tag.Category)).
 		Bold(true).
 		MarginLeft(1)
 
@@ -314,7 +315,7 @@ func (tv *TagView) renderTagHeader() string {
 
 	// Result count style
 	countStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		MarginLeft(1)
 
@@ -379,7 +380,7 @@ func (tv *TagView) adjustScroll() {
 // renderLoading shows loading state
 func (tv *TagView) renderLoading() string {
 	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F1C40F")).
+		Foreground(theme.Current.Accent).
 		Bold(true).
 		Align(lipgloss.Center).
 		Width(tv.width)
@@ -390,7 +391,7 @@ func (tv *TagView) renderLoading() string {
 // renderEmpty shows empty state
 func (tv *TagView) renderEmpty() string {
 	emptyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Italic(true).
 		Align(lipgloss.Center).
 		Width(tv.width).
@@ -428,7 +429,7 @@ func (tv *TagView) renderScrollFooter() string {
 	}
 
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B6B6B")).
+		Foreground(theme.Current.TextMuted).
 		Padding(0, 1).
 		Width(tv.width)
 

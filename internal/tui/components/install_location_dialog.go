@@ -2,6 +2,7 @@ package components
 
 import (
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -247,13 +248,13 @@ func (d *InstallLocationDialog) View() string {
 	}
 	contentWidth := dialogWidth - 6
 
-	// Colors
-	accentColor := lipgloss.Color("#DC143C")
-	goldColor := lipgloss.Color("#F1C40F")
-	mutedColor := lipgloss.Color("#6B6B6B")
-	textColor := lipgloss.Color("#E5E5E5")
-	successColor := lipgloss.Color("#10B981")
-	selectedBgColor := lipgloss.Color("#1A1A2E")
+	// Colors from theme
+	accentColor := theme.Current.Primary
+	goldColor := theme.Current.Accent
+	mutedColor := theme.Current.TextMuted
+	textColor := theme.Current.Text
+	successColor := theme.Current.Success
+	selectedBgColor := theme.Current.Surface
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
@@ -348,7 +349,7 @@ func (d *InstallLocationDialog) View() string {
 	var validationMsg string
 	if !d.hasAnySelected() {
 		validationStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
+			Foreground(theme.Current.Error).
 			Italic(true).
 			Width(contentWidth).
 			Align(lipgloss.Center)
