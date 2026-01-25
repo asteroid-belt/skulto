@@ -13,11 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// telemetryClient is the global telemetry client for CLI commands.
-// Set via Execute() - defaults to nil until initialized.
 var telemetryClient telemetry.Client
 
-// commandStartTime tracks when the current command started for duration measurement.
 var commandStartTime time.Time
 
 var rootCmd = &cobra.Command{

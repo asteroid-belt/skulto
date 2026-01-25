@@ -13,24 +13,19 @@ func TestAddCmd_Structure(t *testing.T) {
 	assert.Equal(t, "add <repository_url>", addCmd.Use)
 	assert.NotEmpty(t, addCmd.Short)
 	assert.NotEmpty(t, addCmd.Long)
-	// Verify args validation is set
 	assert.NotNil(t, addCmd.Args)
 }
 
 func TestAddCmd_ArgsValidation(t *testing.T) {
-	// Test the cobra.ExactArgs(1) validator directly
 	validator := cobra.ExactArgs(1)
 
-	// Should fail with no args
 	err := validator(addCmd, []string{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "accepts 1 arg")
 
-	// Should pass with exactly 1 arg
 	err = validator(addCmd, []string{"owner/repo"})
 	assert.NoError(t, err)
 
-	// Should fail with too many args
 	err = validator(addCmd, []string{"arg1", "arg2"})
 	assert.Error(t, err)
 }
