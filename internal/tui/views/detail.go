@@ -147,7 +147,6 @@ func (dv *DetailView) HandleSkillLoaded(msg SkillLoadedMsg) {
 
 	// Record that this skill was viewed
 	if err := dv.db.RecordSkillView(msg.Skill.ID); err != nil {
-		// Log error but don't fail the view load
 		log.Printf("failed to record skill view: %v", err)
 	}
 

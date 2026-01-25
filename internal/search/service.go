@@ -72,7 +72,7 @@ func (s *Service) Search(ctx context.Context, query string, opts SearchOptions) 
 	if opts.IncludeSemantic && s.store != nil {
 		hits, err := s.semanticSearch(ctx, query, opts)
 		if err != nil {
-			log.Printf("semantic search warning: %v (continuing with FTS only)", err)
+			log.Printf("semantic search error: %v", err)
 		} else {
 			s.categorizeResults(ctx, hits, results, query, seen)
 		}
@@ -82,7 +82,7 @@ func (s *Service) Search(ctx context.Context, query string, opts SearchOptions) 
 	if opts.IncludeFTS {
 		ftsResults, err := s.db.SearchSkills(query, opts.Limit)
 		if err != nil {
-			log.Printf("FTS search warning: %v (continuing with semantic only)", err)
+			log.Printf("FTS search error: %v", err)
 		} else {
 			s.mergeWithFTS(ftsResults, results, query, seen)
 		}

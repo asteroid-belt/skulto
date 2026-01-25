@@ -2,7 +2,6 @@ package migration
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +33,6 @@ func FlattenSkills(database *db.DB, skillsDir string) (*MigrationResult, error) 
 		return result, fmt.Errorf("set pending status: %w", res.Error)
 	}
 	result.SkillsUpdated = int(res.RowsAffected)
-	log.Printf("Migration: Set %d skills to PENDING status", result.SkillsUpdated)
 
 	// 2. Clear category field on all skills
 	res = database.Model(&models.Skill{}).
@@ -44,15 +42,11 @@ func FlattenSkills(database *db.DB, skillsDir string) (*MigrationResult, error) 
 		return result, fmt.Errorf("clear categories: %w", res.Error)
 	}
 	result.CategoriesCleared = int(res.RowsAffected)
-	log.Printf("Migration: Cleared category on %d skills", result.CategoriesCleared)
 
 	// 3. Flatten filesystem structure
 	if err := flattenFilesystem(skillsDir, result); err != nil {
 		return result, fmt.Errorf("flatten filesystem: %w", err)
 	}
-
-	log.Printf("Migration complete: moved=%d, skipped=%d, dirs_removed=%d",
-		result.SkillsMoved, result.SkillsSkipped, result.DirsRemoved)
 
 	return result, nil
 }
@@ -64,13 +58,10 @@ func flattenFilesystem(skillsDir string, result *MigrationResult) error {
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("Migration: Skills directory does not exist: %s", skillsDir)
 			return nil // No skills dir yet
 		}
 		return err
 	}
-
-	log.Printf("Migration: Scanning %s (%d entries)", skillsDir, len(entries))
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -82,7 +73,6 @@ func flattenFilesystem(skillsDir string, result *MigrationResult) error {
 		// Check if this directory is already a flat skill
 		// Support both SKILL.md (uppercase) and skill.md (lowercase)
 		if isSkillDir(dirPath) {
-			log.Printf("Migration: Already flat, skipping: %s", entry.Name())
 			result.SkillsSkipped++
 
 			// Even if it's flat, check for nested skills inside (dual nesting case)
@@ -102,7 +92,6 @@ func flattenFilesystem(skillsDir string, result *MigrationResult) error {
 		// Remove empty category directory (handles spaces in names)
 		if isEmpty(dirPath) {
 			if err := os.Remove(dirPath); err == nil {
-				log.Printf("Migration: Removed empty category: %s", entry.Name())
 				result.DirsRemoved++
 			}
 		}
@@ -150,7 +139,6 @@ func processCategory(skillsDir, categoryDir, categoryName string, result *Migrat
 		if _, err := os.Stat(flatSkillDir); err == nil {
 			// Target exists - check if it's the same as source (dual nesting)
 			if filepath.Clean(flatSkillDir) == filepath.Clean(nestedSkillDir) {
-				log.Printf("Migration: Self-reference, skipping: %s", subEntry.Name())
 				result.SkillsSkipped++
 				continue
 			}
@@ -169,12 +157,7 @@ func processCategory(skillsDir, categoryDir, categoryName string, result *Migrat
 					fmt.Sprintf("%s-%s-%d", subEntry.Name(), sanitizedCategory, i))
 			}
 
-			log.Printf("Migration: Name collision, using: %s", filepath.Base(flatSkillDir))
 		}
-
-		// Move the skill directory
-		log.Printf("Migration: Moving %s/%s → %s",
-			categoryName, subEntry.Name(), filepath.Base(flatSkillDir))
 
 		if err := os.Rename(nestedSkillDir, flatSkillDir); err != nil {
 			return fmt.Errorf("move %s: %w", nestedSkillDir, err)

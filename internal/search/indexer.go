@@ -132,12 +132,10 @@ func (idx *Indexer) indexBatchWithRetry(ctx context.Context, skills []models.Ski
 	}
 
 	// Try with exponential backoff
-	var lastErr error
 	for attempt := 0; attempt < idx.config.RetryAttempts; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s, ...
 			delay := idx.config.RetryBaseDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			log.Printf("Retry attempt %d/%d after %v", attempt+1, idx.config.RetryAttempts, delay)
 
 			select {
 			case <-ctx.Done():
@@ -168,12 +166,9 @@ func (idx *Indexer) indexBatchWithRetry(ctx context.Context, skills []models.Ski
 		if batchCompleted > 0 {
 			completed += batchCompleted
 		}
-		lastErr = errs[0]
-		log.Printf("Batch indexing error (attempt %d): %v", attempt+1, lastErr)
 	}
 
 	// All retries exhausted
-	log.Printf("Batch indexing failed after %d attempts: %v", idx.config.RetryAttempts, lastErr)
 	return completed, skipped, len(toIndex) - completed
 }
 
