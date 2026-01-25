@@ -41,6 +41,18 @@ Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It 
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install asteroid-belt/tap/skulto
+```
+
+To upgrade:
+
+```bash
+brew upgrade asteroid-belt/tap/skulto
+```
+
 ### From Source
 
 ```bash
