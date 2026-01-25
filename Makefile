@@ -112,7 +112,12 @@ deps:
 	@echo "Downloading dependencies..."
 	$(GO) mod download
 	$(GO) mod tidy
-	curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.7.2
+	@if [ ! -f ./bin/golangci-lint ]; then \
+		echo "Installing golangci-lint..."; \
+		curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.7.2; \
+	else \
+		echo "golangci-lint already installed"; \
+	fi
 	@echo "✅ Dependencies ready"
 
 ci: deps build test
