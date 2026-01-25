@@ -1,0 +1,675 @@
+package installer
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/asteroid-belt/skulto/internal/config"
+	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/models"
+)
+
+// Installer handles skill installation and uninstallation.
+// Skills are installed by creating symlinks from repository skill directories
+// to the platform skill directories (e.g., ~/.claude/skills/).
+type Installer struct {
+	db    *db.DB
+	cfg   *config.Config
+	paths *PathResolver
+}
+
+// New creates a new installer.
+func New(database *db.DB, conf *config.Config) *Installer {
+	return &Installer{
+		db:    database,
+		cfg:   conf,
+		paths: NewPathResolver(conf),
+	}
+}
+
+// Install installs a skill to all configured AI tools by creating symlinks.
+// The skill source directory must exist in the cloned repository.
+func (i *Installer) Install(ctx context.Context, skill *models.Skill, source *models.Source) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+
+	if source == nil {
+		return fmt.Errorf("source cannot be nil for symlink-based installation")
+	}
+
+	// Get user's selected AI tools
+	userState, err := i.db.GetUserState()
+	if err != nil {
+		return fmt.Errorf("failed to get user state: %w", err)
+	}
+
+	platforms := parsePlatforms(userState)
+	if len(platforms) == 0 {
+		return ErrNoToolsSelected
+	}
+
+	// Get source skill path in repository using the skill's actual FilePath
+	sourcePath := i.paths.GetSourcePath(source.Owner, source.Repo, skill.FilePath)
+
+	// Verify source path exists
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return fmt.Errorf("skill directory not found: %s", sourcePath)
+	}
+
+	// Create symlinks for each platform
+	var createdSymlinks []string
+	var lastErr error
+
+	for _, platform := range platforms {
+		targetPath, err := platform.GetSkillPath(skill.Slug)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Ensure target parent directory exists
+		targetDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Remove existing symlink or directory
+		if exists(targetPath) {
+			if err := os.RemoveAll(targetPath); err != nil {
+				lastErr = err
+				continue
+			}
+		}
+
+		// Create symlink: targetPath -> sourcePath
+		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			lastErr = err
+			continue
+		}
+
+		createdSymlinks = append(createdSymlinks, targetPath)
+	}
+
+	// If no platforms succeeded, return error
+	if len(createdSymlinks) == 0 {
+		if lastErr != nil {
+			return fmt.Errorf("failed to install to any platform: %w", lastErr)
+		}
+		return ErrSymlinkFailed
+	}
+
+	// Update database
+	if err := i.db.SetInstalled(skill.ID, true); err != nil {
+		// Rollback: remove created symlinks
+		for _, path := range createdSymlinks {
+			_ = os.Remove(path)
+		}
+		return fmt.Errorf("database update failed: %w", err)
+	}
+
+	return nil
+}
+
+// Uninstall removes skill symlinks from all platforms.
+func (i *Installer) Uninstall(ctx context.Context, skill *models.Skill) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+
+	// Remove symlinks for all platforms
+	var errors []error
+	for _, platform := range AllPlatforms() {
+		targetPath, err := platform.GetSkillPath(skill.Slug)
+		if err != nil {
+			continue
+		}
+
+		if exists(targetPath) && isSymlink(targetPath) {
+			if err := os.Remove(targetPath); err != nil {
+				errors = append(errors, fmt.Errorf("%s: %w", platform, err))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("symlink removal failed: %v", errors)
+	}
+
+	// Update database
+	return i.db.SetInstalled(skill.ID, false)
+}
+
+// ReInstall reinstalls a skill by uninstalling and reinstalling.
+func (i *Installer) ReInstall(ctx context.Context, skill *models.Skill, source *models.Source) error {
+	if err := i.Uninstall(ctx, skill); err != nil {
+		return fmt.Errorf("uninstall failed: %w", err)
+	}
+	return i.Install(ctx, skill, source)
+}
+
+// IsInstalled checks if a skill is installed.
+func (i *Installer) IsInstalled(skillID string) (bool, error) {
+	skill, err := i.db.GetSkill(skillID)
+	if err != nil {
+		return false, err
+	}
+	if skill == nil {
+		return false, ErrSkillNotFound
+	}
+	return skill.IsInstalled, nil
+}
+
+// InstallTo installs a skill to specific locations by creating symlinks.
+// This is the new location-aware installation method.
+func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *models.Source, locations []InstallLocation) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+	if source == nil {
+		return fmt.Errorf("source cannot be nil for symlink-based installation")
+	}
+	if len(locations) == 0 {
+		return fmt.Errorf("no installation locations specified")
+	}
+
+	// Get source skill path in repository using the skill's actual FilePath
+	sourcePath := i.paths.GetSourcePath(source.Owner, source.Repo, skill.FilePath)
+
+	// Verify source path exists
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return fmt.Errorf("skill directory not found: %s", sourcePath)
+	}
+
+	// Create symlinks for each location
+	var createdInstalls []models.SkillInstallation
+	var lastErr error
+
+	for _, loc := range locations {
+		targetPath := loc.GetSkillPath(skill.Slug)
+		if targetPath == "" {
+			continue
+		}
+
+		// Ensure target parent directory exists
+		targetDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Remove existing symlink or directory
+		if exists(targetPath) {
+			if err := os.RemoveAll(targetPath); err != nil {
+				lastErr = err
+				continue
+			}
+		}
+
+		// Create symlink: targetPath -> sourcePath
+		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Record installation
+		install := models.SkillInstallation{
+			SkillID:     skill.ID,
+			Platform:    string(loc.Platform),
+			Scope:       string(loc.Scope),
+			BasePath:    loc.BasePath,
+			SymlinkPath: targetPath,
+		}
+		if err := i.db.AddInstallation(&install); err != nil {
+			// Rollback symlink
+			_ = os.Remove(targetPath)
+			lastErr = err
+			continue
+		}
+
+		createdInstalls = append(createdInstalls, install)
+	}
+
+	// If no locations succeeded, return error
+	if len(createdInstalls) == 0 {
+		if lastErr != nil {
+			return fmt.Errorf("failed to install to any location: %w", lastErr)
+		}
+		return ErrSymlinkFailed
+	}
+
+	// Update legacy IsInstalled flag for backward compatibility
+	if err := i.db.SetInstalled(skill.ID, true); err != nil {
+		// Rollback: remove created symlinks and installations
+		for _, inst := range createdInstalls {
+			_ = os.Remove(inst.SymlinkPath)
+			_ = i.db.RemoveInstallation(inst.SkillID, inst.Platform, inst.Scope, inst.BasePath)
+		}
+		return fmt.Errorf("database update failed: %w", err)
+	}
+
+	return nil
+}
+
+// InstallLocalSkillTo installs a local skill (from ~/.skulto/skills) to specific locations.
+// Unlike InstallTo, this doesn't require a Source object since local skills are self-contained.
+func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill, sourcePath string, locations []InstallLocation) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+	if sourcePath == "" {
+		return fmt.Errorf("source path cannot be empty")
+	}
+	if len(locations) == 0 {
+		return fmt.Errorf("no installation locations specified")
+	}
+
+	// Verify source path exists
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return fmt.Errorf("skill directory not found: %s", sourcePath)
+	}
+
+	// Create symlinks for each location
+	var createdInstalls []models.SkillInstallation
+	var lastErr error
+
+	for _, loc := range locations {
+		targetPath := loc.GetSkillPath(skill.Slug)
+		if targetPath == "" {
+			continue
+		}
+
+		// Ensure target parent directory exists
+		targetDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Remove existing symlink or directory
+		if exists(targetPath) {
+			if err := os.RemoveAll(targetPath); err != nil {
+				lastErr = err
+				continue
+			}
+		}
+
+		// Create symlink: targetPath -> sourcePath
+		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			lastErr = err
+			continue
+		}
+
+		// Record installation
+		install := models.SkillInstallation{
+			SkillID:     skill.ID,
+			Platform:    string(loc.Platform),
+			Scope:       string(loc.Scope),
+			BasePath:    loc.BasePath,
+			SymlinkPath: targetPath,
+		}
+		if err := i.db.AddInstallation(&install); err != nil {
+			// Rollback symlink
+			_ = os.Remove(targetPath)
+			lastErr = err
+			continue
+		}
+
+		createdInstalls = append(createdInstalls, install)
+	}
+
+	// If no locations succeeded, return error
+	if len(createdInstalls) == 0 {
+		if lastErr != nil {
+			return fmt.Errorf("failed to install to any location: %w", lastErr)
+		}
+		return ErrSymlinkFailed
+	}
+
+	// Update legacy IsInstalled flag for backward compatibility
+	if err := i.db.SetInstalled(skill.ID, true); err != nil {
+		// Rollback: remove created symlinks and installations
+		for _, inst := range createdInstalls {
+			_ = os.Remove(inst.SymlinkPath)
+			_ = i.db.RemoveInstallation(inst.SkillID, inst.Platform, inst.Scope, inst.BasePath)
+		}
+		return fmt.Errorf("database update failed: %w", err)
+	}
+
+	return nil
+}
+
+// UninstallFrom removes a skill from specific locations.
+func (i *Installer) UninstallFrom(ctx context.Context, skill *models.Skill, locations []InstallLocation) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+
+	var errors []error
+	for _, loc := range locations {
+		targetPath := loc.GetSkillPath(skill.Slug)
+		if targetPath == "" {
+			continue
+		}
+
+		if exists(targetPath) && isSymlink(targetPath) {
+			if err := os.Remove(targetPath); err != nil {
+				errors = append(errors, fmt.Errorf("%s: %w", loc.ID(), err))
+				continue
+			}
+		}
+
+		// Remove installation record
+		if err := i.db.RemoveInstallation(skill.ID, string(loc.Platform), string(loc.Scope), loc.BasePath); err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("uninstall errors: %v", errors)
+	}
+
+	// Check if any installations remain
+	remaining, err := i.db.GetInstallations(skill.ID)
+	if err == nil && len(remaining) == 0 {
+		// No installations remain, update legacy flag
+		_ = i.db.SetInstalled(skill.ID, false)
+	}
+
+	return nil
+}
+
+// UninstallAll removes a skill from all installed locations.
+// It first checks the skill_installations table for recorded installations,
+// then falls back to checking legacy global paths for backward compatibility.
+func (i *Installer) UninstallAll(ctx context.Context, skill *models.Skill) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+
+	var errors []error
+
+	// First, remove symlinks from recorded installations (new system)
+	installations, err := i.db.GetInstallations(skill.ID)
+	if err != nil {
+		errors = append(errors, err)
+	}
+
+	for _, inst := range installations {
+		if exists(inst.SymlinkPath) && isSymlink(inst.SymlinkPath) {
+			if err := os.Remove(inst.SymlinkPath); err != nil {
+				errors = append(errors, err)
+			}
+		}
+	}
+
+	// Remove all installation records
+	if err := i.db.RemoveAllInstallations(skill.ID); err != nil {
+		errors = append(errors, err)
+	}
+
+	// Also check legacy global paths for backward compatibility
+	// This handles skills installed before the new location tracking system
+	for _, platform := range AllPlatforms() {
+		targetPath, err := platform.GetSkillPath(skill.Slug)
+		if err != nil {
+			continue
+		}
+
+		if exists(targetPath) && isSymlink(targetPath) {
+			if err := os.Remove(targetPath); err != nil {
+				errors = append(errors, fmt.Errorf("%s: %w", platform, err))
+			}
+		}
+	}
+
+	// Update legacy flag
+	_ = i.db.SetInstalled(skill.ID, false)
+
+	if len(errors) > 0 {
+		return fmt.Errorf("uninstall errors: %v", errors)
+	}
+
+	return nil
+}
+
+// GetInstallLocations returns all locations where a skill is installed.
+func (i *Installer) GetInstallLocations(skillID string) ([]InstallLocation, error) {
+	installations, err := i.db.GetInstallations(skillID)
+	if err != nil {
+		return nil, err
+	}
+
+	locations := make([]InstallLocation, 0, len(installations))
+	for _, inst := range installations {
+		locations = append(locations, InstallLocation{
+			Platform: PlatformFromString(inst.Platform),
+			Scope:    InstallScope(inst.Scope),
+			BasePath: inst.BasePath,
+		})
+	}
+	return locations, nil
+}
+
+// Helper functions
+
+// parsePlatforms converts UserState.AITools to []Platform.
+func parsePlatforms(state *models.UserState) []Platform {
+	if state == nil || len(state.GetAITools()) == 0 {
+		return nil
+	}
+
+	toolNames := state.GetAITools()
+	platforms := make([]Platform, 0, len(toolNames))
+
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if p := PlatformFromString(name); p != "" {
+			platforms = append(platforms, p)
+		}
+	}
+
+	return platforms
+}
+
+// exists checks if a file or directory exists.
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
+// isSymlink checks if a path is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeSymlink) != 0
+}
+
+// SyncInstallState scans all AI tool skill directories and reconciles the database
+// with the actual state of symlinks on disk. This ensures is_installed flags and
+// skill_installations records match reality.
+func (i *Installer) SyncInstallState(ctx context.Context) error {
+	// Track all found installations: skillID -> list of locations
+	foundInstalls := make(map[string][]InstallLocation)
+
+	// Scan all platforms and scopes
+	for _, platform := range AllPlatforms() {
+		for _, scope := range AllScopes() {
+			if err := i.scanPlatformScope(ctx, platform, scope, foundInstalls); err != nil {
+				// Log but continue - don't fail the whole sync for one platform
+				continue
+			}
+		}
+	}
+
+	// Get all skills from database
+	skills, err := i.db.GetAllSkills()
+	if err != nil {
+		return fmt.Errorf("failed to get skills: %w", err)
+	}
+
+	// Reconcile each skill
+	for _, skill := range skills {
+		found := foundInstalls[skill.ID]
+
+		// Get current database installations
+		dbInstalls, err := i.db.GetInstallations(skill.ID)
+		if err != nil {
+			continue
+		}
+
+		// Build set of current DB install keys for comparison
+		dbInstallKeys := make(map[string]bool)
+		for _, inst := range dbInstalls {
+			key := fmt.Sprintf("%s:%s:%s", inst.Platform, inst.Scope, inst.BasePath)
+			dbInstallKeys[key] = true
+		}
+
+		// Add missing installations to DB
+		for _, loc := range found {
+			key := fmt.Sprintf("%s:%s:%s", loc.Platform, loc.Scope, loc.BasePath)
+			if !dbInstallKeys[key] {
+				install := models.SkillInstallation{
+					SkillID:     skill.ID,
+					Platform:    string(loc.Platform),
+					Scope:       string(loc.Scope),
+					BasePath:    loc.BasePath,
+					SymlinkPath: loc.GetSkillPath(skill.Slug),
+				}
+				_ = i.db.AddInstallation(&install)
+			}
+		}
+
+		// Build set of found install keys
+		foundKeys := make(map[string]bool)
+		for _, loc := range found {
+			key := fmt.Sprintf("%s:%s:%s", loc.Platform, loc.Scope, loc.BasePath)
+			foundKeys[key] = true
+		}
+
+		// Remove orphaned installations from DB (symlink no longer exists)
+		for _, inst := range dbInstalls {
+			key := fmt.Sprintf("%s:%s:%s", inst.Platform, inst.Scope, inst.BasePath)
+			if !foundKeys[key] {
+				_ = i.db.RemoveInstallation(inst.SkillID, inst.Platform, inst.Scope, inst.BasePath)
+			}
+		}
+
+		// Update is_installed flag
+		hasInstalls := len(found) > 0
+		if skill.IsInstalled != hasInstalls {
+			_ = i.db.SetInstalled(skill.ID, hasInstalls)
+		}
+	}
+
+	return nil
+}
+
+// scanPlatformScope scans a specific platform/scope directory for skill symlinks.
+func (i *Installer) scanPlatformScope(ctx context.Context, platform Platform, scope InstallScope, found map[string][]InstallLocation) error {
+	info := platform.Info()
+	if info.SkillsPath == "" {
+		return nil
+	}
+
+	basePath, err := resolveBasePath(scope)
+	if err != nil {
+		return err
+	}
+
+	skillsDir := filepath.Join(basePath, info.SkillsPath)
+
+	// Check if directory exists
+	if !exists(skillsDir) {
+		return nil
+	}
+
+	// Read directory entries
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		// Skip hidden files
+		if entry.Name()[0] == '.' {
+			continue
+		}
+
+		entryPath := filepath.Join(skillsDir, entry.Name())
+
+		// Check if it's a symlink
+		if !isSymlink(entryPath) {
+			continue
+		}
+
+		// Get the slug from the directory name
+		slug := entry.Name()
+
+		// Try to find skill by slug (check both local and remote patterns)
+		skill := i.findSkillBySlug(slug)
+		if skill == nil {
+			continue
+		}
+
+		// Record this installation
+		loc := InstallLocation{
+			Platform: platform,
+			Scope:    scope,
+			BasePath: basePath,
+		}
+		found[skill.ID] = append(found[skill.ID], loc)
+	}
+
+	return nil
+}
+
+// findSkillBySlug finds a skill by its slug, checking various ID patterns.
+func (i *Installer) findSkillBySlug(slug string) *models.Skill {
+	// Try direct slug lookup first
+	if skill, err := i.db.GetSkillBySlug(slug); err == nil && skill != nil {
+		return skill
+	}
+
+	// Try common ID patterns
+	patterns := []string{
+		"local-" + slug,
+		"cwd-" + slug,
+		slug, // some skills might use slug as ID directly
+	}
+
+	for _, pattern := range patterns {
+		if skill, err := i.db.GetSkill(pattern); err == nil && skill != nil {
+			return skill
+		}
+	}
+
+	return nil
+}

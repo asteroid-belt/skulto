@@ -1,0 +1,268 @@
+# Builds skulto and releases to public repo asteroid-belt/skulto.
+# Triggered on version tags (v*) or manually.
+
+name: Release to Public
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0, v1.0.0-beta.1)'
+        required: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+
+          if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$'; then
+            echo "Error: Invalid version format: $VERSION"
+            echo "Expected: vMAJOR.MINOR.PATCH[-prerelease][+metadata]"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Git repository
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+      - name: 🔨 Install Dependencies 🔨
+        run: sudo apt-get update && sudo apt-get install make
+      - name: 🚀 Tests 🚀
+        run: make deps && make test && make lint
+        env:
+          RUN_AI_TESTS: '1'
+          OPENAI_API_KEY: ${{ secrets.TESTS_OPENAI_API_KEY }}
+
+  build:
+    needs: [test, validate]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+
+      - name: Build Skulto
+        run: make release
+        env:
+          SKULTO_POSTHOG_API_KEY: ${{ secrets.SKULTO_POSTHOG_API_KEY }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.validate.outputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skulto-${{ matrix.suffix }}
+          path: release/${{ matrix.goos }}/${{ matrix.goarch }}/skulto
+
+  release:
+    needs: [build, validate]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize release structure
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f | head -50
+
+          mkdir -p release
+
+          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            artifact_dir="artifacts/skulto-${suffix}"
+            echo "Looking for: $artifact_dir"
+            if [ -d "$artifact_dir" ]; then
+              echo "  Found directory"
+              binary=$(find "$artifact_dir" -name 'skulto' -type f | head -1)
+              if [ -n "$binary" ]; then
+                echo "  Found binary: $binary"
+                mkdir -p "release/${suffix}"
+                cp "$binary" "release/${suffix}/skulto"
+                chmod +x "release/${suffix}/skulto"
+              else
+                echo "  ERROR: No binary found in $artifact_dir"
+              fi
+            else
+              echo "  ERROR: Directory not found"
+            fi
+          done
+
+          echo ""
+          echo "=== Final release structure ==="
+          find release -type f -exec ls -la {} \;
+
+          # Verify all 4 binaries exist
+          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            if [ ! -f "release/${suffix}/skulto" ]; then
+              echo "FATAL: Missing release/${suffix}/skulto"
+              exit 1
+            fi
+          done
+          echo "All binaries present!"
+
+      - name: Create tarballs
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          mkdir -p dist
+
+          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
+            echo "Creating ${TARBALL}..."
+            tar -czvf "dist/${TARBALL}" -C "release/${suffix}" skulto
+          done
+
+          echo "=== Created tarballs ==="
+          ls -la dist/
+
+      - name: Create release on public repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          PRERELEASE_FLAG=""
+          if echo "$VERSION" | grep -qE '\-'; then
+            PRERELEASE_FLAG="--prerelease"
+            echo "This is a pre-release version"
+          fi
+
+          # Generate checksums for tarballs
+          echo "Generating checksums..."
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+          CHECKSUMS=$(cat checksums.txt)
+          cd ..
+          echo "Checksums:"
+          echo "$CHECKSUMS"
+
+          # Build release notes
+          NOTES="## skulto ${VERSION}
+
+          Cross-platform CLI for AI skill management.
+
+          ### Installation
+
+          Download and extract the appropriate tarball for your platform:
+
+          | Platform | Archive |
+          |----------|---------|
+          | Linux (x64) | skulto-${VERSION}-linux-amd64.tar.gz |
+          | Linux (ARM64) | skulto-${VERSION}-linux-arm64.tar.gz |
+          | macOS (Intel) | skulto-${VERSION}-darwin-amd64.tar.gz |
+          | macOS (Apple Silicon) | skulto-${VERSION}-darwin-arm64.tar.gz |
+
+          ### Quick Install
+
+          \`\`\`bash
+          # Example for macOS Apple Silicon
+          curl -LO https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/skulto-${VERSION}-darwin-arm64.tar.gz
+          tar -xzf skulto-${VERSION}-darwin-arm64.tar.gz
+          chmod +x skulto
+          sudo mv skulto /usr/local/bin/
+          \`\`\`
+
+          ### Checksums (SHA256)
+
+          \`\`\`
+          ${CHECKSUMS}
+          \`\`\`
+          "
+
+          echo "Creating release ${VERSION} on asteroid-belt/skulto"
+
+          gh release create "$VERSION" \
+            --repo "asteroid-belt/skulto" \
+            --title "skulto ${VERSION}" \
+            --notes "$NOTES" \
+            $PRERELEASE_FLAG
+
+          echo "Release created, now uploading assets..."
+
+          # Upload tarballs and checksums
+          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
+            echo "Uploading ${TARBALL}..."
+            gh release upload "$VERSION" \
+              --repo "asteroid-belt/skulto" \
+              "dist/${TARBALL}"
+          done
+
+          # Upload checksums file
+          echo "Uploading checksums.txt..."
+          gh release upload "$VERSION" \
+            --repo "asteroid-belt/skulto" \
+            "dist/checksums.txt"
+
+          echo "All assets uploaded successfully!"
+
+  # homebrew:
+  #   needs: release
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #   steps:
+  #     - name: Extract version
+  #       id: extract-version
+  #       # Strip a string prefix from the git tag name:
+  #       run: |
+  #         echo "tag-name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+  #     - uses: mislav/bump-homebrew-formula-action@v3
+  #       with:
+  #         formula-name: skulto
+  #         formula-path: skulto.rb
+  #         homebrew-tap: asteroid-belt/homebrew-tap
+  #         base-branch: main
+  #         download-url: https://github.com/asteroid-belt/skulto/releases/download/${{ steps.extract-version.outputs.tag-name }}/skulto-${{ steps.extract-version.outputs.tag-name }}-darwin-amd64.tar.gz
+  #         commit-message: |
+  #           {{formulaName}} {{version}}
+
+  #           Created by https://github.com/mislav/bump-homebrew-formula-action
+  #       env:
+  #         COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+  #         # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
