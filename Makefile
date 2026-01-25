@@ -53,7 +53,7 @@ release-easy:
 
 ## clean-release: Remove release artifacts
 clean-release:
-	@echo "🧹 Cleaning release artifacts..."
+	@echo "Cleaning release artifacts..."
 	@rm -rf $(RELEASE_DIR)
 	@echo "✅ Release artifacts cleaned"
 
@@ -65,32 +65,37 @@ dev:
 
 ## test: Run all tests including integration tests that require network access
 test:
-	@echo "🧪 Running tests with coverage..."
+	@echo "Running tests with coverage..."
 	$(GO) test -v -coverprofile=coverage.out ./internal/...
 	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "📊 Coverage report: coverage.html"
+	@echo "Coverage report: coverage.html"
 
 ## test-race: Run tests with race detector (requires CGO, excludes integration tests)
 test-race:
-	@echo "🧪 Running tests with race detector..."
+	@echo "Running tests with race detector..."
 	CGO_ENABLED=1 $(GO) test -v -race ./internal/...
 	@echo "✅ Tests passed"
 
 ## lint: Run linters
 lint:
-	@echo "🔍 Running linters..."
+	@echo "Running linters..."
 	./bin/golangci-lint run --timeout=5m
 	@echo "✅ Linting passed"
 
+## vet: Run vet
+vet:
+	@echo "Run vetter..."
+	$(GO) vet ./...
+
 ## fmt: Format code
 format:
-	@echo "📝 Formatting code..."
+	@echo "Formatting code..."
 	$(GO) fmt ./...
 	@echo "✅ Code formatted"
 
 ## clean: Remove build artifacts
 clean:
-	@echo "🧹 Cleaning..."
+	@echo "Cleaning..."
 	rm -rf $(BUILD_DIR)
 	rm -f coverage.out coverage.html
 	$(GO) clean -cache
@@ -98,13 +103,13 @@ clean:
 
 ## install: Install binary to GOPATH/bin
 install: build
-	@echo "📦 Installing $(BINARY_NAME)..."
+	@echo "Installing $(BINARY_NAME)..."
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
 	@echo "✅ Installed to $(GOPATH)/bin/$(BINARY_NAME)"
 
 ## deps: Download dependencies
 deps:
-	@echo "📦 Downloading dependencies..."
+	@echo "Downloading dependencies..."
 	$(GO) mod download
 	$(GO) mod tidy
 	curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.7.2
@@ -114,7 +119,7 @@ ci: deps build test
 
 ## run: Build and run
 run: build
-	@echo "🏃 Running $(BINARY_NAME)..."
+	@echo "Running $(BINARY_NAME)..."
 	$(BUILD_DIR)/$(BINARY_NAME)
 
 ## ship-it: Push to remote after checking for unstaged files
