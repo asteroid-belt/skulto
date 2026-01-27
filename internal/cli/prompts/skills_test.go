@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildSkillOptions(t *testing.T) {
-	skills := []*models.Skill{
+	skills := []models.Skill{
 		{Slug: "docker-expert", Title: "Docker Expert", Description: "Docker help"},
 		{Slug: "react-patterns", Title: "React Patterns", Description: "React best practices"},
 	}
@@ -23,7 +23,7 @@ func TestBuildSkillOptions(t *testing.T) {
 }
 
 func TestFilterSelectedSkills(t *testing.T) {
-	skills := []*models.Skill{
+	skills := []models.Skill{
 		{Slug: "docker-expert", Title: "Docker Expert"},
 		{Slug: "react-patterns", Title: "React Patterns"},
 		{Slug: "go-idioms", Title: "Go Idioms"},

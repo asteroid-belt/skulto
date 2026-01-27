@@ -8,7 +8,7 @@ import (
 )
 
 // BuildSkillOptions creates huh options from skills.
-func BuildSkillOptions(skills []*models.Skill) []huh.Option[string] {
+func BuildSkillOptions(skills []models.Skill) []huh.Option[string] {
 	options := make([]huh.Option[string], 0, len(skills))
 	for _, s := range skills {
 		label := s.Title
@@ -26,13 +26,13 @@ func BuildSkillOptions(skills []*models.Skill) []huh.Option[string] {
 }
 
 // FilterSelectedSkills returns only skills matching selected slugs.
-func FilterSelectedSkills(all []*models.Skill, selected []string) []*models.Skill {
+func FilterSelectedSkills(all []models.Skill, selected []string) []models.Skill {
 	selectedMap := make(map[string]bool, len(selected))
 	for _, s := range selected {
 		selectedMap[s] = true
 	}
 
-	result := make([]*models.Skill, 0, len(selected))
+	result := make([]models.Skill, 0, len(selected))
 	for _, s := range all {
 		if selectedMap[s.Slug] {
 			result = append(result, s)
@@ -43,7 +43,7 @@ func FilterSelectedSkills(all []*models.Skill, selected []string) []*models.Skil
 
 // RunSkillSelector shows interactive skill selection.
 // Returns selected skill slugs.
-func RunSkillSelector(skills []*models.Skill, preselected []string) ([]string, error) {
+func RunSkillSelector(skills []models.Skill, preselected []string) ([]string, error) {
 	options := BuildSkillOptions(skills)
 
 	var selected []string
