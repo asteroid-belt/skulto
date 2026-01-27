@@ -90,10 +90,10 @@ func TestPlatformGetSkillPath(t *testing.T) {
 			expected: filepath.Join(home, ".cursor", "skills", "test-skill"),
 		},
 		{
-			name:     "OpenCode (singular skill)",
+			name:     "OpenCode",
 			platform: PlatformOpenCode,
 			slug:     "test-skill",
-			expected: filepath.Join(home, ".opencode", "skill", "test-skill"),
+			expected: filepath.Join(home, ".opencode", "skills", "test-skill"),
 		},
 	}
 

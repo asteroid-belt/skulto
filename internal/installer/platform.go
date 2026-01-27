@@ -42,7 +42,7 @@ var platformRegistry = map[Platform]PlatformInfo{
 	},
 	PlatformOpenCode: {
 		Name:       "OpenCode",
-		SkillsPath: ".opencode/skill", // Note: singular "skill" for OpenCode
+		SkillsPath: ".opencode/skills",
 	},
 	PlatformWindsurf: {
 		Name:       "Windsurf",
