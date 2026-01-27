@@ -134,3 +134,98 @@ func TestInstallService_InstallBatch(t *testing.T) {
 		assert.NotNil(t, results[2].Skill)
 	})
 }
+
+func TestInstallService_GetInstalledSkillsSummary(t *testing.T) {
+	service, database := setupTestService(t)
+	ctx := context.Background()
+
+	t.Run("returns empty slice when no installations", func(t *testing.T) {
+		summary, err := service.GetInstalledSkillsSummary(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, summary)
+	})
+
+	t.Run("returns skills with their installation locations", func(t *testing.T) {
+		// Seed test skills
+		skill1 := &models.Skill{ID: "skill-1", Slug: "teach", Title: "Teach"}
+		skill2 := &models.Skill{ID: "skill-2", Slug: "superplan", Title: "Superplan"}
+		require.NoError(t, database.CreateSkill(skill1))
+		require.NoError(t, database.CreateSkill(skill2))
+
+		// Add installations
+		require.NoError(t, database.AddInstallation(&models.SkillInstallation{
+			SkillID:  "skill-1",
+			Platform: "claude",
+			Scope:    "global",
+			BasePath: "/home/test",
+		}))
+		require.NoError(t, database.AddInstallation(&models.SkillInstallation{
+			SkillID:  "skill-2",
+			Platform: "claude",
+			Scope:    "global",
+			BasePath: "/home/test",
+		}))
+		require.NoError(t, database.AddInstallation(&models.SkillInstallation{
+			SkillID:  "skill-2",
+			Platform: "cursor",
+			Scope:    "project",
+			BasePath: "/projects/myapp",
+		}))
+
+		summary, err := service.GetInstalledSkillsSummary(ctx)
+		require.NoError(t, err)
+		assert.Len(t, summary, 2)
+
+		// Results should be sorted by slug
+		assert.Equal(t, "superplan", summary[0].Slug)
+		assert.Equal(t, "Superplan", summary[0].Title)
+		assert.Equal(t, "teach", summary[1].Slug)
+		assert.Equal(t, "Teach", summary[1].Title)
+
+		// Check superplan locations (claude global + cursor project)
+		assert.Len(t, summary[0].Locations, 2)
+		assert.Contains(t, summary[0].Locations, PlatformClaude)
+		assert.Contains(t, summary[0].Locations, PlatformCursor)
+		assert.Contains(t, summary[0].Locations[PlatformClaude], ScopeGlobal)
+		assert.Contains(t, summary[0].Locations[PlatformCursor], ScopeProject)
+
+		// Check teach locations (claude global only)
+		assert.Len(t, summary[1].Locations, 1)
+		assert.Contains(t, summary[1].Locations, PlatformClaude)
+		assert.Contains(t, summary[1].Locations[PlatformClaude], ScopeGlobal)
+	})
+
+	t.Run("handles skill with both global and project on same platform", func(t *testing.T) {
+		// Clear previous data by creating fresh service
+		service2, database2 := setupTestService(t)
+
+		skill := &models.Skill{ID: "skill-3", Slug: "docker-expert", Title: "Docker Expert"}
+		require.NoError(t, database2.CreateSkill(skill))
+
+		// Install to both global and project on same platform
+		require.NoError(t, database2.AddInstallation(&models.SkillInstallation{
+			SkillID:  "skill-3",
+			Platform: "codex",
+			Scope:    "global",
+			BasePath: "/home/test",
+		}))
+		require.NoError(t, database2.AddInstallation(&models.SkillInstallation{
+			SkillID:  "skill-3",
+			Platform: "codex",
+			Scope:    "project",
+			BasePath: "/projects/myapp",
+		}))
+
+		summary, err := service2.GetInstalledSkillsSummary(ctx)
+		require.NoError(t, err)
+		require.Len(t, summary, 1)
+
+		// Should have codex with both scopes
+		assert.Equal(t, "docker-expert", summary[0].Slug)
+		assert.Contains(t, summary[0].Locations, PlatformCodex)
+		scopes := summary[0].Locations[PlatformCodex]
+		assert.Len(t, scopes, 2)
+		assert.Contains(t, scopes, ScopeGlobal)
+		assert.Contains(t, scopes, ScopeProject)
+	})
+}

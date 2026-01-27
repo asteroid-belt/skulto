@@ -333,3 +333,88 @@ func (s *InstallService) FetchSkillsFromURL(ctx context.Context, url string) ([]
 	// For now, return error indicating this needs implementation
 	return nil, fmt.Errorf("FetchSkillsFromURL not yet implemented for URL: %s", url)
 }
+
+// InstalledSkillSummary represents a skill and where it's installed.
+type InstalledSkillSummary struct {
+	Slug      string                      // Skill slug (e.g., "teach", "superplan")
+	Title     string                      // Skill display name
+	Locations map[Platform][]InstallScope // Platform -> scopes installed
+}
+
+// GetInstalledSkillsSummary returns all installed skills with their installation locations.
+// Only returns skills that have at least one installation.
+// Results are sorted by skill slug for consistent output.
+func (s *InstallService) GetInstalledSkillsSummary(ctx context.Context) ([]InstalledSkillSummary, error) {
+	// 1. Get all installations from database
+	installations, err := s.db.GetAllInstallations()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get installations: %w", err)
+	}
+
+	if len(installations) == 0 {
+		return []InstalledSkillSummary{}, nil
+	}
+
+	// 2. Group by skill ID and collect platforms/scopes
+	type skillData struct {
+		slug      string
+		title     string
+		locations map[Platform][]InstallScope
+	}
+	skillMap := make(map[string]*skillData)
+
+	for _, inst := range installations {
+		data, exists := skillMap[inst.SkillID]
+		if !exists {
+			// Look up skill details
+			skill, err := s.db.GetSkill(inst.SkillID)
+			if err != nil || skill == nil {
+				continue // Skip installations for unknown skills
+			}
+			data = &skillData{
+				slug:      skill.Slug,
+				title:     skill.Title,
+				locations: make(map[Platform][]InstallScope),
+			}
+			skillMap[inst.SkillID] = data
+		}
+
+		// Add this location
+		platform := Platform(inst.Platform)
+		scope := InstallScope(inst.Scope)
+
+		// Avoid duplicate scopes for same platform
+		scopes := data.locations[platform]
+		found := false
+		for _, s := range scopes {
+			if s == scope {
+				found = true
+				break
+			}
+		}
+		if !found {
+			data.locations[platform] = append(scopes, scope)
+		}
+	}
+
+	// 3. Convert to slice and sort by slug
+	result := make([]InstalledSkillSummary, 0, len(skillMap))
+	for _, data := range skillMap {
+		result = append(result, InstalledSkillSummary{
+			Slug:      data.slug,
+			Title:     data.title,
+			Locations: data.locations,
+		})
+	}
+
+	// Sort by slug
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].Slug > result[j].Slug {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	return result, nil
+}
