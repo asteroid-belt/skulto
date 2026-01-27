@@ -322,7 +322,7 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 
 	installResult := InstallResult{
 		Success: true,
-		Message: fmt.Sprintf("Skill '%s' installed to %d platform(s)", result.Skill.Title, len(paths)),
+		Message: fmt.Sprintf("Skill '%s' installed to %d platform(s). Restart your agent for the skill to take effect.", result.Skill.Title, len(paths)),
 		Paths:   paths,
 	}
 

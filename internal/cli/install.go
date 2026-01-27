@@ -221,6 +221,7 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		} else {
 			fmt.Printf("\nDone! Installed to %d location(s).\n", newInstalls)
 		}
+		fmt.Println("\nRestart your agent for the skill to take effect.")
 	}
 
 	return nil
