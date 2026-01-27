@@ -8,7 +8,34 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+)
+
+// Styles for check command output
+var (
+	checkHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#E5E5E5"})
+
+	checkSkillStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#6B3FA0", Dark: "#9B59B6"})
+
+	checkGlobalStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#008000", Dark: "#00FF41"})
+
+	checkProjectStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#0088CC", Dark: "#00D4FF"})
+
+	checkBothStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#B8860B", Dark: "#F1C40F"})
+
+	checkMutedStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#6B6B6B", Dark: "#6B6B6B"})
+
+	checkCountStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#8B0000", Dark: "#DC143C"}).
+			Bold(true)
 )
 
 var checkCmd = &cobra.Command{
@@ -52,8 +79,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 // printCheckTable displays installed skills in a formatted table.
 func printCheckTable(skills []installer.InstalledSkillSummary) {
 	if len(skills) == 0 {
-		fmt.Println("No skills installed.")
-		fmt.Println("\nUse 'skulto install <slug>' to install a skill.")
+		fmt.Println(checkMutedStyle.Render("No skills installed."))
+		fmt.Println()
+		fmt.Println(checkMutedStyle.Render("Use 'skulto install <slug>' to install a skill."))
 		return
 	}
 
@@ -66,19 +94,25 @@ func printCheckTable(skills []installer.InstalledSkillSummary) {
 	}
 
 	// Print header
-	fmt.Printf("%-*s  INSTALLED LOCATIONS\n", skillWidth, "SKILL")
-	fmt.Println(strings.Repeat("-", skillWidth+2+30))
+	header := fmt.Sprintf("%-*s  %s", skillWidth, "SKILL", "INSTALLED LOCATIONS")
+	fmt.Println(checkHeaderStyle.Render(header))
+	fmt.Println(checkMutedStyle.Render(strings.Repeat("─", skillWidth+2+40)))
 
 	// Print rows
 	for _, s := range skills {
-		locations := formatLocations(s.Locations)
-		fmt.Printf("%-*s  %s\n", skillWidth, s.Slug, locations)
+		skillName := checkSkillStyle.Render(fmt.Sprintf("%-*s", skillWidth, s.Slug))
+		locations := formatLocationsStyled(s.Locations)
+		fmt.Printf("%s  %s\n", skillName, locations)
 	}
+
+	// Print count
+	fmt.Println()
+	fmt.Println(checkCountStyle.Render(fmt.Sprintf("%d skill(s) installed", len(skills))))
 }
 
-// formatLocations formats the platform-scope map as a readable string.
+// formatLocationsStyled formats the platform-scope map with lipgloss styling.
 // Example: "claude (global), cursor (global + project)"
-func formatLocations(locations map[installer.Platform][]installer.InstallScope) string {
+func formatLocationsStyled(locations map[installer.Platform][]installer.InstallScope) string {
 	if len(locations) == 0 {
 		return ""
 	}
@@ -90,20 +124,22 @@ func formatLocations(locations map[installer.Platform][]installer.InstallScope) 
 	}
 	sort.Strings(platforms)
 
-	// Build formatted strings
+	// Build formatted strings with styling
 	parts := make([]string, 0, len(platforms))
 	for _, pStr := range platforms {
 		p := installer.Platform(pStr)
 		scopes := locations[p]
-		scopeStr := formatScopes(scopes)
-		parts = append(parts, fmt.Sprintf("%s (%s)", pStr, scopeStr))
+		scopeStr, style := formatScopesStyled(scopes)
+		styledScope := style.Render(scopeStr)
+		parts = append(parts, fmt.Sprintf("%s (%s)", pStr, styledScope))
 	}
 
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, checkMutedStyle.Render(", "))
 }
 
-// formatScopes formats scopes as "global", "project", or "global + project".
-func formatScopes(scopes []installer.InstallScope) string {
+// formatScopesStyled formats scopes and returns appropriate style.
+// Returns: scope string, style to use
+func formatScopesStyled(scopes []installer.InstallScope) (string, lipgloss.Style) {
 	hasGlobal := false
 	hasProject := false
 
@@ -118,12 +154,12 @@ func formatScopes(scopes []installer.InstallScope) string {
 
 	switch {
 	case hasGlobal && hasProject:
-		return "global + project"
+		return "global + project", checkBothStyle
 	case hasGlobal:
-		return "global"
+		return "global", checkGlobalStyle
 	case hasProject:
-		return "project"
+		return "project", checkProjectStyle
 	default:
-		return ""
+		return "", checkMutedStyle
 	}
 }
