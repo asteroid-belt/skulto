@@ -17,6 +17,7 @@ CGO_ENABLED=0
 BUILD_DIR=./build
 RELEASE_DIR=./release
 CMD_DIR=./cmd/skulto
+CMD_MCP_DIR=./cmd/skulto-mcp
 
 # Default target
 all: build
@@ -27,6 +28,16 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
 	@echo "✅ Built $(BUILD_DIR)/$(BINARY_NAME)"
+
+## build-mcp: Build the skulto-mcp MCP server binary
+build-mcp:
+	@echo "Building skulto-mcp..."
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/skulto-mcp $(CMD_MCP_DIR)
+	@echo "✅ Built $(BUILD_DIR)/skulto-mcp"
+
+## build-all: Build all binaries (skulto and skulto-mcp)
+build-all: build build-mcp
 
 ## release: Build skulto for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
 release:
@@ -47,6 +58,16 @@ ifndef GOARCH
 	$(error GOARCH is required. Usage: make release-all GOOS=linux GOARCH=amd64)
 endif
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh all
+
+## release-mcp: Build skulto-mcp for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
+release-mcp:
+ifndef GOOS
+	$(error GOOS is required. Usage: make release-mcp GOOS=linux GOARCH=amd64)
+endif
+ifndef GOARCH
+	$(error GOARCH is required. Usage: make release-mcp GOOS=linux GOARCH=amd64)
+endif
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto-mcp
 
 release-easy:
 	@GOOS=$(shell uname | tr '[:upper:]' '[:lower:]') GOARCH=$(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') ./scripts/release.sh skulto
