@@ -116,7 +116,6 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 
 	// Determine selected platforms
 	selectedPlatforms := installPlatforms
-	var alreadyInstalledPlatforms []string
 
 	if !installYes && len(selectedPlatforms) == 0 {
 		// Interactive mode - show platform selector with installed info
@@ -142,7 +141,6 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		}
 
 		selectedPlatforms = result.Selected
-		alreadyInstalledPlatforms = result.AlreadyInstalled
 	}
 
 	if len(selectedPlatforms) == 0 {
@@ -186,7 +184,9 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 	}
 
 	// Print results
+	// Note: result.Locations contains ALL installed locations (not just new ones)
 	newInstalls := 0
+	alreadyInstalledCount := 0
 	for _, loc := range result.Locations {
 		// Check if this was a new install or already existed
 		wasAlreadyInstalled := false
@@ -198,27 +198,18 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		}
 		if wasAlreadyInstalled {
 			fmt.Printf("  ○ %s (%s) - already installed\n", loc.Platform, loc.Scope)
+			alreadyInstalledCount++
 		} else {
 			fmt.Printf("  ✓ %s (%s)\n", loc.Platform, loc.Scope)
 			newInstalls++
 		}
 	}
 
-	// Also show platforms that were already installed (from interactive selection)
-	for _, platformID := range alreadyInstalledPlatforms {
-		for _, loc := range installedLocations {
-			if string(loc.Platform) == platformID {
-				fmt.Printf("  ○ %s (%s) - already installed\n", loc.Platform, loc.Scope)
-			}
-		}
-	}
-
 	if newInstalls == 0 {
 		fmt.Println("\nNo new installations performed. All locations were already installed.")
 	} else {
-		skipped := len(result.Locations) - newInstalls + len(alreadyInstalledPlatforms)
-		if skipped > 0 {
-			fmt.Printf("\nDone! Installed to %d new location(s). %d location(s) were already installed.\n", newInstalls, skipped)
+		if alreadyInstalledCount > 0 {
+			fmt.Printf("\nDone! Installed to %d new location(s). %d location(s) were already installed.\n", newInstalls, alreadyInstalledCount)
 		} else {
 			fmt.Printf("\nDone! Installed to %d location(s).\n", newInstalls)
 		}

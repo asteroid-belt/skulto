@@ -8,8 +8,8 @@ import (
 // BuildScopeOptions creates huh options for installation scopes.
 func BuildScopeOptions() []huh.Option[string] {
 	return []huh.Option[string]{
-		huh.NewOption("Global (~/.claude/skills/) - Available everywhere", string(installer.ScopeGlobal)),
-		huh.NewOption("Project (./.claude/skills/) - Current directory only", string(installer.ScopeProject)),
+		huh.NewOption("Global (i.e. ~/.claude/skills/) - Available everywhere", string(installer.ScopeGlobal)),
+		huh.NewOption("Project (i.e. ./.claude/skills/) - Current directory only", string(installer.ScopeProject)),
 	}
 }
 
