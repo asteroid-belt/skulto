@@ -275,105 +275,128 @@ func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (
 }
 
 // handleInstall handles the skulto_install tool.
-// Uses internal/installer to create actual symlinks to AI tool directories.
+// Uses InstallService for unified installation across all platforms.
 func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
-	skill, err := s.db.GetSkillBySlug(slug)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get skill: %v", err)), nil
-	}
-	if skill == nil {
-		return mcp.NewToolResultError(fmt.Sprintf("skill not found: %s", slug)), nil
-	}
-
-	fullSkill, err := s.db.GetSkill(skill.ID)
-	if err != nil || fullSkill == nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to load skill details: %v", err)), nil
-	}
-
-	source := fullSkill.Source
-	if source == nil && fullSkill.SourceID != nil {
-		source, _ = s.db.GetSource(*fullSkill.SourceID)
-	}
-
-	if source == nil {
-		return mcp.NewToolResultError("skill has no source repository - cannot install"), nil
-	}
-
-	userState, err := s.db.GetUserState()
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get user settings: %v", err)), nil
-	}
-
-	platforms := userState.GetAITools()
-	if len(platforms) == 0 {
-		return mcp.NewToolResultError("no AI platforms configured - run 'skulto' TUI to select platforms"), nil
-	}
-
-	locations := make([]installer.InstallLocation, 0, len(platforms))
-	for _, platformName := range platforms {
-		platform := installer.PlatformFromString(platformName)
-		if platform == "" {
-			continue
+	// Parse optional platforms array
+	var platforms []string
+	if platformsArg, ok := req.Params.Arguments["platforms"].([]interface{}); ok {
+		for _, p := range platformsArg {
+			if ps, ok := p.(string); ok && ps != "" {
+				platforms = append(platforms, ps)
+			}
 		}
-		loc, err := installer.NewInstallLocation(platform, installer.ScopeGlobal)
-		if err != nil {
-			continue
+	}
+
+	// Parse optional scope
+	var scopes []installer.InstallScope
+	if scopeArg, ok := req.Params.Arguments["scope"].(string); ok && scopeArg != "" {
+		scope := installer.InstallScope(scopeArg)
+		if scope == installer.ScopeGlobal || scope == installer.ScopeProject {
+			scopes = []installer.InstallScope{scope}
 		}
-		locations = append(locations, loc)
 	}
 
-	if len(locations) == 0 {
-		return mcp.NewToolResultError("no valid installation locations found"), nil
+	// Build install options
+	opts := installer.InstallOptions{
+		Platforms: platforms, // nil means use user's configured platforms
+		Scopes:    scopes,    // nil means default to global
+		Confirm:   true,
 	}
 
-	if err := s.installer.InstallTo(ctx, fullSkill, source, locations); err != nil {
+	// Use InstallService for unified behavior
+	result, err := s.installService.Install(ctx, slug, opts)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to install: %v", err)), nil
 	}
 
-	installedLocs, _ := s.installer.GetInstallLocations(fullSkill.ID)
-	paths := make([]string, 0, len(installedLocs))
-	for _, loc := range installedLocs {
-		paths = append(paths, loc.GetSkillPath(fullSkill.Slug))
+	// Build paths from locations
+	paths := make([]string, 0, len(result.Locations))
+	for _, loc := range result.Locations {
+		paths = append(paths, loc.GetSkillPath(result.Skill.Slug))
 	}
 
-	result := InstallResult{
+	installResult := InstallResult{
 		Success: true,
-		Message: fmt.Sprintf("Skill '%s' installed to %d platform(s)", fullSkill.Title, len(paths)),
+		Message: fmt.Sprintf("Skill '%s' installed to %d platform(s)", result.Skill.Title, len(paths)),
 		Paths:   paths,
 	}
 
-	data, _ := json.Marshal(result)
+	data, _ := json.Marshal(installResult)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleUninstall handles the skulto_uninstall tool.
-// Uses internal/installer to remove symlinks from all AI tool directories.
+// Uses InstallService for unified uninstallation across all platforms.
 func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
-	skill, err := s.db.GetSkillBySlug(slug)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get skill: %v", err)), nil
-	}
-	if skill == nil {
-		return mcp.NewToolResultError(fmt.Sprintf("skill not found: %s", slug)), nil
+	// Parse optional platforms array
+	var platforms []string
+	if platformsArg, ok := req.Params.Arguments["platforms"].([]interface{}); ok {
+		for _, p := range platformsArg {
+			if ps, ok := p.(string); ok && ps != "" {
+				platforms = append(platforms, ps)
+			}
+		}
 	}
 
-	if err := s.installer.UninstallAll(ctx, skill); err != nil {
+	// Parse optional scope
+	scopeArg, _ := req.Params.Arguments["scope"].(string)
+
+	// Get current install locations
+	locations, err := s.installService.GetInstallLocations(ctx, slug)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get install locations: %v", err)), nil
+	}
+
+	if len(locations) == 0 {
+		return mcp.NewToolResultError(fmt.Sprintf("skill '%s' is not installed anywhere", slug)), nil
+	}
+
+	// Filter locations if platforms or scope specified
+	var toUninstall []installer.InstallLocation
+	if len(platforms) > 0 || (scopeArg != "" && scopeArg != "all") {
+		platformSet := make(map[string]bool)
+		for _, p := range platforms {
+			platformSet[p] = true
+		}
+
+		for _, loc := range locations {
+			// Filter by platform if specified
+			if len(platforms) > 0 && !platformSet[string(loc.Platform)] {
+				continue
+			}
+			// Filter by scope if specified (and not "all")
+			if scopeArg != "" && scopeArg != "all" && string(loc.Scope) != scopeArg {
+				continue
+			}
+			toUninstall = append(toUninstall, loc)
+		}
+	} else {
+		// No filters - uninstall from all
+		toUninstall = locations
+	}
+
+	if len(toUninstall) == 0 {
+		return mcp.NewToolResultError("no matching installation locations found"), nil
+	}
+
+	// Perform uninstallation
+	if err := s.installService.Uninstall(ctx, slug, toUninstall); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to uninstall: %v", err)), nil
 	}
 
 	result := InstallResult{
 		Success: true,
-		Message: fmt.Sprintf("Skill '%s' uninstalled from all platforms", skill.Title),
+		Message: fmt.Sprintf("Skill '%s' uninstalled from %d location(s)", slug, len(toUninstall)),
 	}
 
 	data, _ := json.Marshal(result)
@@ -396,6 +419,7 @@ func (s *Server) handleBookmark(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError("action must be 'add' or 'remove'"), nil
 	}
 
+	// Verify skill exists in database
 	skill, err := s.db.GetSkillBySlug(slug)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get skill: %v", err)), nil
@@ -404,19 +428,24 @@ func (s *Server) handleBookmark(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError(fmt.Sprintf("skill not found: %s", slug)), nil
 	}
 
+	// Check if favorites store is available
+	if s.favorites == nil {
+		return mcp.NewToolResultError("favorites store not initialized"), nil
+	}
+
 	var opErr error
 	var message string
 
 	if action == "add" {
-		opErr = s.db.AddInstalled(skill.ID)
-		message = fmt.Sprintf("Skill '%s' bookmarked", skill.Title)
+		opErr = s.favorites.Add(slug)
+		message = fmt.Sprintf("Skill '%s' added to favorites", skill.Title)
 	} else {
-		opErr = s.db.RemoveInstalled(skill.ID)
-		message = fmt.Sprintf("Skill '%s' removed from bookmarks", skill.Title)
+		opErr = s.favorites.Remove(slug)
+		message = fmt.Sprintf("Skill '%s' removed from favorites", skill.Title)
 	}
 
 	if opErr != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to %s bookmark: %v", action, opErr)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("failed to %s favorite: %v", action, opErr)), nil
 	}
 
 	result := InstallResult{
@@ -438,19 +467,33 @@ func (s *Server) handleGetBookmarks(ctx context.Context, req mcp.CallToolRequest
 		}
 	}
 
-	skills, err := s.db.GetInstalled()
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get bookmarks: %v", err)), nil
+	// Check if favorites store is available
+	if s.favorites == nil {
+		return mcp.NewToolResultError("favorites store not initialized"), nil
 	}
+
+	// Get favorites from file-based store
+	favs := s.favorites.List()
 
 	// Apply limit
-	if len(skills) > limit {
-		skills = skills[:limit]
+	if len(favs) > limit {
+		favs = favs[:limit]
 	}
 
-	results := make([]SkillResponse, 0, len(skills))
-	for i := range skills {
-		results = append(results, toSkillResponse(&skills[i], false))
+	// Look up skill details from database for each favorite
+	results := make([]SkillResponse, 0, len(favs))
+	for _, fav := range favs {
+		skill, err := s.db.GetSkillBySlug(fav.Slug)
+		if err != nil || skill == nil {
+			// Skill might have been deleted from DB, include minimal info
+			results = append(results, SkillResponse{
+				Slug:        fav.Slug,
+				Title:       fav.Slug, // Use slug as title if skill not found
+				Description: "(Skill no longer in database)",
+			})
+			continue
+		}
+		results = append(results, toSkillResponse(skill, false))
 	}
 
 	data, err := json.Marshal(results)

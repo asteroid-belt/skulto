@@ -65,8 +65,8 @@ Unify skull installation across CLI/TUI/MCP into a single service with new inter
 | 2 | CLI Prompts | 1 | - | 3 | ✅ |
 | 3A | CLI Install Command | 2 | 3B | 5 | ✅ |
 | 3B | CLI Uninstall Command | 2 | 3A | 3 | ✅ |
-| 4 | TUI Refactor | 1 | - | 5 | ⬜ |
-| 5 | MCP Updates | 1 | 4 | 3 | ⬜ |
+| 4 | TUI Refactor | 1 | - | 5 | ✅ |
+| 5 | MCP Updates | 1 | 4 | 3 | ✅ |
 
 **Total Estimate**: 24 points
 

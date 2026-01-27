@@ -10,6 +10,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
@@ -48,13 +49,15 @@ type Model struct {
 	keymap    Keymap
 	searchSvc *search.Service
 	telemetry telemetry.Client
+	favorites *favorites.Store
 
 	// Background indexer for semantic search
 	bgIndexer       *search.BackgroundIndexer
 	indexProgressCh chan search.IndexProgress
 	pullProgressCh  chan pullProgressMsg
-	scanProgressCh  chan scanProgressMsg
-	installer       *installer.Installer
+	scanProgressCh   chan scanProgressMsg
+	installer        *installer.Installer
+	installService   *installer.InstallService
 
 	// Views
 	currentView          ViewType
@@ -183,21 +186,30 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 	// Create installer for skill installation management
 	inst := installer.New(database, conf)
 
+	// Create install service for unified installation operations
+	instService := installer.NewInstallService(database, conf, nil)
+
 	// Create search service (nil VectorStore means FTS-only mode)
 	// VectorStore can be injected later via NewModelWithSearchService if needed
 	searchSvc := search.New(database, nil, search.DefaultConfig())
+
+	// Initialize favorites store
+	paths := config.GetPaths(conf)
+	favStore := favorites.NewStore(paths.Favorites)
+	_ = favStore.Load() // Ignore error, will use empty store
 
 	return &Model{
 		db:                   database,
 		cfg:                  conf,
 		keymap:               keymap,
 		searchSvc:            searchSvc,
+		favorites:            favStore,
 		currentView:          startingView,
 		previousView:         startingView,
 		homeView:             homeView,
 		searchView:           views.NewSearchView(database, conf, searchSvc),
 		resetView:            views.NewResetView(database, conf),
-		detailView:           views.NewDetailView(database, conf),
+		detailView:           views.NewDetailView(database, conf, favStore),
 		tagView:              views.NewTagView(database, conf),
 		onboardingIntroView:  views.NewOnboardingIntroView(conf),
 		onboardingSetupView:  views.NewOnboardingSetupView(conf),
@@ -208,6 +220,7 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 		ticker:               time.NewTicker(500 * time.Millisecond),
 		animTick:             0,
 		installer:            inst,
+		installService:       instService,
 		newSkillDialog:       components.NewNewSkillDialog(),
 		quitConfirmDialog:    components.NewConfirmDialog("Quit Skulto?", "Are you sure you want to exit?"),
 	}
@@ -245,8 +258,16 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 	// Create installer for skill installation management
 	inst := installer.New(database, conf)
 
+	// Create install service for unified installation operations
+	instService := installer.NewInstallService(database, conf, tc)
+
+	// Initialize favorites store
+	paths := config.GetPaths(conf)
+	favStore := favorites.NewStore(paths.Favorites)
+	_ = favStore.Load() // Ignore error, will use empty store
+
 	searchView := views.NewSearchView(database, conf, searchSvc)
-	detailView := views.NewDetailView(database, conf)
+	detailView := views.NewDetailView(database, conf, favStore)
 
 	// Track app started
 	sourceCount := 0
@@ -262,7 +283,9 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 		keymap:               keymap,
 		telemetry:            tc,
 		installer:            inst,
+		installService:       instService,
 		searchSvc:            searchSvc,
+		favorites:            favStore,
 		bgIndexer:            indexer,
 		indexProgressCh:      make(chan search.IndexProgress, 10),
 		pullProgressCh:       make(chan pullProgressMsg, 20),
@@ -1218,13 +1241,16 @@ func (m *Model) finishResetWithNewDB() {
 	// Reinitialize installer with new database (critical for post-reset installs)
 	m.installer = installer.New(m.db, m.cfg)
 
+	// Reinitialize install service with new database
+	m.installService = installer.NewInstallService(m.db, m.cfg, m.telemetry)
+
 	// Reinitialize search service with new database
 	m.searchSvc = search.New(m.db, nil, search.DefaultConfig())
 
 	// Reinitialize ALL views with the new database connection
 	m.homeView = views.NewHomeView(m.db, m.cfg)
 	m.searchView = views.NewSearchView(m.db, m.cfg, m.searchSvc)
-	m.detailView = views.NewDetailView(m.db, m.cfg)
+	m.detailView = views.NewDetailView(m.db, m.cfg, m.favorites)
 	m.tagView = views.NewTagView(m.db, m.cfg)
 	m.resetView = views.NewResetView(m.db, m.cfg)
 	m.addSourceView = views.NewAddSourceView(m.db, m.cfg)

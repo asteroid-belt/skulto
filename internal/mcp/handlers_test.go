@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Note: setupTestDB and setupTestFavorites are defined in server_test.go
+
 func seedTestSkills(t *testing.T, s *Server) {
 	t.Helper()
 
@@ -46,7 +48,8 @@ func seedTestSkills(t *testing.T, s *Server) {
 func TestHandleSearch(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -105,7 +108,8 @@ func TestHandleSearch(t *testing.T) {
 func TestHandleGetSkill(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -160,7 +164,8 @@ func TestHandleGetSkill(t *testing.T) {
 func TestHandleListSkills(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -209,7 +214,8 @@ func TestHandleListSkills(t *testing.T) {
 func TestHandleBrowseTags(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 
 	// Seed some tags
 	tags := []models.Tag{
@@ -264,7 +270,8 @@ func TestHandleBrowseTags(t *testing.T) {
 func TestHandleGetStats(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -290,7 +297,8 @@ func TestHandleGetStats(t *testing.T) {
 func TestHandleGetRecent(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -324,7 +332,8 @@ func TestHandleGetRecent(t *testing.T) {
 func TestHandleBookmark(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -340,9 +349,9 @@ func TestHandleBookmark(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
-		// Verify skill is now in bookmarks
-		installed, _ := server.db.GetInstalled()
-		assert.Len(t, installed, 1)
+		// Verify skill is now in favorites
+		assert.True(t, favStore.IsFavorite("test-react-hooks"))
+		assert.Equal(t, 1, favStore.Count())
 	})
 
 	t.Run("bookmark remove works", func(t *testing.T) {
@@ -356,9 +365,9 @@ func TestHandleBookmark(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
-		// Verify skill is removed from bookmarks
-		installed, _ := server.db.GetInstalled()
-		assert.Len(t, installed, 0)
+		// Verify skill is removed from favorites
+		assert.False(t, favStore.IsFavorite("test-react-hooks"))
+		assert.Equal(t, 0, favStore.Count())
 	})
 
 	t.Run("bookmark invalid action returns error", func(t *testing.T) {
@@ -372,17 +381,30 @@ func TestHandleBookmark(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 	})
+
+	t.Run("bookmark nonexistent skill returns error", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"slug":   "nonexistent-skill",
+			"action": "add",
+		}
+
+		result, err := server.handleBookmark(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+	})
 }
 
 func TestHandleGetBookmarks(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
 
-	// Add a bookmark
+	// Add a bookmark via handler
 	bookmarkReq := mcp.CallToolRequest{}
 	bookmarkReq.Params.Arguments = map[string]any{
 		"slug":   "test-react-hooks",
@@ -408,13 +430,69 @@ func TestHandleGetBookmarks(t *testing.T) {
 
 		assert.Len(t, skills, 1)
 		assert.Equal(t, "test-react-hooks", skills[0].Slug)
+		assert.Equal(t, "React Hooks Best Practices", skills[0].Title)
+	})
+
+	t.Run("get bookmarks returns empty array when no favorites", func(t *testing.T) {
+		// Create a new server with empty favorites
+		emptyFavStore := setupTestFavorites(t)
+		emptyServer := NewServer(database, cfg, emptyFavStore)
+
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{}
+
+		result, err := emptyServer.handleGetBookmarks(ctx, req)
+		require.NoError(t, err)
+		require.False(t, result.IsError)
+
+		var skills []SkillResponse
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		err = json.Unmarshal([]byte(textContent.Text), &skills)
+		require.NoError(t, err)
+
+		assert.Len(t, skills, 0)
+	})
+
+	t.Run("get bookmarks handles deleted skill gracefully", func(t *testing.T) {
+		// Add a favorite directly that doesn't exist in DB
+		require.NoError(t, favStore.Add("deleted-skill"))
+
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{}
+
+		result, err := server.handleGetBookmarks(ctx, req)
+		require.NoError(t, err)
+		require.False(t, result.IsError)
+
+		var skills []SkillResponse
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		err = json.Unmarshal([]byte(textContent.Text), &skills)
+		require.NoError(t, err)
+
+		// Should return both the valid skill and the deleted one with minimal info
+		assert.Len(t, skills, 2)
+
+		// Find the deleted skill response
+		var deletedSkill *SkillResponse
+		for i := range skills {
+			if skills[i].Slug == "deleted-skill" {
+				deletedSkill = &skills[i]
+				break
+			}
+		}
+		require.NotNil(t, deletedSkill)
+		assert.Equal(t, "deleted-skill", deletedSkill.Slug)
+		assert.Contains(t, deletedSkill.Description, "no longer in database")
 	})
 }
 
 func TestHandleInstall(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -452,14 +530,15 @@ func TestHandleInstall(t *testing.T) {
 		// Should fail because skill has no source repository
 		textContent, ok := result.Content[0].(mcp.TextContent)
 		require.True(t, ok)
-		assert.Contains(t, textContent.Text, "no source repository")
+		assert.Contains(t, textContent.Text, "cannot install skill without source")
 	})
 }
 
 func TestHandleUninstall(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()

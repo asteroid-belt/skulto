@@ -79,6 +79,12 @@ func installTool() mcp.Tool {
 			mcp.Required(),
 			mcp.Description("The skill's unique slug identifier"),
 		),
+		mcp.WithArray("platforms",
+			mcp.Description("Platforms to install to. Options: claude, cursor, windsurf, copilot, codex, opencode. Default: user's configured platforms."),
+		),
+		mcp.WithString("scope",
+			mcp.Description("Installation scope: 'global' (user-wide) or 'project' (current directory). Default: global."),
+		),
 	)
 }
 
@@ -89,6 +95,12 @@ func uninstallTool() mcp.Tool {
 		mcp.WithString("slug",
 			mcp.Required(),
 			mcp.Description("The skill's unique slug identifier"),
+		),
+		mcp.WithArray("platforms",
+			mcp.Description("Platforms to uninstall from. Options: claude, cursor, windsurf, copilot, codex, opencode. Default: all installed locations."),
+		),
+		mcp.WithString("scope",
+			mcp.Description("Scope to uninstall from: 'global', 'project', or 'all'. Default: all."),
 		),
 	)
 }

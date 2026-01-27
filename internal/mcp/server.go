@@ -11,6 +11,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/pkg/version"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -19,18 +20,22 @@ import (
 
 // Server wraps the MCP server with Skulto-specific functionality.
 type Server struct {
-	db        *db.DB
-	cfg       *config.Config
-	installer *installer.Installer // Reuse existing installer for symlink operations
-	server    *server.MCPServer
+	db             *db.DB
+	cfg            *config.Config
+	installer      *installer.Installer      // Reuse existing installer for symlink operations
+	installService *installer.InstallService // Unified install service
+	favorites      *favorites.Store          // Favorites store (persists across DB resets)
+	server         *server.MCPServer
 }
 
 // NewServer creates a new MCP server instance.
-func NewServer(database *db.DB, cfg *config.Config) *Server {
+func NewServer(database *db.DB, cfg *config.Config, favStore *favorites.Store) *Server {
 	s := &Server{
-		db:        database,
-		cfg:       cfg,
-		installer: installer.New(database, cfg), // Same installer used by TUI
+		db:             database,
+		cfg:            cfg,
+		installer:      installer.New(database, cfg),              // Same installer used by TUI
+		installService: installer.NewInstallService(database, cfg, nil), // Unified service
+		favorites:      favStore,
 	}
 
 	// Create MCP server with capabilities
