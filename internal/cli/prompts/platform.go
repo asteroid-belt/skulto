@@ -61,7 +61,11 @@ func RunPlatformSelector(platforms []installer.DetectedPlatform, preselected []s
 		preselected = GetDefaultSelectedPlatforms(platforms)
 	}
 
-	var selected []string
+	// Initialize selected with preselected values BEFORE creating form
+	// (form binds to &selected, so we must not reassign after binding)
+	selected := make([]string, len(preselected))
+	copy(selected, preselected)
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -71,9 +75,6 @@ func RunPlatformSelector(platforms []installer.DetectedPlatform, preselected []s
 				Value(&selected),
 		),
 	)
-
-	// Set initial selection
-	selected = preselected
 
 	if err := form.Run(); err != nil {
 		return nil, err

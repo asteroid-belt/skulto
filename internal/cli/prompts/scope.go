@@ -36,7 +36,11 @@ func RunScopeSelector(preselected []string) ([]string, error) {
 		preselected = []string{string(installer.ScopeGlobal)}
 	}
 
-	var selected []string
+	// Initialize selected with preselected values BEFORE creating form
+	// (form binds to &selected, so we must not reassign after binding)
+	selected := make([]string, len(preselected))
+	copy(selected, preselected)
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
@@ -46,9 +50,6 @@ func RunScopeSelector(preselected []string) ([]string, error) {
 				Value(&selected),
 		),
 	)
-
-	// Set initial selection
-	selected = preselected
 
 	if err := form.Run(); err != nil {
 		return nil, err
