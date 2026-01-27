@@ -68,7 +68,7 @@ cd skulto
 make deps
 
 # Build
-make build
+make build-all
 
 # Run
 ./build/skulto
@@ -244,6 +244,35 @@ skulto favorites list
 ```
 
 You can also toggle favorites in the TUI by pressing `f` on any skill detail view.
+
+### MCP Server
+
+Skulto includes an MCP (Model Context Protocol) server that exposes skills to Claude Code and other MCP-compatible clients. This enables AI assistants to search, browse, and install skills directly.
+
+#### Available Tools
+
+| Tool | Description |
+| --- | --- |
+| `skulto_search` | Search skills using full-text search with BM25 ranking |
+| `skulto_get_skill` | Get detailed information about a skill including full content and tags |
+| `skulto_list_skills` | List all skills with pagination |
+| `skulto_browse_tags` | List available tags by category (language, framework, tool, concept, domain) |
+| `skulto_get_stats` | Get database statistics (total skills, tags, sources) |
+| `skulto_get_recent` | Get recently viewed skills |
+| `skulto_install` | Install a skill to Claude Code or other platforms |
+| `skulto_uninstall` | Uninstall a skill |
+| `skulto_favorite` | Add or remove a skill from favorites |
+| `skulto_get_favorites` | Get favorite skills |
+| `skulto_check` | List all installed skills and their locations |
+
+#### Resources
+
+The MCP server also exposes resources for direct skill access:
+
+| Resource URI | Description |
+| --- | --- |
+| `skulto://skill/{slug}` | Full markdown content of a skill |
+| `skulto://skill/{slug}/metadata` | JSON metadata including tags, source, and stats |
 
 ### Database Location
 

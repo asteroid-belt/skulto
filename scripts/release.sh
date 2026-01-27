@@ -11,17 +11,24 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Configuration
 VALID_OS_TYPES="linux darwin"
 VALID_ARCH_TYPES="amd64 arm64"
+VALID_BINARIES="skulto skulto-mcp"
 RELEASE_DIR="${PROJECT_ROOT}/release"
 CGO_ENABLED=0
 
 # Requirements
-REQUIRED_ARGS=()
+REQUIRED_ARGS=(BINARY)
 REQUIRED_ENV_VARS=(VERSION SKULTO_POSTHOG_API_KEY GOOS GOARCH)
 REQUIRED_PROGRAMS=("git" "go")
 
+# Parsed arguments
+BINARY=""
+
 usage() {
   cat << 'EOF'
-Usage: VERSION=<version> SKULTO_POSTHOG_API_KEY=<key> GOOS=<os> GOARCH=<arch> release.sh
+Usage: VERSION=<version> SKULTO_POSTHOG_API_KEY=<key> GOOS=<os> GOARCH=<arch> release.sh <binary>
+
+Arguments:
+  binary                   Binary to build: skulto or skulto-mcp [required]
 
 Environment variables:
   VERSION                  Version string for the build [required]
@@ -33,8 +40,8 @@ External tools:
   git, go
 
 Examples:
-  VERSION=1.0.0 SKULTO_POSTHOG_API_KEY=key GOOS=linux GOARCH=amd64 ./scripts/release.sh
-  VERSION=1.0.0 SKULTO_POSTHOG_API_KEY=key GOOS=darwin GOARCH=arm64 ./scripts/release.sh
+  VERSION=1.0.0 SKULTO_POSTHOG_API_KEY=key GOOS=linux GOARCH=amd64 ./scripts/release.sh skulto
+  VERSION=1.0.0 SKULTO_POSTHOG_API_KEY=key GOOS=darwin GOARCH=arm64 ./scripts/release.sh skulto-mcp
 EOF
 }
 
@@ -87,36 +94,43 @@ get_ldflags() {
 }
 
 get_cmd_path() {
-  printf '%s' "./cmd/skulto"
+  local binary_name="$1"
+  case "$binary_name" in
+    skulto)     printf '%s' "./cmd/skulto" ;;
+    skulto-mcp) printf '%s' "./cmd/skulto-mcp" ;;
+    *)          printf 'Error: Unknown binary %s\n' "$binary_name" >&2; return 1 ;;
+  esac
 }
 
 build_artifact() {
+  local binary_name="$1"
   local cmd_path
   local ldflags
   local output_dir
 
-  cmd_path=$(get_cmd_path)
+  cmd_path=$(get_cmd_path "$binary_name")
   ldflags=$(get_ldflags)
   output_dir="${RELEASE_DIR}/${GOOS}/${GOARCH}"
 
-  printf '📦 Building skulto for %s-%s...\n' "$GOOS" "$GOARCH"
+  printf '📦 Building %s for %s-%s...\n' "$binary_name" "$GOOS" "$GOARCH"
   printf '   Version: %s\n' "$VERSION"
   printf '   Commit:  %s\n\n' "$COMMIT"
 
   mkdir -p "$output_dir"
 
-  printf '  Building skulto...\n'
+  printf '  Building %s...\n' "$binary_name"
 
   CGO_ENABLED="$CGO_ENABLED" \
-    go build -v -ldflags "$ldflags" -o "${output_dir}/skulto" "$cmd_path"
+    go build -v -ldflags "$ldflags" -o "${output_dir}/${binary_name}" "$cmd_path"
 
-  chmod +x "${output_dir}/skulto"
+  chmod +x "${output_dir}/${binary_name}"
 
-  printf '\n✅ skulto built for %s-%s\n' "$GOOS" "$GOARCH"
+  printf '\n✅ %s built for %s-%s\n' "$binary_name" "$GOOS" "$GOARCH"
 }
 
 validate_artifact() {
-  local artifact_path="${RELEASE_DIR}/${GOOS}/${GOARCH}/skulto"
+  local binary_name="$1"
+  local artifact_path="${RELEASE_DIR}/${GOOS}/${GOARCH}/${binary_name}"
   local host_os
   local host_arch
 
@@ -135,7 +149,7 @@ validate_artifact() {
     *)       host_arch="unknown" ;;
   esac
 
-  printf '\n🔍 Validating skulto...\n'
+  printf '\n🔍 Validating %s...\n' "$binary_name"
 
   if [ "$GOOS" != "$host_os" ] || [ "$GOARCH" != "$host_arch" ]; then
     printf '   ⚠️  Skipping validation: cross-compiled binary (target: %s-%s, host: %s-%s)\n' \
@@ -146,9 +160,9 @@ validate_artifact() {
   local version_output
   if version_output=$("$artifact_path" --version 2>&1); then
     printf '   Version output: %s\n' "$version_output"
-    printf '   ✅ skulto validated successfully\n'
+    printf '   ✅ %s validated successfully\n' "$binary_name"
   else
-    printf '   ❌ Failed to run skulto --version\n' >&2
+    printf '   ❌ Failed to run %s --version\n' "$binary_name" >&2
     printf '   Output: %s\n' "$version_output" >&2
     return 1
   fi
@@ -166,7 +180,27 @@ show_release_structure() {
 }
 
 parse_args() {
-  :
+  if [ $# -lt 1 ]; then
+    printf 'Error: Missing required argument: binary\n' >&2
+    usage >&2
+    return 1
+  fi
+  BINARY="$1"
+}
+
+validate_binary() {
+  if ! echo "$VALID_BINARIES" | grep -qw "$BINARY"; then
+    printf 'Error: Invalid binary "%s". Valid options: %s\n' "$BINARY" "$VALID_BINARIES" >&2
+    printf '\n' >&2
+    usage >&2
+    return 1
+  fi
+}
+
+build_single() {
+  local binary_name="$1"
+  build_artifact "$binary_name"
+  validate_artifact "$binary_name"
 }
 
 validate_platform() {
@@ -190,15 +224,15 @@ validate_platform() {
 }
 
 main() {
-  parse_args "$@"
+  parse_args "$@" || exit 1
   check_requirements "$#" || exit 1
   validate_platform || exit 1
+  validate_binary || exit 1
 
   cd "$PROJECT_ROOT"
   get_version_info
 
-  build_artifact
-  validate_artifact
+  build_single "$BINARY"
   show_release_structure
 
   printf '🎉 Release complete!\n'

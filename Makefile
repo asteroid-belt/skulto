@@ -39,44 +39,20 @@ build-mcp:
 ## build-all: Build all binaries (skulto and skulto-mcp)
 build-all: build build-mcp
 
-## release: Build skulto for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
+## release: Build all artifacts for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
 release:
-ifndef GOOS
-	$(error GOOS is required. Usage: make release GOOS=linux GOARCH=amd64)
-endif
-ifndef GOARCH
-	$(error GOARCH is required. Usage: make release GOOS=linux GOARCH=amd64)
-endif
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto
-
-## release-all: Build all artifacts for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
-release-all:
 ifndef GOOS
 	$(error GOOS is required. Usage: make release-all GOOS=linux GOARCH=amd64)
 endif
 ifndef GOARCH
 	$(error GOARCH is required. Usage: make release-all GOOS=linux GOARCH=amd64)
 endif
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh all
-
-## release-mcp: Build skulto-mcp for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
-release-mcp:
-ifndef GOOS
-	$(error GOOS is required. Usage: make release-mcp GOOS=linux GOARCH=amd64)
-endif
-ifndef GOARCH
-	$(error GOARCH is required. Usage: make release-mcp GOOS=linux GOARCH=amd64)
-endif
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto-mcp
 
 release-easy:
 	@GOOS=$(shell uname | tr '[:upper:]' '[:lower:]') GOARCH=$(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') ./scripts/release.sh skulto
-
-## clean-release: Remove release artifacts
-clean-release:
-	@echo "Cleaning release artifacts..."
-	@rm -rf $(RELEASE_DIR)
-	@echo "✅ Release artifacts cleaned"
+	@GOOS=$(shell uname | tr '[:upper:]' '[:lower:]') GOARCH=$(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') ./scripts/release.sh skulto-mcp
 
 ## dev: Build for development (with race detector, requires CGO)
 dev:
@@ -161,6 +137,12 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@sed -n 's/^##//p' $(MAKEFILE_LIST) | column -t -s ':' | sed -e 's/^/ /'
+
+## clean: Remove release artifacts
+clean:
+	@echo "Cleaning release artifacts..."
+	@rm -rf $(RELEASE_DIR)
+	@echo "✅ Release artifacts cleaned"
 
 # Default help
 .DEFAULT_GOAL := help
