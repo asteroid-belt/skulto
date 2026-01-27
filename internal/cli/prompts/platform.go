@@ -10,8 +10,8 @@ import (
 
 // PlatformSelectorResult contains the result of platform selection.
 type PlatformSelectorResult struct {
-	Selected            []string // Platform IDs selected for installation
-	AlreadyInstalled    []string // Platform IDs that were already installed
+	Selected           []string // Platform IDs selected for installation
+	AlreadyInstalled   []string // Platform IDs that were already installed
 	AllAlreadyInstalled bool     // True if all platforms are already installed
 }
 

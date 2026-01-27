@@ -90,6 +90,14 @@ format:
 	$(GO) fmt ./...
 	@echo "✅ Code formatted"
 
+## clean: Remove build artifacts
+clean:
+	@echo "Cleaning..."
+	rm -rf $(BUILD_DIR)
+	rm -f coverage.out coverage.html
+	$(GO) clean -cache
+	@echo "✅ Cleaned"
+
 ## install: Install binary to GOPATH/bin
 install: build
 	@echo "Installing $(BINARY_NAME)..."
@@ -135,11 +143,6 @@ clean:
 	@echo "Cleaning release artifacts..."
 	@rm -rf $(RELEASE_DIR)
 	@echo "✅ Release artifacts cleaned"
-	@echo "Cleaning..."
-	rm -rf $(BUILD_DIR)
-	rm -f coverage.out coverage.html
-	$(GO) clean -cache
-	@echo "✅ Cleaned"
 
 # Default help
 .DEFAULT_GOAL := help
