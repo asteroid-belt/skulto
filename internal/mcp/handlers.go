@@ -292,8 +292,8 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 		}
 	}
 
-	// Parse optional scope
-	var scopes []installer.InstallScope
+	// Parse optional scope - default to project for MCP (local to current workspace)
+	scopes := []installer.InstallScope{installer.ScopeProject}
 	if scopeArg, ok := req.Params.Arguments["scope"].(string); ok && scopeArg != "" {
 		scope := installer.InstallScope(scopeArg)
 		if scope == installer.ScopeGlobal || scope == installer.ScopeProject {
@@ -304,7 +304,7 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 	// Build install options
 	opts := installer.InstallOptions{
 		Platforms: platforms, // nil means use user's configured platforms
-		Scopes:    scopes,    // nil means default to global
+		Scopes:    scopes,    // defaults to project scope for MCP
 		Confirm:   true,
 	}
 

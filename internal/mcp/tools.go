@@ -74,7 +74,7 @@ func getRecentTool() mcp.Tool {
 // installTool returns the skulto_install tool definition.
 func installTool() mcp.Tool {
 	return mcp.NewTool("skulto_install",
-		mcp.WithDescription("Install a skill to Claude Code. Creates a symlink in the global Claude skills directory."),
+		mcp.WithDescription("Install a skill to Claude Code. Creates a symlink in the project's skills directory by default."),
 		mcp.WithString("slug",
 			mcp.Required(),
 			mcp.Description("The skill's unique slug identifier"),
@@ -83,7 +83,7 @@ func installTool() mcp.Tool {
 			mcp.Description("Platforms to install to. Options: claude, cursor, windsurf, copilot, codex, opencode. Default: user's configured platforms."),
 		),
 		mcp.WithString("scope",
-			mcp.Description("Installation scope: 'global' (user-wide) or 'project' (current directory). Default: global."),
+			mcp.Description("Installation scope: 'global' (user-wide) or 'project' (current directory). Default: project."),
 		),
 	)
 }
