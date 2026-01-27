@@ -16,11 +16,12 @@ const (
 // UserState represents the user's application state including onboarding and AI tools.
 // Note: The table name is "user_state" to avoid conflicts with reserved keywords.
 type UserState struct {
-	ID               string           `gorm:"primaryKey;size:64" json:"id"`
-	OnboardingStatus OnboardingStatus `gorm:"size:20;default:NOT_STARTED" json:"onboarding_status"`
-	AITools          string           `gorm:"type:text" json:"ai_tools"`
-	TrackingID       string           `gorm:"size:64" json:"tracking_id"`
-	UpdatedAt        time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
+	ID                   string           `gorm:"primaryKey;size:64" json:"id"`
+	OnboardingStatus     OnboardingStatus `gorm:"size:20;default:NOT_STARTED" json:"onboarding_status"`
+	AITools              string           `gorm:"type:text" json:"ai_tools"`
+	TrackingID           string           `gorm:"size:64" json:"tracking_id"`
+	SkipUninstallConfirm bool             `gorm:"default:false" json:"skip_uninstall_confirm"`
+	UpdatedAt            time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 // TableName specifies the table name for GORM.

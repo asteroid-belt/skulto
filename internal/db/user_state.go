@@ -94,3 +94,24 @@ func (db *DB) GetOrCreateTrackingID() string {
 func generateSessionID() string {
 	return uuid.New().String()
 }
+
+// GetSkipUninstallConfirm returns whether the user wants to skip uninstall confirmations.
+func (db *DB) GetSkipUninstallConfirm() (bool, error) {
+	state, err := db.GetUserState()
+	if err != nil {
+		return false, err
+	}
+	return state.SkipUninstallConfirm, nil
+}
+
+// SetSkipUninstallConfirm updates the skip uninstall confirmation preference.
+func (db *DB) SetSkipUninstallConfirm(skip bool) error {
+	state := models.UserState{
+		ID:                   "default",
+		SkipUninstallConfirm: skip,
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"skip_uninstall_confirm", "updated_at"}),
+	}).Create(&state).Error
+}
