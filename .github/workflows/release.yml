@@ -95,17 +95,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ needs.validate.outputs.version }}
 
-      - name: Upload skulto artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: skulto-${{ matrix.suffix }}
-          path: release/${{ matrix.goos }}/${{ matrix.goarch }}/skulto
-
-      - name: Upload skulto-mcp artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: skulto-mcp-${{ matrix.suffix }}
-          path: release/${{ matrix.goos }}/${{ matrix.goarch }}/skulto-mcp
+          path: |
+            release/${{ matrix.goos }}/${{ matrix.goarch }}/skulto
+            release/${{ matrix.goos }}/${{ matrix.goarch }}/skulto-mcp
 
   release:
     needs: [build, validate]
@@ -127,35 +123,29 @@ jobs:
           for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             mkdir -p "release/${suffix}"
 
-            # Process skulto binary
             artifact_dir="artifacts/skulto-${suffix}"
             echo "Looking for: $artifact_dir"
             if [ -d "$artifact_dir" ]; then
               echo "  Found directory"
-              binary=$(find "$artifact_dir" -name 'skulto' -type f | head -1)
+
+              # Process skulto binary
+              binary=$(find "$artifact_dir" -name 'skulto' -type f ! -name 'skulto-mcp' | head -1)
               if [ -n "$binary" ]; then
-                echo "  Found binary: $binary"
+                echo "  Found skulto binary: $binary"
                 cp "$binary" "release/${suffix}/skulto"
                 chmod +x "release/${suffix}/skulto"
               else
                 echo "  ERROR: No skulto binary found in $artifact_dir"
               fi
-            else
-              echo "  ERROR: Directory not found"
-            fi
 
-            # Process skulto-mcp binary
-            mcp_artifact_dir="artifacts/skulto-mcp-${suffix}"
-            echo "Looking for: $mcp_artifact_dir"
-            if [ -d "$mcp_artifact_dir" ]; then
-              echo "  Found directory"
-              mcp_binary=$(find "$mcp_artifact_dir" -name 'skulto-mcp' -type f | head -1)
+              # Process skulto-mcp binary
+              mcp_binary=$(find "$artifact_dir" -name 'skulto-mcp' -type f | head -1)
               if [ -n "$mcp_binary" ]; then
-                echo "  Found binary: $mcp_binary"
+                echo "  Found skulto-mcp binary: $mcp_binary"
                 cp "$mcp_binary" "release/${suffix}/skulto-mcp"
                 chmod +x "release/${suffix}/skulto-mcp"
               else
-                echo "  ERROR: No skulto-mcp binary found in $mcp_artifact_dir"
+                echo "  ERROR: No skulto-mcp binary found in $artifact_dir"
               fi
             else
               echo "  ERROR: Directory not found"
@@ -185,15 +175,9 @@ jobs:
           mkdir -p dist
 
           for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
-            # Create skulto tarball
             TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
-            echo "Creating ${TARBALL}..."
-            tar -czvf "dist/${TARBALL}" -C "release/${suffix}" skulto
-
-            # Create skulto-mcp tarball
-            MCP_TARBALL="skulto-mcp-${VERSION}-${suffix}.tar.gz"
-            echo "Creating ${MCP_TARBALL}..."
-            tar -czvf "dist/${MCP_TARBALL}" -C "release/${suffix}" skulto-mcp
+            echo "Creating ${TARBALL} with skulto and skulto-mcp..."
+            tar -czvf "dist/${TARBALL}" -C "release/${suffix}" skulto skulto-mcp
           done
 
           echo "=== Created tarballs ==="
@@ -227,9 +211,7 @@ jobs:
 
           ### Installation
 
-          Download and extract the appropriate tarball for your platform:
-
-          #### Skulto CLI
+          Download and extract the appropriate tarball for your platform. Each archive contains both \`skulto\` (CLI) and \`skulto-mcp\` (MCP server).
 
           | Platform | Archive |
           |----------|---------|
@@ -238,39 +220,19 @@ jobs:
           | macOS (Intel) | skulto-${VERSION}-darwin-amd64.tar.gz |
           | macOS (Apple Silicon) | skulto-${VERSION}-darwin-arm64.tar.gz |
 
-          #### Skulto MCP Server
-
-          | Platform | Archive |
-          |----------|---------|
-          | Linux (x64) | skulto-mcp-${VERSION}-linux-amd64.tar.gz |
-          | Linux (ARM64) | skulto-mcp-${VERSION}-linux-arm64.tar.gz |
-          | macOS (Intel) | skulto-mcp-${VERSION}-darwin-amd64.tar.gz |
-          | macOS (Apple Silicon) | skulto-mcp-${VERSION}-darwin-arm64.tar.gz |
-
           ### Quick Install
 
           \`\`\`bash
           # Example for macOS Apple Silicon
           curl -LO https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/skulto-${VERSION}-darwin-arm64.tar.gz
           tar -xzf skulto-${VERSION}-darwin-arm64.tar.gz
-          chmod +x skulto
-          sudo mv skulto /usr/local/bin/
+          chmod +x skulto skulto-mcp
+          sudo mv skulto skulto-mcp /usr/local/bin/
           \`\`\`
 
           ### MCP Server Setup
 
-          To use \`skulto-mcp\` with Claude Code or other MCP-compatible clients:
-
-          1. Download and install the \`skulto-mcp\` binary:
-
-          \`\`\`bash
-          curl -LO https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/skulto-mcp-${VERSION}-darwin-arm64.tar.gz
-          tar -xzf skulto-mcp-${VERSION}-darwin-arm64.tar.gz
-          chmod +x skulto-mcp
-          sudo mv skulto-mcp /usr/local/bin/
-          \`\`\`
-
-          2. Add to your MCP configuration (e.g., \`~/.claude.json\`):
+          To use \`skulto-mcp\` with Claude Code or other MCP-compatible clients, add to your MCP configuration (e.g., \`~/.claude.json\`):
 
           \`\`\`json
           {
@@ -283,7 +245,7 @@ jobs:
           }
           \`\`\`
 
-          3. Restart your MCP client to load the Skulto tools.
+          Then restart your MCP client to load the Skulto tools. 🚀
 
           ### Checksums (SHA256)
 
@@ -302,22 +264,13 @@ jobs:
 
           echo "Release created, now uploading assets..."
 
-          # Upload skulto tarballs
+          # Upload tarballs
           for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
             echo "Uploading ${TARBALL}..."
             gh release upload "$VERSION" \
               --repo "asteroid-belt/skulto" \
               "dist/${TARBALL}"
-          done
-
-          # Upload skulto-mcp tarballs
-          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
-            MCP_TARBALL="skulto-mcp-${VERSION}-${suffix}.tar.gz"
-            echo "Uploading ${MCP_TARBALL}..."
-            gh release upload "$VERSION" \
-              --repo "asteroid-belt/skulto" \
-              "dist/${MCP_TARBALL}"
           done
 
           # Upload checksums file
