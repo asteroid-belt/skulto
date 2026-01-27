@@ -33,7 +33,7 @@ func NewServer(database *db.DB, cfg *config.Config, favStore *favorites.Store) *
 	s := &Server{
 		db:             database,
 		cfg:            cfg,
-		installer:      installer.New(database, cfg),              // Same installer used by TUI
+		installer:      installer.New(database, cfg),                    // Same installer used by TUI
 		installService: installer.NewInstallService(database, cfg, nil), // Unified service
 		favorites:      favStore,
 	}
@@ -79,6 +79,9 @@ func (s *Server) registerTools() {
 	s.server.AddTool(uninstallTool(), s.handleUninstall)
 	s.server.AddTool(favoriteTool(), s.handleFavorite)
 	s.server.AddTool(getFavoritesTool(), s.handleGetFavorites)
+
+	// Check tool (shows installed skills)
+	s.server.AddTool(checkTool(), s.handleCheck)
 }
 
 // registerResources adds all Skulto resources to the MCP server.

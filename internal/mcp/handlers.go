@@ -60,6 +60,19 @@ type InstallResult struct {
 	Paths   []string `json:"paths,omitempty"` // Symlink paths created
 }
 
+// CheckSkillResponse represents an installed skill in the check response.
+type CheckSkillResponse struct {
+	Slug      string                  `json:"slug"`
+	Title     string                  `json:"title"`
+	Locations []CheckLocationResponse `json:"locations"`
+}
+
+// CheckLocationResponse represents an installation location.
+type CheckLocationResponse struct {
+	Platform string `json:"platform"`
+	Scope    string `json:"scope"`
+}
+
 // toSkillResponse converts a models.Skill to SkillResponse.
 func toSkillResponse(skill *models.Skill, includeContent bool) SkillResponse {
 	resp := SkillResponse{
@@ -494,6 +507,44 @@ func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest
 			continue
 		}
 		results = append(results, toSkillResponse(skill, false))
+	}
+
+	data, err := json.Marshal(results)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// handleCheck handles the skulto_check tool.
+func (s *Server) handleCheck(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Get all installed skills with their locations
+	summaries, err := s.installService.GetInstalledSkillsSummary(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get installed skills: %v", err)), nil
+	}
+
+	// Convert to response format
+	results := make([]CheckSkillResponse, 0, len(summaries))
+	for _, summary := range summaries {
+		skillResp := CheckSkillResponse{
+			Slug:      summary.Slug,
+			Title:     summary.Title,
+			Locations: make([]CheckLocationResponse, 0),
+		}
+
+		// Iterate through platforms and their scopes
+		for platform, scopes := range summary.Locations {
+			for _, scope := range scopes {
+				skillResp.Locations = append(skillResp.Locations, CheckLocationResponse{
+					Platform: string(platform),
+					Scope:    string(scope),
+				})
+			}
+		}
+
+		results = append(results, skillResp)
 	}
 
 	data, err := json.Marshal(results)

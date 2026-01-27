@@ -129,3 +129,10 @@ func getFavoritesTool() mcp.Tool {
 		),
 	)
 }
+
+// checkTool returns the skulto_check tool definition.
+func checkTool() mcp.Tool {
+	return mcp.NewTool("skulto_check",
+		mcp.WithDescription("List all installed skills and their installation locations. Returns skills with their platforms and scopes (global/project)."),
+	)
+}
