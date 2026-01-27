@@ -13,8 +13,9 @@ import (
 )
 
 var pullCmd = &cobra.Command{
-	Use:   "pull",
-	Short: "Pull and sync all skill repositories",
+	Use:     "pull",
+	Aliases: []string{"p"},
+	Short:   "Pull and sync all skill repositories (alias: p)",
 	Long: `Pull and sync all skill repositories, then reconcile installed skills.
 
 This command:

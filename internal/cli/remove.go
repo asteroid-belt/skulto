@@ -19,8 +19,9 @@ import (
 var removeForce bool
 
 var removeCmd = &cobra.Command{
-	Use:   "remove [repository]",
-	Short: "Remove a skill repository",
+	Use:     "remove [repository]",
+	Aliases: []string{"rm"},
+	Short:   "Remove a skill repository (alias: rm)",
 	Long: `Remove a skill repository from Skulto.
 
 This will:

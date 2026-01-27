@@ -14,8 +14,9 @@ import (
 var addNoSync bool
 
 var addCmd = &cobra.Command{
-	Use:   "add <repository_url>",
-	Short: "Add a skill repository",
+	Use:     "add <repository_url>",
+	Aliases: []string{"a"},
+	Short:   "Add a skill repository (alias: a)",
 	Long: `Add a skill repository to Skulto and sync its skills.
 
 Supports multiple URL formats:

@@ -15,8 +15,9 @@ import (
 )
 
 var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Pull repositories, scan for threats, and report changes",
+	Use:     "update",
+	Aliases: []string{"up"},
+	Short:   "Pull repositories, scan for threats, and report changes (alias: up)",
 	Long: `Update pulls all registered skill repositories, runs security scans
 on new and updated skills, and displays a summary of what changed.
 

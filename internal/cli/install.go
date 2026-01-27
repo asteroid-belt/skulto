@@ -21,8 +21,9 @@ var (
 )
 
 var installCmd = &cobra.Command{
-	Use:   "install <slug|url>",
-	Short: "Install a skill to AI tool directories",
+	Use:     "install <slug|url>",
+	Aliases: []string{"i"},
+	Short:   "Install a skill to AI tool directories (alias: i)",
 	Long: `Install a skill by slug or from a repository URL.
 
 The install command creates symlinks in your AI tool directories,

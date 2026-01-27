@@ -16,8 +16,9 @@ var (
 )
 
 var uninstallCmd = &cobra.Command{
-	Use:   "uninstall <slug>",
-	Short: "Uninstall a skill from AI tool directories",
+	Use:     "uninstall <slug>",
+	Aliases: []string{"ui"},
+	Short:   "Uninstall a skill from AI tool directories (alias: ui)",
 	Long: `Uninstall a skill by removing its symlinks from AI tool directories.
 
 Interactive Mode (default):
