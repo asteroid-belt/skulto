@@ -12,6 +12,7 @@ type Paths struct {
 	Config       string // Config file
 	Repositories string // Cloned repositories directory
 	Skills       string // Local skills directory
+	Favorites    string // Favorites JSON file (persists across DB resets)
 }
 
 // GetPaths returns all commonly used paths based on config.
@@ -22,6 +23,7 @@ func GetPaths(cfg *Config) Paths {
 		Config:       filepath.Join(cfg.BaseDir, "config.yaml"),
 		Repositories: filepath.Join(cfg.BaseDir, "repositories"),
 		Skills:       filepath.Join(cfg.BaseDir, "skills"),
+		Favorites:    filepath.Join(cfg.BaseDir, "favorites.json"),
 	}
 }
 

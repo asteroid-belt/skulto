@@ -35,6 +35,9 @@ type Client interface {
 	TrackConfigChanged(settingName string, isDefault bool)
 	TrackCLIError(commandName, errorType string)
 	TrackCLIHelpViewed(commandName string, cliArgs []string)
+	TrackFavoriteAdded(slug string)
+	TrackFavoriteRemoved(slug string)
+	TrackFavoritesListed(count int)
 
 	// TUI events
 	TrackViewNavigated(viewName, previousView string)

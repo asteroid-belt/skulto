@@ -20,6 +20,9 @@ const (
 	EventConfigChanged      = "config_changed"
 	EventCLIErrorOccurred   = "cli_error_occurred"
 	EventCLIHelpViewed      = "cli_help_viewed"
+	EventFavoriteAdded      = "favorite_added"
+	EventFavoriteRemoved    = "favorite_removed"
+	EventFavoritesListed    = "favorites_listed"
 )
 
 // Event names - TUI
@@ -159,6 +162,27 @@ func (c *posthogClient) TrackCLIHelpViewed(commandName string, cliArgs []string)
 	props["command_name"] = commandName
 	props["cli_args"] = strings.Join(cliArgs, " ")
 	c.Track(EventCLIHelpViewed, props)
+}
+
+// TrackFavoriteAdded tracks when a skill is added to favorites.
+func (c *posthogClient) TrackFavoriteAdded(slug string) {
+	props := baseProperties()
+	props["skill_slug"] = slug
+	c.Track(EventFavoriteAdded, props)
+}
+
+// TrackFavoriteRemoved tracks when a skill is removed from favorites.
+func (c *posthogClient) TrackFavoriteRemoved(slug string) {
+	props := baseProperties()
+	props["skill_slug"] = slug
+	c.Track(EventFavoriteRemoved, props)
+}
+
+// TrackFavoritesListed tracks when favorites are listed.
+func (c *posthogClient) TrackFavoritesListed(count int) {
+	props := baseProperties()
+	props["favorites_count"] = count
+	c.Track(EventFavoritesListed, props)
 }
 
 // --- TUI Tracking Methods ---
@@ -357,6 +381,9 @@ func (c *noopClient) TrackSkillInfoViewed(category string, isLocal bool)        
 func (c *noopClient) TrackConfigChanged(settingName string, isDefault bool)                       {}
 func (c *noopClient) TrackCLIError(commandName, errorType string)                                 {}
 func (c *noopClient) TrackCLIHelpViewed(commandName string, cliArgs []string)                     {}
+func (c *noopClient) TrackFavoriteAdded(slug string)                                              {}
+func (c *noopClient) TrackFavoriteRemoved(slug string)                                            {}
+func (c *noopClient) TrackFavoritesListed(count int)                                              {}
 func (c *noopClient) TrackViewNavigated(viewName, previousView string)                            {}
 func (c *noopClient) TrackSkillInstalled(skillName, category string, isLocal bool, platformCount int) {
 }
