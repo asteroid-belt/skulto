@@ -370,7 +370,7 @@ func (hv *HomeView) View() string {
 	headerLineCount := strings.Count(headerView, "\n") + 1
 
 	// Fixed element heights
-	welcomeLines := 4 // Welcome section with margins
+	welcomeLines := 5 // Welcome section with margins (now 3 lines of text + margins)
 	tagsLines := 4    // Tags section with title and margin
 	footerLines := 1  // Footer
 	paddingLines := 2 // Extra padding
@@ -502,11 +502,18 @@ func (hv *HomeView) renderWelcome() string {
 	msgStyle := lipgloss.NewStyle().
 		Foreground(theme.Current.Text).
 		MarginLeft(1).
+		MarginRight(2)
+
+	// Secondary line with slightly muted text
+	secondaryStyle := lipgloss.NewStyle().
+		Foreground(theme.Current.TextMuted).
+		MarginLeft(1).
 		MarginRight(2).
 		MarginBottom(1)
 
 	return welcomeStyle.Render("Welcome to SKULTO") + "\n" +
-		msgStyle.Render("/ (search) • ↑↓ (nav) • p (pull) • a (add repo) • s (settings) • n (new skill) • ? (help) • q (quit)")
+		msgStyle.Render("/ (search) • ↑↓ (nav) • m (manage) • p (pull) • q (quit)") + "\n" +
+		secondaryStyle.Render("a (add repo) • s (settings) • n (new skill) • ? (help)")
 }
 
 // renderRecentSkillsWithLimit renders recent skills with scrolling support.
@@ -979,6 +986,7 @@ func (hv *HomeView) GetKeyboardCommands() ViewCommands {
 			{Key: "←→, h/l", Description: "Switch columns (loaded, recent, tags)"},
 			{Key: "Enter", Description: "Select skill or tag"},
 			{Key: "/", Description: "Search skills"},
+			{Key: "m", Description: "Manage installed skills"},
 			{Key: "a", Description: "Add new source repository"},
 			{Key: "p", Description: "Pull latest from seed repositories"},
 			{Key: "s", Description: "Open settings"},

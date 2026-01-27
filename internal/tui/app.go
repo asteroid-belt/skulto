@@ -40,6 +40,7 @@ const (
 	ViewAddSource
 	ViewHelp
 	ViewSettings
+	ViewManage
 )
 
 // Model is the main Bubble Tea model for the TUI.
@@ -55,9 +56,9 @@ type Model struct {
 	bgIndexer       *search.BackgroundIndexer
 	indexProgressCh chan search.IndexProgress
 	pullProgressCh  chan pullProgressMsg
-	scanProgressCh   chan scanProgressMsg
-	installer        *installer.Installer
-	installService   *installer.InstallService
+	scanProgressCh  chan scanProgressMsg
+	installer       *installer.Installer
+	installService  *installer.InstallService
 
 	// Views
 	currentView          ViewType
@@ -112,6 +113,17 @@ type Model struct {
 	// Quit confirmation dialog
 	quitConfirmDialog  *components.ConfirmDialog
 	showingQuitConfirm bool
+
+	// Manage view
+	manageView           *views.ManageView
+	manageDialog         *components.ManageSkillDialog
+	showManageDialog     bool
+	confirmChangesDialog *components.ConfirmChangesDialog
+	showConfirmChanges   bool
+	pendingManageChanges struct {
+		toInstall   []installer.InstallLocation
+		toUninstall []installer.InstallLocation
+	}
 }
 
 // Message types for Bubble Tea
@@ -217,6 +229,7 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 		onboardingSkillsView: views.NewOnboardingSkillsView(conf, database),
 		addSourceView:        views.NewAddSourceView(database, conf),
 		helpView:             views.NewHelpView(database, conf),
+		manageView:           views.NewManageView(database, conf, instService, nil),
 		ticker:               time.NewTicker(500 * time.Millisecond),
 		animTick:             0,
 		installer:            inst,
@@ -304,6 +317,7 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 		addSourceView:        views.NewAddSourceView(database, conf),
 		helpView:             views.NewHelpView(database, conf),
 		settingsView:         views.NewSettingsView(database, conf),
+		manageView:           views.NewManageView(database, conf, instService, tc),
 		sessionStart:         time.Now(),
 		ticker:               time.NewTicker(500 * time.Millisecond),
 		animTick:             0,
@@ -337,6 +351,8 @@ func (v ViewType) String() string {
 		return "help"
 	case ViewSettings:
 		return "settings"
+	case ViewManage:
+		return "manage"
 	default:
 		return "unknown"
 	}
@@ -482,6 +498,8 @@ func (m *Model) getCurrentViewCommands() views.ViewCommands {
 		return m.onboardingToolsView.GetKeyboardCommands()
 	case ViewOnboardingSkills:
 		return m.onboardingSkillsView.GetKeyboardCommands()
+	case ViewManage:
+		return m.manageView.GetKeyboardCommands()
 	default:
 		return views.ViewCommands{ViewName: "UNKNOWN VIEW", Commands: []views.Command{}}
 	}
@@ -700,6 +718,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// Handle 'm' key to open Manage view
+			if key == "m" {
+				m.trackViewNavigation(ViewManage)
+				m.previousView = ViewHome
+				m.currentView = ViewManage
+				return m, m.manageView.Init()
+			}
+
 		case ViewSearch:
 			switch key {
 			case "esc":
@@ -852,6 +878,106 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 
+		case ViewManage:
+			// Handle manage dialog if showing
+			if m.showManageDialog && m.manageDialog != nil {
+				m.manageDialog.HandleKey(key)
+
+				if m.manageDialog.IsCancelled() {
+					m.showManageDialog = false
+					return m, nil
+				}
+
+				if m.manageDialog.IsConfirmed() {
+					toInstall, toUninstall := m.manageDialog.GetChanges()
+
+					// If there are removals, check if we need confirmation
+					if len(toUninstall) > 0 {
+						skipConfirm, _ := m.db.GetSkipUninstallConfirm()
+						if !skipConfirm {
+							// Show confirmation dialog
+							skill := m.manageDialog.GetSkill()
+							m.confirmChangesDialog = components.NewConfirmChangesDialog(
+								skill.Slug,
+								toInstall,
+								toUninstall,
+							)
+							m.confirmChangesDialog.SetWidth(m.width)
+							m.pendingManageChanges.toInstall = toInstall
+							m.pendingManageChanges.toUninstall = toUninstall
+							m.showManageDialog = false
+							m.showConfirmChanges = true
+							return m, nil
+						}
+					}
+
+					// Execute changes directly (no removals or skip confirm)
+					m.showManageDialog = false
+					skill := m.manageDialog.GetSkill()
+					return m, m.executeManageChangesCmd(skill.Slug, toInstall, toUninstall)
+				}
+
+				return m, nil
+			}
+
+			// Handle confirm changes dialog if showing
+			if m.showConfirmChanges && m.confirmChangesDialog != nil {
+				m.confirmChangesDialog.HandleKey(key)
+
+				if m.confirmChangesDialog.IsCancelled() {
+					m.showConfirmChanges = false
+					// Re-show manage dialog
+					m.showManageDialog = true
+					return m, nil
+				}
+
+				if m.confirmChangesDialog.IsConfirmed() {
+					// Save "do not show again" preference if checked
+					if m.confirmChangesDialog.DoNotShowAgain() {
+						_ = m.db.SetSkipUninstallConfirm(true)
+					}
+
+					m.showConfirmChanges = false
+					skill := m.manageDialog.GetSkill()
+					return m, m.executeManageChangesCmd(
+						skill.Slug,
+						m.pendingManageChanges.toInstall,
+						m.pendingManageChanges.toUninstall,
+					)
+				}
+
+				return m, nil
+			}
+
+			// Handle ManageView updates
+			action, cmd := m.manageView.Update(key)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+
+			switch action {
+			case views.ManageActionBack:
+				m.currentView = ViewHome
+				m.homeView.Init(m.telemetry)
+				return m, nil
+
+			case views.ManageActionSelectSkill:
+				if skill := m.manageView.GetSelectedSkill(); skill != nil {
+					// Get user's configured platforms
+					userState, _ := m.db.GetUserState()
+					platforms := parsePlatformsFromState(userState)
+					if len(platforms) == 0 {
+						// No platforms configured
+						return m, nil
+					}
+
+					m.manageDialog = components.NewManageSkillDialog(*skill, platforms)
+					m.manageDialog.SetWidth(m.width)
+					m.showManageDialog = true
+				}
+				return m, nil
+			}
+
 		case ViewOnboardingIntro:
 			back, skipped := m.onboardingIntroView.Update(key)
 			if back {
@@ -990,6 +1116,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case views.SettingsLoadedMsg:
 		m.settingsView.HandleSettingsLoaded(msg)
 
+	case views.ManageSkillsLoadedMsg:
+		m.manageView.HandleManageSkillsLoaded(msg)
+
+	case manageChangesCompleteMsg:
+		if msg.err != nil {
+			m.setError(msg.err, "manage_changes")
+		}
+		// Refresh the manage view
+		return m, m.manageView.RefreshSkills()
+
 	case views.ClearCachedLocationsMsg:
 		// Clear cached install locations so user sees the dialog again
 		m.cachedLocations = nil
@@ -1061,6 +1197,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.helpView.SetSize(m.width, contentHeight)
 		// SettingsView uses content height
 		m.settingsView.SetSize(m.width, contentHeight)
+		// ManageView uses content height
+		m.manageView.SetSize(m.width, contentHeight)
 		// NewSkillDialog uses full size
 		m.newSkillDialog.SetSize(m.width, m.height)
 
@@ -1197,6 +1335,8 @@ func (m *Model) View() string {
 		contentView = m.helpView.View()
 	case ViewSettings:
 		contentView = m.settingsView.View()
+	case ViewManage:
+		contentView = m.manageView.View()
 	case ViewOnboardingIntro:
 		contentView = m.onboardingIntroView.View()
 	case ViewOnboardingSetup:
@@ -1222,6 +1362,16 @@ func (m *Model) View() string {
 	// Overlay quit confirmation dialog if showing
 	if m.showingQuitConfirm {
 		return m.quitConfirmDialog.CenteredView(m.width, m.height)
+	}
+
+	// Overlay manage dialog if showing
+	if m.showManageDialog && m.manageDialog != nil {
+		return m.manageDialog.CenteredView(m.width, m.height)
+	}
+
+	// Overlay confirm changes dialog if showing
+	if m.showConfirmChanges && m.confirmChangesDialog != nil {
+		return m.confirmChangesDialog.CenteredView(m.width, m.height)
 	}
 
 	return contentView
@@ -1256,6 +1406,7 @@ func (m *Model) finishResetWithNewDB() {
 	m.addSourceView = views.NewAddSourceView(m.db, m.cfg)
 	m.helpView = views.NewHelpView(m.db, m.cfg)
 	m.settingsView = views.NewSettingsView(m.db, m.cfg)
+	m.manageView = views.NewManageView(m.db, m.cfg, m.installService, m.telemetry)
 
 	// Set header and footer for home view (empty DB, so 0 counts)
 	m.homeView.SetStats(0, 1) // 1 tag = "mine" tag
@@ -1277,6 +1428,7 @@ func (m *Model) finishResetWithNewDB() {
 	m.addSourceView.SetSize(m.width, contentHeight)
 	m.helpView.SetSize(m.width, contentHeight)
 	m.settingsView.SetSize(m.width, contentHeight)
+	m.manageView.SetSize(m.width, contentHeight)
 }
 
 // loadDataCmd returns a command that loads initial data.
@@ -1594,6 +1746,40 @@ func (m *Model) syncPrimarySkillsCmd() tea.Cmd {
 
 		// Skills are auto-saved to DB by scraper
 		return primarySyncCompleteMsg{}
+	}
+}
+
+// manageChangesCompleteMsg is sent when manage changes complete.
+type manageChangesCompleteMsg struct {
+	err error
+}
+
+// executeManageChangesCmd executes install/uninstall changes from the manage dialog.
+func (m *Model) executeManageChangesCmd(skillSlug string, toInstall, toUninstall []installer.InstallLocation) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Execute uninstalls first
+		if len(toUninstall) > 0 {
+			if err := m.installService.Uninstall(ctx, skillSlug, toUninstall); err != nil {
+				return manageChangesCompleteMsg{err: fmt.Errorf("uninstall failed: %w", err)}
+			}
+		}
+
+		// Execute installs - one location at a time to avoid cross-product
+		for _, loc := range toInstall {
+			opts := installer.InstallOptions{
+				Platforms: []string{string(loc.Platform)},
+				Scopes:    []installer.InstallScope{loc.Scope},
+				Confirm:   true,
+			}
+
+			if _, err := m.installService.Install(ctx, skillSlug, opts); err != nil {
+				return manageChangesCompleteMsg{err: fmt.Errorf("install failed: %w", err)}
+			}
+		}
+
+		return manageChangesCompleteMsg{err: nil}
 	}
 }
 
