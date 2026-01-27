@@ -20,6 +20,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/mcp"
 	"github.com/asteroid-belt/skulto/pkg/version"
 )
@@ -65,8 +66,15 @@ func main() {
 		_ = database.Close()
 	}()
 
+	// Initialize favorites store
+	favStore := favorites.NewStore(paths.Favorites)
+	if err := favStore.Load(); err != nil {
+		// Non-fatal: continue with empty favorites
+		fmt.Fprintf(os.Stderr, "Warning: failed to load favorites: %v\n", err)
+	}
+
 	// Create and run MCP server
-	server := mcp.NewServer(database, cfg)
+	server := mcp.NewServer(database, cfg, favStore)
 	if err := server.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
@@ -112,8 +120,8 @@ TOOLS PROVIDED:
     skulto_get_recent    Get recently viewed skills
     skulto_install       Install a skill to Claude
     skulto_uninstall     Uninstall a skill from Claude
-    skulto_bookmark      Bookmark/unbookmark a skill
-    skulto_get_bookmarks Get bookmarked skills
+    skulto_favorite      Add/remove a skill from favorites
+    skulto_get_favorites Get favorite skills
 
 RESOURCES PROVIDED:
     skulto://skill/{slug}           Skill markdown content

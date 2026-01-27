@@ -121,7 +121,7 @@ Implement the `skulto favorites` CLI with add/remove/list subcommands.
 
 **Tasks:**
 
-- [ ] Task 1.1: Create `internal/cli/favorites.go`
+- [x] Task 1.1: Create `internal/cli/favorites.go`
   - File: `internal/cli/favorites.go` (CREATE)
   - Define `favoritesCmd` - parent command with Long description
   - Define `favoritesAddCmd` - `add <slug>`, validates skill exists in DB
@@ -130,11 +130,11 @@ Implement the `skulto favorites` CLI with add/remove/list subcommands.
   - Use pattern: `config.Load()` → `config.GetPaths()` → `favorites.NewStore()`
   - Add telemetry tracking: `TrackFavoriteAdded`, `TrackFavoriteRemoved`, `TrackFavoritesList`
 
-- [ ] Task 1.2: Register favorites command in `cli.go`
+- [x] Task 1.2: Register favorites command in `cli.go`
   - File: `internal/cli/cli.go:61-69` (MODIFY)
   - Add `rootCmd.AddCommand(favoritesCmd)` in `init()`
 
-- [ ] Task 1.3: Add telemetry methods for favorites
+- [x] Task 1.3: Add telemetry methods for favorites
   - File: `internal/telemetry/client.go` (MODIFY)
   - Add `TrackFavoriteAdded(slug string)`
   - Add `TrackFavoriteRemoved(slug string)`
@@ -142,14 +142,14 @@ Implement the `skulto favorites` CLI with add/remove/list subcommands.
   - File: `internal/telemetry/noop.go` (MODIFY)
   - Add no-op implementations
 
-- [ ] Task 1.4: Create `internal/cli/favorites_test.go`
+- [x] Task 1.4: Create `internal/cli/favorites_test.go`
   - File: `internal/cli/favorites_test.go` (CREATE)
   - Test: `TestFavoritesCmd_Structure` - verify command structure
   - Test: `TestFavoritesAddCmd_ArgsValidation` - verify requires 1 arg
   - Test: `TestFavoritesRemoveCmd_ArgsValidation` - verify requires 1 arg
   - Test: `TestFavoritesListCmd_NoArgs` - verify requires 0 args
 
-- [ ] **CHECKPOINT: Run `/compact focus on: Phase 1 complete, CLI favorites add/remove/list working, Phase 2 needs TUI integration`**
+- [x] **CHECKPOINT: Run `/compact focus on: Phase 1 complete, CLI favorites add/remove/list working, Phase 2 needs TUI integration`**
 
 ### Phase 2: TUI Integration (Estimate: 3)
 
@@ -157,41 +157,41 @@ Add `f` key binding to toggle favorites in skill detail view.
 
 **Tasks:**
 
-- [ ] Task 2.1: Add favorites store to TUI app
+- [x] Task 2.1: Add favorites store to TUI app
   - File: `internal/tui/app.go` (MODIFY)
   - Add `favorites *favorites.Store` field to `Model` struct
   - Initialize in `New()` or `Init()` using `config.GetPaths()`
 
-- [ ] Task 2.2: Add favorite state to skill display
+- [x] Task 2.2: Add favorite state to skill display
   - File: `internal/tui/views/detail.go` (MODIFY)
   - Add `favorites *favorites.Store` field to `DetailView` struct
   - Add `isFavorite bool` field (cached state)
   - Update `NewDetailView()` to accept favorites store
   - Update `HandleSkillLoaded()` to check `favorites.IsFavorite(skill.Slug)`
 
-- [ ] Task 2.3: Implement `f` key handler
+- [x] Task 2.3: Implement `f` key handler
   - File: `internal/tui/views/detail.go:264-306` (MODIFY)
   - Add case `"f"` in `Update()` switch
   - Toggle favorite: `if isFavorite { favorites.Remove(slug) } else { favorites.Add(slug) }`
   - Update `isFavorite` state
   - Track telemetry
 
-- [ ] Task 2.4: Update detail view rendering
+- [x] Task 2.4: Update detail view rendering
   - File: `internal/tui/views/detail.go` (MODIFY)
   - Add `renderFavoriteIndicator()` method
   - Show `[★ Favorite]` or `[☆ Add to favorites (f)]` in metadata section
   - Update `renderScrollIndicator()` to show `f (favorite)` in keybindings
 
-- [ ] Task 2.5: Update keyboard commands help
+- [x] Task 2.5: Update keyboard commands help
   - File: `internal/tui/views/detail.go:813-835` (MODIFY)
   - Add `{Key: "f", Description: "Toggle favorite"}` to `GetKeyboardCommands()`
 
-- [ ] Task 2.6: Add favorites view/filter to search (optional enhancement)
+- [x] Task 2.6: Add favorites view/filter to search (optional enhancement) - DEFERRED to v2
   - File: `internal/tui/views/search.go` (MODIFY)
   - Consider: Add filter mode to show only favorites
   - This can be deferred to v2
 
-- [ ] **CHECKPOINT: Run `/compact focus on: Phase 2 complete, TUI f-key toggles favorites, Phase 3 needs MCP fix`**
+- [x] **CHECKPOINT: Run `/compact focus on: Phase 2 complete, TUI f-key toggles favorites, Phase 3 needs MCP fix`**
 
 ### Phase 3: MCP Server Fix (Estimate: 2)
 
@@ -199,36 +199,36 @@ Fix the MCP bookmark tools to use the favorites store instead of installed state
 
 **Tasks:**
 
-- [ ] Task 3.1: Add favorites store to MCP server
+- [x] Task 3.1: Add favorites store to MCP server
   - File: `internal/mcp/server.go` (MODIFY)
   - Add `favorites *favorites.Store` field to `Server` struct
   - Update `NewServer()` to accept and store favorites
   - Update constructor call sites (cmd/skulto-mcp/main.go)
 
-- [ ] Task 3.2: Fix `handleBookmark` handler
+- [x] Task 3.2: Fix `handleBookmark` handler
   - File: `internal/mcp/handlers.go:383-429` (MODIFY)
   - Replace `s.db.AddInstalled(skill.ID)` with `s.favorites.Add(skill.Slug)`
   - Replace `s.db.RemoveInstalled(skill.ID)` with `s.favorites.Remove(skill.Slug)`
   - Update messages to use "favorites" terminology
 
-- [ ] Task 3.3: Fix `handleGetBookmarks` handler
+- [x] Task 3.3: Fix `handleGetBookmarks` handler
   - File: `internal/mcp/handlers.go:431-462` (MODIFY)
   - Replace `s.db.GetInstalled()` with `s.favorites.List()`
   - Look up skill details from DB by slug for each favorite
   - Handle case where favorited skill no longer exists in DB
 
-- [ ] Task 3.4: Update MCP main to initialize favorites
+- [x] Task 3.4: Update MCP main to initialize favorites
   - File: `cmd/skulto-mcp/main.go` (MODIFY)
   - Initialize favorites store with correct path
   - Pass to `NewServer()`
 
-- [ ] Task 3.5: Update MCP tests
+- [x] Task 3.5: Update MCP tests
   - File: `internal/mcp/handlers_test.go` (MODIFY)
   - Update tests to use favorites store
   - Add test: bookmark persists to file
   - Add test: bookmarks survive server restart
 
-- [ ] **CHECKPOINT: Run `/compact focus on: Phase 3 complete, MCP bookmark tools use favorites.json, Phase 4 needs cleanup`**
+- [x] **CHECKPOINT: Run `/compact focus on: Phase 3 complete, MCP bookmark tools use favorites.json, Phase 4 needs cleanup`**
 
 ### Phase 4: Cleanup & Documentation (Estimate: 1)
 
@@ -236,34 +236,37 @@ Clean up legacy bookmark/installed conflation and update docs.
 
 **Tasks:**
 
-- [ ] Task 4.1: Update README with favorites documentation
+- [x] Task 4.1: Update README with favorites documentation
   - File: `README.md` (MODIFY)
   - Add section on favorites feature
   - Document CLI commands
   - Document TUI keybinding
   - Note MCP tools
 
-- [ ] Task 4.2: Add favorites to MCP server README
+- [x] Task 4.2: Add favorites to MCP server README
   - File: `cmd/skulto-mcp/README.md` (MODIFY if exists, or inline in main README)
   - Document `skulto_bookmark` tool
   - Document `skulto_get_bookmarks` tool
+  - Note: MCP tools documented in main README, no separate MCP README exists
 
-- [ ] Task 4.3: Verify installed vs favorites separation
+- [x] Task 4.3: Verify installed vs favorites separation
   - Ensure `Installed` model is only used for actual installation tracking
   - Ensure favorites are only in `~/.skulto/favorites.json`
   - No conflation between the two concepts
+  - Verified: "Installed" = skills symlinked to AI tool dirs (database-backed)
+  - Verified: "Favorites" = user's saved skills (file-backed in ~/.skulto/favorites.json)
 
-- [ ] **CHECKPOINT: Run `/compact focus on: Phase 4 complete, documentation updated, feature ready for review`**
+- [x] **CHECKPOINT: Run `/compact focus on: Phase 4 complete, documentation updated, feature ready for review`**
 
 ## Definition of Done (Per Phase)
 
-- [ ] Code passes `golangci-lint run`
-- [ ] Code passes `go fmt ./...`
-- [ ] Code passes `go vet ./...`
-- [ ] All new tests pass (`go test ./...`)
-- [ ] All existing tests pass
-- [ ] Test coverage >= 80% for new code
-- [ ] No new warnings introduced
+- [x] Code passes `golangci-lint run`
+- [x] Code passes `go fmt ./...`
+- [x] Code passes `go vet ./...`
+- [x] All new tests pass (`go test ./...`)
+- [x] All existing tests pass
+- [x] Test coverage >= 80% for new code
+- [x] No new warnings introduced
 
 ## Test Plan
 

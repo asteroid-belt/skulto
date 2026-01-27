@@ -76,7 +76,8 @@ func TestParseSkillURI(t *testing.T) {
 func TestHandleSkillContentResource(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -118,7 +119,8 @@ func TestHandleSkillContentResource(t *testing.T) {
 func TestHandleSkillMetadataResource(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
-	server := NewServer(database, cfg)
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()

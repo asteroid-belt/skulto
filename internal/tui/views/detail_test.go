@@ -51,7 +51,7 @@ func TestAsyncLoadingFlow(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	cfg := &config.Config{}
-	view := NewDetailView(database, cfg)
+	view := NewDetailView(database, cfg, nil) // nil favorites store for testing
 	view.Init(telemetry.New(nil))
 	view.SetSize(80, 24)
 
@@ -121,7 +121,7 @@ func TestAsyncLoadingFlowWithError(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	cfg := &config.Config{}
-	view := NewDetailView(database, cfg)
+	view := NewDetailView(database, cfg, nil)
 	view.Init(telemetry.New(nil))
 	view.SetSize(80, 24)
 
@@ -162,7 +162,7 @@ func TestLoadingStateIsRenderable(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	cfg := &config.Config{}
-	view := NewDetailView(database, cfg)
+	view := NewDetailView(database, cfg, nil)
 	view.Init(telemetry.New(nil))
 	view.SetSize(80, 24)
 
@@ -198,7 +198,7 @@ func TestMultipleLoadsResetState(t *testing.T) {
 	}
 
 	cfg := &config.Config{}
-	view := NewDetailView(database, cfg)
+	view := NewDetailView(database, cfg, nil)
 	view.Init(telemetry.New(nil))
 	view.SetSize(80, 24)
 
@@ -236,7 +236,7 @@ func TestHandleSkillLoadedIsIdempotent(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	cfg := &config.Config{}
-	view := NewDetailView(database, cfg)
+	view := NewDetailView(database, cfg, nil)
 	view.Init(telemetry.New(nil))
 	view.SetSize(80, 24)
 

@@ -77,8 +77,8 @@ func (s *Server) registerTools() {
 	// User state tools (Phase 2)
 	s.server.AddTool(installTool(), s.handleInstall)
 	s.server.AddTool(uninstallTool(), s.handleUninstall)
-	s.server.AddTool(bookmarkTool(), s.handleBookmark)
-	s.server.AddTool(getBookmarksTool(), s.handleGetBookmarks)
+	s.server.AddTool(favoriteTool(), s.handleFavorite)
+	s.server.AddTool(getFavoritesTool(), s.handleGetFavorites)
 }
 
 // registerResources adds all Skulto resources to the MCP server.

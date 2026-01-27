@@ -38,7 +38,9 @@ Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It 
 - **Git-based sync** - Clone and pull repositories for reliable updates
 - **Security scanner** - Detects prompt injection in frontmatter, references, scripts and dangerous patterns with threat levels
 - **Skill installation** - Installs skills to global AI tool directories via symlinks
+- **Favorites** - Save favorite skills that persist across database resets
 - **Recently viewed** - Tracks and displays skills you've recently viewed
+- **MCP Server** - Model Context Protocol server for Claude Code integration
 - **Telemetry** - Anonymous usage stats (opt-out with env var in Settings)
 
 ## Installation
@@ -150,6 +152,9 @@ Skulto provides CLI subcommands for scripting and automation:
 | `skulto scan` | Scan skills for security threats |
 | `skulto update` | Pull + scan with change reporting |
 | `skulto info <slug>` | Show detailed information about a skill |
+| `skulto favorites add <slug>` | Add a skill to favorites |
+| `skulto favorites remove <slug>` | Remove a skill from favorites |
+| `skulto favorites list` | List all favorited skills |
 
 #### `skulto add <repo>`
 
@@ -223,6 +228,23 @@ skulto update
 skulto update --scan-all
 ```
 
+#### `skulto favorites`
+
+Manage your favorite skills. Favorites persist across database resets and are stored separately in `~/.skulto/favorites.json`.
+
+```bash
+# Add a skill to favorites
+skulto favorites add docker-expert
+
+# Remove a skill from favorites
+skulto favorites remove docker-expert
+
+# List all favorited skills
+skulto favorites list
+```
+
+You can also toggle favorites in the TUI by pressing `f` on any skill detail view.
+
 ### Database Location
 
 Skulto stores data in `~/.skulto/`:
@@ -232,6 +254,7 @@ Skulto stores data in `~/.skulto/`:
 | `~/.skulto/skulto.db` | SQLite database |
 | `~/.skulto/skulto.log` | Logfile |
 | `~/.skulto/repositories/` | Cloned git repositories |
+| `~/.skulto/favorites.json` | Favorite skills (persists across DB resets) |
 
 ## Development
 
@@ -257,15 +280,18 @@ make clean           # Remove build artifacts
 ```
 skulto/
 ├── cmd/skulto/              # Main CLI entry point
+├── cmd/skulto-mcp/          # MCP server for Claude Code integration
 ├── internal/
 │   ├── cli/                 # Cobra CLI commands (add, list, pull, etc.)
 │   ├── config/              # Configuration (env vars only)
 │   ├── db/                  # GORM + SQLite + FTS5 database layer
 │   ├── detect/              # AI tool detection on system
 │   ├── embedding/           # Embedding provider abstraction
+│   ├── favorites/           # File-based favorites persistence
 │   ├── installer/           # Skill installation via symlinks
 │   ├── llm/                 # LLM provider abstraction
 │   ├── log/                 # Structured logging
+│   ├── mcp/                 # MCP server implementation
 │   ├── migration/           # Database migrations
 │   ├── models/              # Data structures (Skill, Tag, Source, etc.)
 │   ├── scraper/             # GitHub scraping (git clone based)

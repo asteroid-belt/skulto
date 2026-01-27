@@ -403,8 +403,8 @@ func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (
 	return mcp.NewToolResultText(string(data)), nil
 }
 
-// handleBookmark handles the skulto_bookmark tool.
-func (s *Server) handleBookmark(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// handleFavorite handles the skulto_favorite tool.
+func (s *Server) handleFavorite(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
 		return mcp.NewToolResultError("slug parameter is required"), nil
@@ -457,8 +457,8 @@ func (s *Server) handleBookmark(ctx context.Context, req mcp.CallToolRequest) (*
 	return mcp.NewToolResultText(string(data)), nil
 }
 
-// handleGetBookmarks handles the skulto_get_bookmarks tool.
-func (s *Server) handleGetBookmarks(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// handleGetFavorites handles the skulto_get_favorites tool.
+func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	limit := 50
 	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
 		limit = int(l)

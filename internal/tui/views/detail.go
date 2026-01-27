@@ -8,6 +8,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/log"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
@@ -47,11 +48,15 @@ type DetailView struct {
 	db        *db.DB
 	cfg       *config.Config
 	telemetry telemetry.Client
+	favorites *favorites.Store
 
 	skill     *models.Skill
 	skillID   string
 	loading   bool
 	loadError error
+
+	// Favorite state (cached)
+	isFavorite bool
 
 	// Installation state
 	installing bool
@@ -76,7 +81,7 @@ type DetailView struct {
 }
 
 // NewDetailView creates a new DetailView.
-func NewDetailView(database *db.DB, conf *config.Config) *DetailView {
+func NewDetailView(database *db.DB, conf *config.Config, favStore *favorites.Store) *DetailView {
 	// Pre-create the glamour renderer (expensive operation)
 	// This is done once at startup rather than on each render
 	// Use dark theme for better visibility in terminal
@@ -89,6 +94,7 @@ func NewDetailView(database *db.DB, conf *config.Config) *DetailView {
 	return &DetailView{
 		db:              database,
 		cfg:             conf,
+		favorites:       favStore,
 		glamourRenderer: renderer,
 	}
 }
@@ -145,6 +151,11 @@ func (dv *DetailView) HandleSkillLoaded(msg SkillLoadedMsg) {
 	}
 
 	dv.skill = msg.Skill
+
+	// Check if this skill is a favorite
+	if dv.favorites != nil {
+		dv.isFavorite = dv.favorites.IsFavorite(msg.Skill.Slug)
+	}
 
 	// Record that this skill was viewed
 	if err := dv.db.RecordSkillView(msg.Skill.ID); err != nil {
@@ -292,6 +303,21 @@ func (dv *DetailView) Update(key string) (back bool, cmd tea.Cmd) {
 		if dv.skill != nil {
 			_ = clipboard.WriteAll(dv.skill.Content)
 			dv.telemetry.TrackSkillCopied(dv.skill.Title)
+		}
+	case "f":
+		// Toggle favorite
+		if dv.skill != nil && dv.favorites != nil {
+			if dv.isFavorite {
+				if err := dv.favorites.Remove(dv.skill.Slug); err == nil {
+					dv.isFavorite = false
+					dv.telemetry.TrackFavoriteRemoved(dv.skill.Slug)
+				}
+			} else {
+				if err := dv.favorites.Add(dv.skill.Slug); err == nil {
+					dv.isFavorite = true
+					dv.telemetry.TrackFavoriteAdded(dv.skill.Slug)
+				}
+			}
 		}
 	case "S":
 		// Trigger skill scan
@@ -479,6 +505,19 @@ func (dv *DetailView) renderInstallIndicator() string {
 		Render(installText)
 }
 
+// renderFavoriteIndicator renders the favorite status indicator.
+func (dv *DetailView) renderFavoriteIndicator() string {
+	if dv.isFavorite {
+		return lipgloss.NewStyle().
+			Foreground(theme.Current.Warning).
+			Bold(true).
+			Render("★ Favorite (f to remove)")
+	}
+	return lipgloss.NewStyle().
+		Foreground(theme.Current.TextMuted).
+		Render("☆ Add to favorites (f)")
+}
+
 // renderDivider renders a horizontal divider line.
 func (dv *DetailView) renderDivider() string {
 	return lipgloss.NewStyle().
@@ -523,7 +562,7 @@ func (dv *DetailView) renderLocalDetails() string {
 
 	result = append(result,
 		"",
-		dv.renderInstallIndicator(),
+		dv.renderInstallIndicator()+"  "+dv.renderFavoriteIndicator(),
 		dv.renderDivider(),
 	)
 
@@ -621,7 +660,7 @@ func (dv *DetailView) renderRemoteDetails() string {
 	result = append(result,
 		row6,
 		"",
-		dv.renderInstallIndicator(),
+		dv.renderInstallIndicator()+"  "+dv.renderFavoriteIndicator(),
 	)
 
 	// Add security warning banner only for skills with threats
@@ -820,6 +859,7 @@ func (dv *DetailView) GetKeyboardCommands() ViewCommands {
 	// Show install and scan commands for all skills (local and remote)
 	if dv.skill != nil {
 		commands = append(commands, Command{Key: "i", Description: "Toggle install/uninstall skill"})
+		commands = append(commands, Command{Key: "f", Description: "Toggle favorite"})
 		commands = append(commands, Command{Key: "S", Description: "Scan skill for threats"})
 	}
 

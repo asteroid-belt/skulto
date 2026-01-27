@@ -329,7 +329,7 @@ func TestHandleGetRecent(t *testing.T) {
 	})
 }
 
-func TestHandleBookmark(t *testing.T) {
+func TestHandleFavorite(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
@@ -338,14 +338,14 @@ func TestHandleBookmark(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("bookmark add works", func(t *testing.T) {
+	t.Run("favorite add works", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
 			"slug":   "test-react-hooks",
 			"action": "add",
 		}
 
-		result, err := server.handleBookmark(ctx, req)
+		result, err := server.handleFavorite(ctx, req)
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
@@ -354,14 +354,14 @@ func TestHandleBookmark(t *testing.T) {
 		assert.Equal(t, 1, favStore.Count())
 	})
 
-	t.Run("bookmark remove works", func(t *testing.T) {
+	t.Run("favorite remove works", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
 			"slug":   "test-react-hooks",
 			"action": "remove",
 		}
 
-		result, err := server.handleBookmark(ctx, req)
+		result, err := server.handleFavorite(ctx, req)
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
@@ -370,32 +370,32 @@ func TestHandleBookmark(t *testing.T) {
 		assert.Equal(t, 0, favStore.Count())
 	})
 
-	t.Run("bookmark invalid action returns error", func(t *testing.T) {
+	t.Run("favorite invalid action returns error", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
 			"slug":   "test-react-hooks",
 			"action": "invalid",
 		}
 
-		result, err := server.handleBookmark(ctx, req)
+		result, err := server.handleFavorite(ctx, req)
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 	})
 
-	t.Run("bookmark nonexistent skill returns error", func(t *testing.T) {
+	t.Run("favorite nonexistent skill returns error", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
 			"slug":   "nonexistent-skill",
 			"action": "add",
 		}
 
-		result, err := server.handleBookmark(ctx, req)
+		result, err := server.handleFavorite(ctx, req)
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 	})
 }
 
-func TestHandleGetBookmarks(t *testing.T) {
+func TestHandleGetFavorites(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
@@ -404,21 +404,21 @@ func TestHandleGetBookmarks(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Add a bookmark via handler
-	bookmarkReq := mcp.CallToolRequest{}
-	bookmarkReq.Params.Arguments = map[string]any{
+	// Add a favorite via handler
+	favoriteReq := mcp.CallToolRequest{}
+	favoriteReq.Params.Arguments = map[string]any{
 		"slug":   "test-react-hooks",
 		"action": "add",
 	}
-	_, _ = server.handleBookmark(ctx, bookmarkReq)
+	_, _ = server.handleFavorite(ctx, favoriteReq)
 
-	t.Run("get bookmarks returns bookmarked skills", func(t *testing.T) {
+	t.Run("get favorites returns favorited skills", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
 			"limit": float64(50),
 		}
 
-		result, err := server.handleGetBookmarks(ctx, req)
+		result, err := server.handleGetFavorites(ctx, req)
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
@@ -433,7 +433,7 @@ func TestHandleGetBookmarks(t *testing.T) {
 		assert.Equal(t, "React Hooks Best Practices", skills[0].Title)
 	})
 
-	t.Run("get bookmarks returns empty array when no favorites", func(t *testing.T) {
+	t.Run("get favorites returns empty array when no favorites", func(t *testing.T) {
 		// Create a new server with empty favorites
 		emptyFavStore := setupTestFavorites(t)
 		emptyServer := NewServer(database, cfg, emptyFavStore)
@@ -441,7 +441,7 @@ func TestHandleGetBookmarks(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{}
 
-		result, err := emptyServer.handleGetBookmarks(ctx, req)
+		result, err := emptyServer.handleGetFavorites(ctx, req)
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 
@@ -454,14 +454,14 @@ func TestHandleGetBookmarks(t *testing.T) {
 		assert.Len(t, skills, 0)
 	})
 
-	t.Run("get bookmarks handles deleted skill gracefully", func(t *testing.T) {
+	t.Run("get favorites handles deleted skill gracefully", func(t *testing.T) {
 		// Add a favorite directly that doesn't exist in DB
 		require.NoError(t, favStore.Add("deleted-skill"))
 
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{}
 
-		result, err := server.handleGetBookmarks(ctx, req)
+		result, err := server.handleGetFavorites(ctx, req)
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 

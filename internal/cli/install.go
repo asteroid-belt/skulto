@@ -106,24 +106,51 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		return trackCLIError("install", fmt.Errorf("detect platforms: %w", err))
 	}
 
+	// Get current install locations for this skill
+	installedLocations, err := service.GetInstallLocations(ctx, slug)
+	if err != nil {
+		// Skill might not exist yet, continue with empty installed list
+		installedLocations = nil
+	}
+
 	// Determine selected platforms
 	selectedPlatforms := installPlatforms
+	var alreadyInstalledPlatforms []string
+
 	if !installYes && len(selectedPlatforms) == 0 {
-		// Interactive mode - show platform selector
+		// Interactive mode - show platform selector with installed info
 		if !isInteractive() {
 			return trackCLIError("install", fmt.Errorf("interactive mode requires a terminal, use -y flag"))
 		}
-		selectedPlatforms, err = prompts.RunPlatformSelector(platforms, installPlatforms)
+
+		result, err := prompts.RunPlatformSelectorWithInstalled(platforms, installedLocations, installPlatforms)
 		if err != nil {
 			return trackCLIError("install", fmt.Errorf("platform selection: %w", err))
 		}
+
+		// Handle fully installed case
+		if result.AllAlreadyInstalled {
+			fmt.Printf("✓ %s is already installed to all detected platforms.\n\n", slug)
+			fmt.Println("Installed locations:")
+			for _, loc := range installedLocations {
+				fmt.Printf("  • %s (%s)\n", loc.Platform, loc.Scope)
+			}
+			fmt.Printf("\nTo install to additional platforms, use: skulto install %s -p <platform>\n", slug)
+			fmt.Printf("To remove from locations, use: skulto uninstall %s\n", slug)
+			return nil
+		}
+
+		selectedPlatforms = result.Selected
+		alreadyInstalledPlatforms = result.AlreadyInstalled
+	}
+
+	if len(selectedPlatforms) == 0 {
+		// Default to detected platforms (excluding already installed)
+		selectedPlatforms = prompts.GetDefaultSelectablePlatforms(platforms, installedLocations)
 	}
 	if len(selectedPlatforms) == 0 {
-		// Default to detected platforms
-		selectedPlatforms = prompts.GetDefaultSelectedPlatforms(platforms)
-	}
-	if len(selectedPlatforms) == 0 {
-		return trackCLIError("install", fmt.Errorf("no platforms selected or detected"))
+		fmt.Println("No platforms selected. Nothing to install.")
+		return nil
 	}
 
 	// Determine scope
@@ -158,13 +185,42 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 	}
 
 	// Print results
-	if len(result.Locations) == 0 {
-		fmt.Println("  No installations performed.")
-	} else {
-		for _, loc := range result.Locations {
-			fmt.Printf("  ✓ %s (%s)\n", loc.Platform, loc.Scope)
+	newInstalls := 0
+	for _, loc := range result.Locations {
+		// Check if this was a new install or already existed
+		wasAlreadyInstalled := false
+		for _, existingLoc := range installedLocations {
+			if existingLoc.Platform == loc.Platform && existingLoc.Scope == loc.Scope {
+				wasAlreadyInstalled = true
+				break
+			}
 		}
-		fmt.Printf("\nDone! Installed to %d location(s).\n", len(result.Locations))
+		if wasAlreadyInstalled {
+			fmt.Printf("  ○ %s (%s) - already installed\n", loc.Platform, loc.Scope)
+		} else {
+			fmt.Printf("  ✓ %s (%s)\n", loc.Platform, loc.Scope)
+			newInstalls++
+		}
+	}
+
+	// Also show platforms that were already installed (from interactive selection)
+	for _, platformID := range alreadyInstalledPlatforms {
+		for _, loc := range installedLocations {
+			if string(loc.Platform) == platformID {
+				fmt.Printf("  ○ %s (%s) - already installed\n", loc.Platform, loc.Scope)
+			}
+		}
+	}
+
+	if newInstalls == 0 {
+		fmt.Println("\nNo new installations performed. All locations were already installed.")
+	} else {
+		skipped := len(result.Locations) - newInstalls + len(alreadyInstalledPlatforms)
+		if skipped > 0 {
+			fmt.Printf("\nDone! Installed to %d new location(s). %d location(s) were already installed.\n", newInstalls, skipped)
+		} else {
+			fmt.Printf("\nDone! Installed to %d location(s).\n", newInstalls)
+		}
 	}
 
 	return nil

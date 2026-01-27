@@ -105,10 +105,10 @@ func uninstallTool() mcp.Tool {
 	)
 }
 
-// bookmarkTool returns the skulto_bookmark tool definition.
-func bookmarkTool() mcp.Tool {
-	return mcp.NewTool("skulto_bookmark",
-		mcp.WithDescription("Add or remove a skill from your bookmarks/favorites."),
+// favoriteTool returns the skulto_favorite tool definition.
+func favoriteTool() mcp.Tool {
+	return mcp.NewTool("skulto_favorite",
+		mcp.WithDescription("Add or remove a skill from your favorites."),
 		mcp.WithString("slug",
 			mcp.Required(),
 			mcp.Description("The skill's unique slug identifier"),
@@ -120,10 +120,10 @@ func bookmarkTool() mcp.Tool {
 	)
 }
 
-// getBookmarksTool returns the skulto_get_bookmarks tool definition.
-func getBookmarksTool() mcp.Tool {
-	return mcp.NewTool("skulto_get_bookmarks",
-		mcp.WithDescription("Get your bookmarked/favorite skills."),
+// getFavoritesTool returns the skulto_get_favorites tool definition.
+func getFavoritesTool() mcp.Tool {
+	return mcp.NewTool("skulto_get_favorites",
+		mcp.WithDescription("Get your favorite skills."),
 		mcp.WithNumber("limit",
 			mcp.Description("Maximum number of results to return (default: 50, max: 100)"),
 		),
