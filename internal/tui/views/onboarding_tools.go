@@ -43,8 +43,7 @@ type OnboardingToolsView struct {
 	group2Expanded bool                 // Whether "All Agents" group is expanded
 
 	// Scrolling
-	scrollOffset   int
-	viewportHeight int
+	scrollOffset int
 
 	width  int
 	height int
@@ -261,16 +260,6 @@ func (v *OnboardingToolsView) countSelected() int {
 		}
 	}
 	return count
-}
-
-// isDetected checks if a platform was detected.
-func (v *OnboardingToolsView) isDetected(platform installer.Platform) bool {
-	for _, result := range v.detectionResults {
-		if result.Platform == platform && result.Detected {
-			return true
-		}
-	}
-	return false
 }
 
 // View renders the onboarding tools view.

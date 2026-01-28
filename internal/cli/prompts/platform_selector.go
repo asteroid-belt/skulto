@@ -29,10 +29,10 @@ type platformItem struct {
 // platformSelectorModel is a Bubble Tea model for the grouped platform selector.
 type platformSelectorModel struct {
 	// Data
-	detected    []installer.DetectedPlatform // Detected platforms (group 1)
-	others      []installer.DetectedPlatform // Non-detected platforms (group 2)
-	installed   map[string]bool              // Already-installed platform IDs
-	selected    map[string]bool              // Currently selected platform IDs
+	detected     []installer.DetectedPlatform // Detected platforms (group 1)
+	others       []installer.DetectedPlatform // Non-detected platforms (group 2)
+	installed    map[string]bool              // Already-installed platform IDs
+	selected     map[string]bool              // Currently selected platform IDs
 	displayItems []platformItem
 
 	// UI state

@@ -43,11 +43,11 @@ type ManageSkillDialog struct {
 	platforms  []installer.Platform // User's configured platforms
 
 	// Display items for navigation
-	displayItems   []manageDisplayItem
-	currentIndex   int // Index into displayItems
-	scrollOffset   int
-	width          int
-	height         int
+	displayItems []manageDisplayItem
+	currentIndex int // Index into displayItems
+	scrollOffset int
+	width        int
+	height       int
 
 	// Collapsible groups
 	installedCount int  // checkboxes[0:installedCount] = group 1
