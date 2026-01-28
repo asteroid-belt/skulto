@@ -44,3 +44,4 @@ scratch.txt
 plans/
 bin/
 docs/
+*.cast
