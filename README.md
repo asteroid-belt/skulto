@@ -23,25 +23,48 @@
 
 ## What is Skulto?
 
-Skulto is a cross-platform CLI tool for managing AI coding assistant skills. It provides:
+Skulto is a cross-platform CLI tool for managing AI coding assistant skills across 30+ platforms. It provides:
 
-1. **Repository management** - Add, sync, and remove skill repositories
-2. **Full-text search** - SQLite FTS5-powered search across all indexed skills
-3. **Security scanning** - Detect prompt injection and dangerous code patterns
-4. **Skill installation** - Install skills to AI tool directories via symlinks
-5. **Interactive TUI** - Bubble Tea-powered terminal interface with custom keybindings
+1. **Multi-platform installation** - Install skills to Claude Code, Cursor, Windsurf, Copilot, Codex, Cline, Roo Code, Gemini CLI, Kiro CLI, and 25+ more
+2. **Repository management** - Add, sync, and remove skill repositories
+3. **Full-text search** - SQLite FTS5-powered search across all indexed skills
+4. **Security scanning** - Detect prompt injection and dangerous code patterns
+5. **Platform detection** - Automatically detects which AI tools are installed on your system
+6. **Interactive TUI** - Bubble Tea-powered terminal interface with collapsible groups, multi-select, and keyboard navigation
+7. **URL-based install** - Install directly from GitHub repositories via `skulto install owner/repo`
 
 ## Features
 
+- **30+ platform support** - Claude Code, Cursor, Windsurf, GitHub Copilot, OpenAI Codex, OpenCode, Cline, Roo Code, Gemini CLI, Kiro CLI, Amp, Continue, Goose, Junie, Qwen Code, Trae, and more
+- **Platform detection** - Detects installed AI tools and surfaces them in platform choosers
 - **Offline-first** - Works without internet after initial sync
 - **Fast search** - FTS5-powered full-text search with BM25 ranking (~50ms latency)
 - **Git-based sync** - Clone and pull repositories for reliable updates
 - **Security scanner** - Detects prompt injection in frontmatter, references, scripts and dangerous patterns with threat levels
-- **Skill installation** - Installs skills to global AI tool directories via symlinks
+- **Smart multi-skill install** - Install multiple skills from a repository URL with per-skill conflict resolution (skip already-installed, add new locations, or skip all)
+- **Scope selection** - Install skills globally (`~/`) or per-project (`./`) with separate control per platform
+- **Collapsible platform groups** - Detected/preferred platforms at top, all others in a collapsed group across all choosers
+- **Install location memory** - Optionally remember your platform/scope choices for future installs
 - **Favorites** - Save favorite skills that persist across database resets
 - **Recently viewed** - Tracks and displays skills you've recently viewed
-- **MCP Server** - Model Context Protocol server for Claude Code integration
+- **MCP Server** - Model Context Protocol server for AI tool integration (search, install, manage skills programmatically)
 - **Telemetry** - Anonymous usage stats (opt-out with env var in Settings)
+
+### Supported Platforms
+
+Skulto detects and installs skills to 33 AI coding tools:
+
+| | | | |
+|---|---|---|---|
+| Claude Code | Cursor | Windsurf | GitHub Copilot |
+| OpenAI Codex | OpenCode | Cline | Roo Code |
+| Gemini CLI | Kiro CLI | Amp | Continue |
+| Goose | Junie | Kilo Code | Trae |
+| Qwen Code | Kimi Code CLI | CodeBuddy | Command Code |
+| Crush | Droid | Kode | MCPJam |
+| Mux | OpenHands | Pi | Qoder |
+| Zencoder | Neovate | Pochi | Antigravity |
+| Moltbot | | | |
 
 ## Installation
 
@@ -67,7 +90,7 @@ cd skulto
 # Install dependencies
 make deps
 
-# Build
+# Build (outputs to ./build/)
 make build-all
 
 # Run
@@ -82,25 +105,25 @@ make build-all
 ## Quick Start
 
 ```bash
-# 1. Set your GitHub token for faster syncing (optional but recommended)
-export GITHUB_TOKEN=ghp_your_token_here
+# Launch the TUI (guided onboarding on first run)
+skulto
 
-# 2. Build app
-make build
-
-# 3. Add a skill repository
-./build/skulto add asteroid-belt/skills
-
-# 4. Launch the TUI
-./build/skulto
+# Or install skills directly from a repository URL
+skulto install asteroid-belt/skills
 ```
+
+On first launch, Skulto walks you through onboarding:
+
+1. **Platform selection** - Detected AI tools appear at top; select which ones to sync skills to
+2. **Skill selection** - Curated starter skills from Asteroid Belt (superplan, superbuild, teach, agentsmd-generator, and more)
+3. **Location chooser** - Pick global or project scope per platform, with your previous selections pre-filled
 
 ## Usage
 
 ### TUI Mode (Default)
 
 ```bash
-./build/skulto
+skulto
 ```
 
 **Key Bindings:**
@@ -111,19 +134,20 @@ make build
 | `j` / `k` | Navigate down / up |
 | `h` / `l` | Navigate left / right (between columns) |
 | `↑` / `↓` | Navigate results |
-| `Enter` | Select skill / tag |
+| `Enter` | Select / confirm |
+| `Space` | Toggle selection (in choosers) |
 | `f` | Toggle favorite / bookmark |
-| `i` | Install / uninstall skill |
+| `i` | Install / manage skill locations |
 | `c` | Copy skill content to clipboard |
 | `p` | Pull/sync repositories |
-| `Esc` | Back to previous view |
+| `Esc` | Back / cancel |
 | `q` | Quit |
 
 ### Home Dashboard
 
 The home view displays three columns:
 
-1. **Installed Skills** - Your installed/bookmarked skills
+1. **Installed Skills** - Your installed skills (scrollable, shows up to 5 at a time)
 2. **Recently Viewed Skills** - Skills you've recently viewed
 3. **Top Tags** - Popular skill categories
 
@@ -131,12 +155,30 @@ The home view displays three columns:
 
 When you select a skill, you'll see:
 
-- **Install** - Ability to install non-local skills
+- **Install / Manage** - Install to new platforms or manage existing locations
 - **Metadata** - Author, category, source repository
 - **Tags** - Categorized skill tags
 - **Security status** - Threat level from security scan
 - **Full markdown content** - Rendered with syntax highlighting and scrolling
 - **Copy to clipboard** - Press `c` to copy the full skill content
+
+### Install Location Dialog
+
+When installing a skill, you choose where to install it:
+
+- **Platform headers** - Each AI tool listed with nested scope options
+- **Global vs Project** - Install to `~/.claude/skills/` (user-wide) or `./.claude/skills/` (project-local)
+- **Collapsible groups** - Preferred/detected platforms at top, others collapsed below
+- **Remember locations** - Optionally save choices for future installs
+- **Quick keys** - `a` all, `n` none, `g` global only, `p` project only
+
+### Manage View
+
+Press `i` on an installed skill to manage its locations:
+
+- **Installed platforms** shown at top with checkboxes pre-selected
+- **Other platforms** collapsed below in an expandable group
+- **Add/remove** locations across any combination of platforms and scopes
 
 ### CLI Commands
 
@@ -145,6 +187,7 @@ Skulto provides CLI subcommands for scripting and automation:
 | Command | Purpose |
 | --- | --- |
 | `skulto` | Launch the interactive TUI |
+| `skulto install <slug or repo>` | Install skills by slug or from a repository URL |
 | `skulto add <repo>` | Add a skill repository and sync its skills |
 | `skulto list` | List all configured source repositories |
 | `skulto pull` | Pull/sync all repositories and reconcile installed skills |
@@ -155,6 +198,32 @@ Skulto provides CLI subcommands for scripting and automation:
 | `skulto favorites add <slug>` | Add a skill to favorites |
 | `skulto favorites remove <slug>` | Remove a skill from favorites |
 | `skulto favorites list` | List all favorited skills |
+| `skulto feedback` | Open the feedback/bug report page |
+
+#### `skulto install`
+
+Install skills by slug or directly from a GitHub repository:
+
+```bash
+# Install a single skill by slug
+skulto install superplan
+
+# Install from a repository (auto-detects all skills)
+skulto install asteroid-belt/skills
+
+# Install from a full GitHub URL
+skulto install https://github.com/asteroid-belt/skills
+
+# Non-interactive mode (accept defaults)
+skulto install asteroid-belt/skills -y
+```
+
+When installing from a repository URL:
+1. Skulto syncs the repository and presents all available skills
+2. Select which skills to install with an interactive checklist
+3. Choose target platforms with a collapsible platform chooser (detected platforms at top)
+4. **Smart skip** for already-installed skills: prompted with `y` (add locations), `N` (skip, default), or `s` (skip all remaining)
+5. Final summary shows installed, skipped, and failed counts
 
 #### `skulto add <repo>`
 
@@ -245,9 +314,22 @@ skulto favorites list
 
 You can also toggle favorites in the TUI by pressing `f` on any skill detail view.
 
-### MCP Server
+### MCP Server (`skulto-mcp`)
 
-Skulto includes an MCP (Model Context Protocol) server that exposes skills to Claude Code and other MCP-compatible clients. This enables AI assistants to search, browse, and install skills directly.
+Skulto includes an MCP (Model Context Protocol) server that exposes skills to Claude Code and other MCP-compatible clients. This enables AI assistants to search, browse, install, and manage skills and repositories programmatically.
+
+Add to your Claude Code settings (`.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "skulto": {
+      "command": "/opt/homebrew/bin/skulto-mcp",
+      "type": "stdio"
+    }
+  }
+}
+```
 
 #### Available Tools
 
@@ -259,11 +341,12 @@ Skulto includes an MCP (Model Context Protocol) server that exposes skills to Cl
 | `skulto_browse_tags` | List available tags by category (language, framework, tool, concept, domain) |
 | `skulto_get_stats` | Get database statistics (total skills, tags, sources) |
 | `skulto_get_recent` | Get recently viewed skills |
-| `skulto_install` | Install a skill to Claude Code or other platforms |
-| `skulto_uninstall` | Uninstall a skill |
+| `skulto_install` | Install a skill to any supported platform (30+ platforms, global or project scope) |
+| `skulto_uninstall` | Uninstall a skill from specified platforms |
 | `skulto_favorite` | Add or remove a skill from favorites |
 | `skulto_get_favorites` | Get favorite skills |
-| `skulto_check` | List all installed skills and their locations |
+| `skulto_check` | List all installed skills and their installation locations |
+| `skulto_add` | Add a skill repository and sync its skills |
 
 #### Resources
 
@@ -309,15 +392,16 @@ make clean           # Remove build artifacts
 ```
 skulto/
 ├── cmd/skulto/              # Main CLI entry point
-├── cmd/skulto-mcp/          # MCP server for Claude Code integration
+├── cmd/skulto-mcp/          # MCP server binary
 ├── internal/
-│   ├── cli/                 # Cobra CLI commands (add, list, pull, etc.)
+│   ├── cli/                 # Cobra CLI commands (add, install, pull, etc.)
+│   │   └── prompts/         # Interactive CLI prompts (platform selector)
 │   ├── config/              # Configuration (env vars only)
 │   ├── db/                  # GORM + SQLite + FTS5 database layer
 │   ├── detect/              # AI tool detection on system
 │   ├── embedding/           # Embedding provider abstraction
 │   ├── favorites/           # File-based favorites persistence
-│   ├── installer/           # Skill installation via symlinks
+│   ├── installer/           # Skill installation via symlinks (33 platforms)
 │   ├── llm/                 # LLM provider abstraction
 │   ├── log/                 # Structured logging
 │   ├── mcp/                 # MCP server implementation
@@ -329,8 +413,8 @@ skulto/
 │   ├── telemetry/           # PostHog analytics (opt-in)
 │   ├── testutil/            # Test utilities
 │   ├── tui/                 # Bubble Tea TUI
-│   │   ├── components/      # Reusable UI components
-│   │   └── views/           # Screen views (home, search, detail, etc.)
+│   │   ├── components/      # Reusable UI components (dialogs, selectors)
+│   │   └── views/           # Screen views (home, search, detail, onboarding, manage)
 │   └── vector/              # Vector store
 ├── pkg/version/             # Version info (set via ldflags)
 └── scripts/                 # Build and release scripts
