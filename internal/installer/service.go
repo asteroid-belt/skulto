@@ -72,17 +72,11 @@ func (s *InstallService) DetectPlatforms(ctx context.Context) ([]DetectedPlatfor
 
 	for _, p := range allPlatforms {
 		info := p.Info()
-		// Get the global path for display - use a dummy slug then get parent dir
-		globalPath, _ := p.GetSkillPathForScope("_", ScopeGlobal)
-		if globalPath != "" {
-			// Strip the dummy slug to get the skills directory path
-			globalPath = filepath.Dir(globalPath)
-		}
 
 		platformInfo := DetectedPlatform{
 			ID:       string(p),
 			Name:     info.Name,
-			Path:     globalPath,
+			Path:     info.SkillsPath,
 			Detected: isPlatformDetected(p),
 		}
 		result = append(result, platformInfo)

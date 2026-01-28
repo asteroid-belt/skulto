@@ -60,17 +60,11 @@ func newPlatformSelectorModel(platforms []installer.DetectedPlatform, installedL
 		}
 	}
 
-	// Build selected set: pre-select detected platforms (or use preselected list)
+	// Build selected set: only pre-select if explicitly provided
 	selected := make(map[string]bool)
-	if len(preselected) > 0 {
-		for _, id := range preselected {
-			if !installed[id] {
-				selected[id] = true
-			}
-		}
-	} else {
-		for _, p := range detected {
-			selected[p.ID] = true
+	for _, id := range preselected {
+		if !installed[id] {
+			selected[id] = true
 		}
 	}
 
