@@ -699,6 +699,60 @@ func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScop
 	return dialog
 }
 
+// NewInstallLocationDialogForOnboarding creates a dialog with collapsible groups
+// for the onboarding flow. Group 1 = platforms the user selected on the tools screen
+// (pre-selected with global scope). Group 2 = all other platforms (collapsed).
+func NewInstallLocationDialogForOnboarding(selectedPlatforms []installer.Platform) *InstallLocationDialog {
+	selectedSet := make(map[string]bool)
+	for _, p := range selectedPlatforms {
+		selectedSet[string(p)] = true
+	}
+
+	// Build ordered platform list: selected first, then others
+	allPlatforms := installer.AllPlatforms()
+	var ordered []installer.Platform
+	for _, p := range allPlatforms {
+		if selectedSet[string(p)] {
+			ordered = append(ordered, p)
+		}
+	}
+	for _, p := range allPlatforms {
+		if !selectedSet[string(p)] {
+			ordered = append(ordered, p)
+		}
+	}
+
+	dialog := &InstallLocationDialog{
+		platforms: ordered,
+		options:   make([]LocationOption, 0),
+	}
+	dialog.buildOptions()
+
+	// Count options that belong to the selected platforms (group 1)
+	preferredCount := 0
+	for _, opt := range dialog.options {
+		if selectedSet[string(opt.Location.Platform)] {
+			preferredCount++
+		} else {
+			break // Options are ordered: selected first, then others
+		}
+	}
+	dialog.preferredCount = preferredCount
+
+	// Pre-select global scope for selected platforms, nothing for others
+	for i := range dialog.options {
+		platformID := string(dialog.options[i].Location.Platform)
+		if selectedSet[platformID] {
+			dialog.options[i].Selected = (dialog.options[i].Location.Scope == installer.ScopeGlobal)
+		} else {
+			dialog.options[i].Selected = false
+		}
+	}
+
+	dialog.buildDisplayItems()
+	return dialog
+}
+
 // mergePreferencesWithDetected reorders platforms:
 // 1. Saved preferences (enabled) first
 // 2. Newly detected (not in saved) second

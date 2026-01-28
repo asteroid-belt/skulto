@@ -1070,7 +1070,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					if len(allSkills) > 0 {
 						m.pendingInstallSkills = allSkills
-						m.locationDialog = components.NewInstallLocationDialog(
+						m.locationDialog = components.NewInstallLocationDialogForOnboarding(
 							m.onboardingToolsView.GetSelectedPlatforms(),
 						)
 						m.showLocationDialog = true

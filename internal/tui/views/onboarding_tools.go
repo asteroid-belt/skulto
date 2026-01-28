@@ -151,7 +151,7 @@ func (v *OnboardingToolsView) Update(key string) (bool, bool) {
 		v.moveCursor(-1)
 	case "down", "j":
 		v.moveCursor(1)
-	case "space":
+	case "space", " ":
 		if v.currentSelection >= 0 && v.currentSelection < len(v.displayItems) {
 			item := v.displayItems[v.currentSelection]
 			switch item.kind {

@@ -162,7 +162,7 @@ func (v *OnboardingSkillsView) Update(key string) (bool, bool, tea.Cmd) {
 		v.moveUp()
 	case "down", "j":
 		v.moveDown()
-	case "space":
+	case "space", " ":
 		v.toggleSelection()
 	case "a":
 		// Select all new skills
@@ -289,10 +289,7 @@ func (v *OnboardingSkillsView) View() string {
 	)
 
 	// Calculate content width for wrapping (maxWidth - padding - border)
-	maxWidth := 70
-	if v.width < 80 {
-		maxWidth = v.width - 10
-	}
+	maxWidth := v.width * 90 / 100
 	if maxWidth < 50 {
 		maxWidth = 50
 	}
