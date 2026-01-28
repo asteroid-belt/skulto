@@ -138,16 +138,15 @@ func TestOnboardingToolsView_Group2AutoExpandsWhenNothingDetected(t *testing.T) 
 	assert.Equal(t, 2, agentCount, "all agents should be visible when auto-expanded")
 }
 
-func TestOnboardingToolsView_ClaudeDefaultWhenNothingDetected(t *testing.T) {
+func TestOnboardingToolsView_NothingSelectedByDefault(t *testing.T) {
 	cfg := &config.Config{}
 	v := NewOnboardingToolsView(cfg)
 	v.SetSize(120, 40)
 	v.Init()
 
-	// Claude should be selected by default if nothing is detected
+	// Nothing should be pre-selected
 	selected := v.GetSelectedPlatforms()
-	// At minimum, Claude should be in the list (or whatever was detected)
-	assert.NotEmpty(t, selected, "at least one platform should be selected")
+	assert.Empty(t, selected, "no platforms should be pre-selected")
 }
 
 func TestOnboardingToolsView_NavigationSkipsHeaders(t *testing.T) {
@@ -174,29 +173,30 @@ func TestOnboardingToolsView_NavigationSkipsHeaders(t *testing.T) {
 		"cursor after up should be on an interactive item")
 }
 
-func TestOnboardingToolsView_ToggleSelectionMinimumOne(t *testing.T) {
+func TestOnboardingToolsView_ToggleSelection(t *testing.T) {
 	cfg := &config.Config{}
 	v := NewOnboardingToolsView(cfg)
 	v.SetSize(120, 40)
 	v.Init()
 
-	// Get the initial selected platforms
-	initial := v.GetSelectedPlatforms()
-	require.NotEmpty(t, initial)
+	// Nothing selected initially
+	assert.Empty(t, v.GetSelectedPlatforms())
 
-	// If only one is selected, toggling it should keep it selected (minimum 1)
-	if len(initial) == 1 {
-		// Navigate to an agent item first
-		for i, item := range v.displayItems {
-			if item.kind == itemAgent {
-				v.currentSelection = i
-				break
-			}
+	// Navigate to first agent item and toggle on
+	for i, item := range v.displayItems {
+		if item.kind == itemAgent {
+			v.currentSelection = i
+			break
 		}
-		v.Update("space")
-		after := v.GetSelectedPlatforms()
-		assert.Len(t, after, 1, "should enforce minimum 1 selection")
 	}
+	v.Update("space")
+	after := v.GetSelectedPlatforms()
+	assert.Len(t, after, 1, "should have 1 selected after toggle on")
+
+	// Toggle off
+	v.Update("space")
+	after = v.GetSelectedPlatforms()
+	assert.Empty(t, after, "should have 0 selected after toggle off")
 }
 
 func TestOnboardingToolsView_GetSelectedPlatforms(t *testing.T) {
@@ -205,10 +205,14 @@ func TestOnboardingToolsView_GetSelectedPlatforms(t *testing.T) {
 	v.SetSize(120, 40)
 	v.Init()
 
-	platforms := v.GetSelectedPlatforms()
-	assert.NotEmpty(t, platforms, "should return at least one selected platform")
+	// Starts empty
+	assert.Empty(t, v.GetSelectedPlatforms(), "should start with no selections")
 
-	// All returned platforms should be valid
+	// Manually select a platform and verify
+	v.selectedTools[installer.PlatformClaude] = true
+	platforms := v.GetSelectedPlatforms()
+	assert.NotEmpty(t, platforms, "should return selected platform")
+
 	for _, p := range platforms {
 		assert.True(t, p.IsValid(), "returned platform %q should be valid", p)
 	}
@@ -279,8 +283,8 @@ func TestOnboardingToolsView_ConfirmAndSkip(t *testing.T) {
 	v.SetSize(120, 40)
 	v.Init()
 
-	// 'c' should confirm
-	done, skipped := v.Update("c")
+	// 'enter' should confirm
+	done, skipped := v.Update("enter")
 	assert.True(t, done)
 	assert.False(t, skipped)
 }

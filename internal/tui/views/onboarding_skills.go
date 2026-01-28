@@ -134,9 +134,9 @@ func (v *OnboardingSkillsView) Update(key string) (bool, bool, tea.Cmd) {
 
 	if v.err != nil {
 		switch key {
-		case "c", "enter":
+		case "enter":
 			return true, false, nil
-		case "s", "esc":
+		case "esc":
 			return true, true, nil
 		}
 		return false, false, nil
@@ -149,9 +149,9 @@ func (v *OnboardingSkillsView) Update(key string) (bool, bool, tea.Cmd) {
 	if totalItems == 0 {
 		// No skills to show, allow continue/skip
 		switch key {
-		case "c", "enter":
+		case "enter":
 			return true, false, nil
-		case "s", "esc":
+		case "esc":
 			return true, true, nil
 		}
 		return false, false, nil
@@ -162,7 +162,7 @@ func (v *OnboardingSkillsView) Update(key string) (bool, bool, tea.Cmd) {
 		v.moveUp()
 	case "down", "j":
 		v.moveDown()
-	case "space", "enter":
+	case "space":
 		v.toggleSelection()
 	case "a":
 		// Select all new skills
@@ -177,10 +177,10 @@ func (v *OnboardingSkillsView) Update(key string) (bool, bool, tea.Cmd) {
 		for i := range v.installedSkills {
 			v.installedSkills[i].Selected = false
 		}
-	case "c":
+	case "enter":
 		// Continue with selection
 		return true, false, nil
-	case "s", "esc":
+	case "esc":
 		// Skip
 		return true, true, nil
 	}
@@ -274,7 +274,19 @@ func (v *OnboardingSkillsView) View() string {
 		Foreground(theme.Current.TextMuted).
 		MarginBottom(2)
 
-	subtitle := subtitleStyle.Render("Choose which skills to add to your AI tools")
+	subtitle := subtitleStyle.Render("Curated skills from the Asteroid Belt team")
+
+	// Skill highlights
+	highlightStyle := lipgloss.NewStyle().
+		Foreground(theme.Current.TextMuted).
+		MarginBottom(1)
+
+	highlights := highlightStyle.Render(
+		"• superplan + superbuild — rigorous quality gates, definitions of done,\n" +
+			"  and enforced autonomy with sub-agents\n" +
+			"• teach — interactively learn any technical concept, codebase, or spec\n" +
+			"• agentsmd-generator — generate a comprehensive AGENTS.md for your project",
+	)
 
 	// Calculate content width for wrapping (maxWidth - padding - border)
 	maxWidth := 70
@@ -306,10 +318,10 @@ func (v *OnboardingSkillsView) View() string {
 	if v.loading {
 		instructions = instructionStyle.Render("Loading skills...")
 	} else if v.err != nil {
-		instructions = instructionStyle.Render("C continue | S/Esc skip")
+		instructions = instructionStyle.Render("Enter to continue  •  Esc to skip")
 	} else {
 		instructions = instructionStyle.Render(
-			"j/k nav | Space toggle | A all | N none | C continue | S skip",
+			"↑/↓ or j/k to navigate  •  Space to toggle  •  A all  •  N none  •  Enter to continue  •  Esc to skip",
 		)
 	}
 
@@ -318,6 +330,7 @@ func (v *OnboardingSkillsView) View() string {
 		lipgloss.Left,
 		title,
 		subtitle,
+		highlights,
 		"",
 		content,
 		"",
@@ -425,9 +438,9 @@ func (v *OnboardingSkillsView) renderSkillItem(item SkillItem, isSelected bool, 
 	// Checkbox
 	var checkbox string
 	if item.Selected {
-		checkbox = "[x]"
+		checkbox = "☑"
 	} else {
-		checkbox = "[ ]"
+		checkbox = "☐"
 	}
 
 	// Skill title
@@ -465,12 +478,12 @@ func (v *OnboardingSkillsView) GetKeyboardCommands() ViewCommands {
 	return ViewCommands{
 		ViewName: "Skills Onboarding",
 		Commands: []Command{
-			{Key: "j/k, Up/Down", Description: "Navigate skills"},
-			{Key: "Space, Enter", Description: "Toggle selection"},
+			{Key: "↑↓, k/j", Description: "Navigate skills"},
+			{Key: "Space", Description: "Toggle selection"},
 			{Key: "a", Description: "Select all new skills"},
 			{Key: "n", Description: "Deselect all skills"},
-			{Key: "c", Description: "Continue with selection"},
-			{Key: "s, Esc", Description: "Skip skills selection"},
+			{Key: "Enter", Description: "Continue with selection"},
+			{Key: "Esc", Description: "Skip skills selection"},
 		},
 	}
 }

@@ -72,7 +72,6 @@ func (v *OnboardingToolsView) Init() {
 		if result.Detected {
 			detectedMap[result.Platform] = true
 			v.detectedAgents = append(v.detectedAgents, result.Platform)
-			v.selectedTools[result.Platform] = true // Auto-select detected
 		}
 	}
 
@@ -93,11 +92,6 @@ func (v *OnboardingToolsView) Init() {
 
 	// Build display items
 	v.buildDisplayItems()
-
-	// Default to Claude if nothing detected
-	if len(v.detectedAgents) == 0 {
-		v.selectedTools[installer.PlatformClaude] = true
-	}
 
 	// Position cursor on first selectable item
 	v.currentSelection = v.firstSelectableIndex()
@@ -157,16 +151,12 @@ func (v *OnboardingToolsView) Update(key string) (bool, bool) {
 		v.moveCursor(-1)
 	case "down", "j":
 		v.moveCursor(1)
-	case "space", "enter":
+	case "space":
 		if v.currentSelection >= 0 && v.currentSelection < len(v.displayItems) {
 			item := v.displayItems[v.currentSelection]
 			switch item.kind {
 			case itemAgent:
 				v.selectedTools[item.platform] = !v.selectedTools[item.platform]
-				// Enforce minimum 1 selection
-				if v.countSelected() == 0 {
-					v.selectedTools[item.platform] = true
-				}
 			case itemToggleHeader:
 				v.group2Expanded = !v.group2Expanded
 				v.buildDisplayItems()
@@ -180,7 +170,7 @@ func (v *OnboardingToolsView) Update(key string) (bool, bool) {
 				v.ensureVisible()
 			}
 		}
-	case "c":
+	case "enter":
 		return true, false
 	case "esc":
 		return true, true
@@ -249,17 +239,6 @@ func (v *OnboardingToolsView) GetPlatformName(platform installer.Platform) strin
 		return info.Name
 	}
 	return string(platform)
-}
-
-// countSelected returns the number of currently selected tools.
-func (v *OnboardingToolsView) countSelected() int {
-	count := 0
-	for _, selected := range v.selectedTools {
-		if selected {
-			count++
-		}
-	}
-	return count
 }
 
 // View renders the onboarding tools view.
@@ -377,7 +356,7 @@ func (v *OnboardingToolsView) View() string {
 		MarginTop(1)
 
 	instructions := instructionStyle.Render(
-		"↑/↓ or j/k to navigate  •  Space/Enter to toggle  •  C to confirm or Esc to skip",
+		"↑/↓ or j/k to navigate  •  Space to toggle  •  Enter to confirm  •  Esc to skip",
 	)
 
 	// Combine content
@@ -430,8 +409,8 @@ func (ov *OnboardingToolsView) GetKeyboardCommands() ViewCommands {
 		ViewName: "Onboarding",
 		Commands: []Command{
 			{Key: "↑↓, k/j", Description: "Navigate tool options"},
-			{Key: "Space, Enter", Description: "Toggle tool selection"},
-			{Key: "c", Description: "Complete onboarding"},
+			{Key: "Space", Description: "Toggle tool selection"},
+			{Key: "Enter", Description: "Confirm selection"},
 			{Key: "Esc", Description: "Skip onboarding"},
 		},
 	}

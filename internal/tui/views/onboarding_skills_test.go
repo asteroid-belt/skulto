@@ -162,7 +162,7 @@ func TestOnboardingSkillsViewSkip(t *testing.T) {
 	v.Init()
 	v.loading = false
 
-	done, skipped, _ := v.Update("s")
+	done, skipped, _ := v.Update("esc")
 
 	assert.True(t, done)
 	assert.True(t, skipped)
@@ -177,7 +177,7 @@ func TestOnboardingSkillsViewContinue(t *testing.T) {
 	v.Init()
 	v.loading = false
 
-	done, skipped, _ := v.Update("c")
+	done, skipped, _ := v.Update("enter")
 
 	assert.True(t, done)
 	assert.False(t, skipped)
@@ -338,13 +338,7 @@ func TestOnboardingSkillsViewErrorStateContinue(t *testing.T) {
 	v.HandleSkillsFetched(nil, assert.AnError)
 
 	// Continue from error state
-	done, skipped, _ := v.Update("c")
-	assert.True(t, done)
-	assert.False(t, skipped)
-
-	// Also test enter key
-	v.HandleSkillsFetched(nil, assert.AnError)
-	done, skipped, _ = v.Update("enter")
+	done, skipped, _ := v.Update("enter")
 	assert.True(t, done)
 	assert.False(t, skipped)
 }
@@ -390,13 +384,7 @@ func TestOnboardingSkillsViewEmptyStateContinue(t *testing.T) {
 	v.HandleSkillsFetched([]models.Skill{}, nil)
 
 	// Continue from empty state
-	done, skipped, _ := v.Update("c")
-	assert.True(t, done)
-	assert.False(t, skipped)
-
-	// Also test enter key
-	v.HandleSkillsFetched([]models.Skill{}, nil)
-	done, skipped, _ = v.Update("enter")
+	done, skipped, _ := v.Update("enter")
 	assert.True(t, done)
 	assert.False(t, skipped)
 }
@@ -439,7 +427,7 @@ func TestOnboardingSkillsViewVimNavigation(t *testing.T) {
 	assert.Equal(t, 0, v.currentIndex)
 }
 
-func TestOnboardingSkillsViewEnterToggle(t *testing.T) {
+func TestOnboardingSkillsViewSpaceToggle(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
 	database, _ := db.New(db.DefaultConfig(":memory:"))
 	defer func() { _ = database.Close() }()
@@ -455,9 +443,13 @@ func TestOnboardingSkillsViewEnterToggle(t *testing.T) {
 	// Initially selected
 	assert.True(t, v.newSkills[0].Selected)
 
-	// Toggle with enter
-	v.Update("enter")
+	// Toggle with space
+	v.Update("space")
 	assert.False(t, v.newSkills[0].Selected)
+
+	// Enter should continue, not toggle
+	done, _, _ := v.Update("enter")
+	assert.True(t, done)
 }
 
 func TestOnboardingSkillsViewLoadingIgnoresKeys(t *testing.T) {
