@@ -82,6 +82,9 @@ func (s *Server) registerTools() {
 
 	// Check tool (shows installed skills)
 	s.server.AddTool(checkTool(), s.handleCheck)
+
+	// Repository management
+	s.server.AddTool(addTool(), s.handleAdd)
 }
 
 // registerResources adds all Skulto resources to the MCP server.

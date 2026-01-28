@@ -74,7 +74,7 @@ func getRecentTool() mcp.Tool {
 // installTool returns the skulto_install tool definition.
 func installTool() mcp.Tool {
 	return mcp.NewTool("skulto_install",
-		mcp.WithDescription("Install a skill to Claude Code. Creates a symlink in the project's skills directory by default."),
+		mcp.WithDescription("Install a skill to Claude Code. Creates a symlink in the project's skills directory by default. When platforms are not specified, detects available platforms on the system. If multiple are found, returns them for selection instead of installing. Re-call with the chosen platforms to complete installation."),
 		mcp.WithString("slug",
 			mcp.Required(),
 			mcp.Description("The skill's unique slug identifier"),
@@ -134,5 +134,16 @@ func getFavoritesTool() mcp.Tool {
 func checkTool() mcp.Tool {
 	return mcp.NewTool("skulto_check",
 		mcp.WithDescription("List all installed skills and their installation locations. Returns skills with their platforms and scopes (global/project)."),
+	)
+}
+
+// addTool returns the skulto_add tool definition.
+func addTool() mcp.Tool {
+	return mcp.NewTool("skulto_add",
+		mcp.WithDescription("Add a skill repository and sync its skills. Supports multiple URL formats: owner/repo, https://github.com/owner/repo, https://github.com/owner/repo.git, git@github.com:owner/repo.git"),
+		mcp.WithString("url",
+			mcp.Required(),
+			mcp.Description("Repository URL in any supported format (e.g., 'owner/repo' or full GitHub URL)"),
+		),
 	)
 }

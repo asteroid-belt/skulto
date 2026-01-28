@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -55,9 +57,17 @@ type StatsResponse struct {
 
 // InstallResult represents the result of an install/uninstall operation.
 type InstallResult struct {
-	Success bool     `json:"success"`
-	Message string   `json:"message"`
-	Paths   []string `json:"paths,omitempty"` // Symlink paths created
+	Success           bool                   `json:"success"`
+	Message           string                 `json:"message"`
+	Paths             []string               `json:"paths,omitempty"`              // Symlink paths created
+	NeedsSelection    bool                   `json:"needs_selection,omitempty"`    // True when the LLM should ask the user to choose platforms
+	DetectedPlatforms []DetectedPlatformInfo `json:"detected_platforms,omitempty"` // Available platforms for selection
+}
+
+// DetectedPlatformInfo describes a detected platform returned to the LLM for user selection.
+type DetectedPlatformInfo struct {
+	ID   string `json:"id"`   // Platform identifier (e.g. "cursor")
+	Name string `json:"name"` // Human-readable name (e.g. "Cursor")
 }
 
 // CheckSkillResponse represents an installed skill in the check response.
@@ -71,6 +81,21 @@ type CheckSkillResponse struct {
 type CheckLocationResponse struct {
 	Platform string `json:"platform"`
 	Scope    string `json:"scope"`
+}
+
+// AddResult represents the result of adding a repository.
+type AddResult struct {
+	Success     bool             `json:"success"`
+	Message     string           `json:"message"`
+	Source      *SourceResponse  `json:"source,omitempty"`
+	SkillsFound int              `json:"skills_found"`
+	Skills      []AddSkillResult `json:"skills,omitempty"`
+}
+
+// AddSkillResult is a minimal skill reference returned after adding a repo.
+type AddSkillResult struct {
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
 }
 
 // toSkillResponse converts a models.Skill to SkillResponse.
@@ -305,6 +330,39 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 		}
 	}
 
+	// When no platforms specified, use detection to find available platforms
+	if len(platforms) == 0 {
+		detected := detect.DetectAll()
+		var found []DetectedPlatformInfo
+		for _, d := range detected {
+			if d.Detected {
+				info := d.Platform.Info()
+				found = append(found, DetectedPlatformInfo{
+					ID:   string(d.Platform),
+					Name: info.Name,
+				})
+			}
+		}
+
+		switch len(found) {
+		case 0:
+			// No platforms detected — fall through with nil platforms (uses user config / defaults)
+		case 1:
+			// Single platform detected — use it directly
+			platforms = []string{found[0].ID}
+		default:
+			// Multiple platforms detected — return them for user selection
+			result := InstallResult{
+				Success:           false,
+				NeedsSelection:    true,
+				Message:           "Multiple platforms detected. Please ask the user which platform(s) to install to, then re-call with the chosen platforms.",
+				DetectedPlatforms: found,
+			}
+			data, _ := json.Marshal(result)
+			return mcp.NewToolResultText(string(data)), nil
+		}
+	}
+
 	// Parse optional scope - default to project for MCP (local to current workspace)
 	scopes := []installer.InstallScope{installer.ScopeProject}
 	if scopeArg, ok := req.Params.Arguments["scope"].(string); ok && scopeArg != "" {
@@ -316,8 +374,8 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 
 	// Build install options
 	opts := installer.InstallOptions{
-		Platforms: platforms, // nil means use user's configured platforms
-		Scopes:    scopes,    // defaults to project scope for MCP
+		Platforms: platforms,
+		Scopes:    scopes,
 		Confirm:   true,
 	}
 
@@ -552,5 +610,78 @@ func (s *Server) handleCheck(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// handleAdd handles the skulto_add tool.
+func (s *Server) handleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	url, ok := req.Params.Arguments["url"].(string)
+	if !ok || url == "" {
+		return mcp.NewToolResultError("url parameter is required"), nil
+	}
+
+	// Parse and validate the repository URL
+	source, err := scraper.ParseRepositoryURL(url)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid repository URL: %v", err)), nil
+	}
+
+	// Check if source already exists
+	existing, err := s.db.GetSource(source.ID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to check existing source: %v", err)), nil
+	}
+	if existing != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("repository %s already exists", source.ID)), nil
+	}
+
+	// Add source to database
+	if err := s.db.UpsertSource(source); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to add source: %v", err)), nil
+	}
+
+	// Create scraper and sync
+	scraperCfg := scraper.ScraperConfig{
+		Token:        s.cfg.GitHub.Token,
+		DataDir:      s.cfg.BaseDir,
+		RepoCacheTTL: s.cfg.GitHub.RepoCacheTTL,
+		UseGitClone:  s.cfg.GitHub.UseGitClone,
+	}
+	sc := scraper.NewScraperWithConfig(scraperCfg, s.db)
+
+	syncCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	result, err := sc.ScrapeRepository(syncCtx, source.Owner, source.Repo)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to sync %s: %v", source.ID, err)), nil
+	}
+
+	// Fetch the scraped skills to include in response
+	skills, err := s.db.GetSkillsBySourceID(source.ID)
+	var skillResults []AddSkillResult
+	if err == nil {
+		skillResults = make([]AddSkillResult, 0, len(skills))
+		for _, skill := range skills {
+			skillResults = append(skillResults, AddSkillResult{
+				Slug:  skill.Slug,
+				Title: skill.Title,
+			})
+		}
+	}
+
+	addResult := AddResult{
+		Success: true,
+		Message: fmt.Sprintf("Repository '%s/%s' added with %d skills", source.Owner, source.Repo, result.SkillsNew),
+		Source: &SourceResponse{
+			Owner: source.Owner,
+			Repo:  source.Repo,
+			URL:   source.URL,
+		},
+		SkillsFound: result.SkillsNew,
+		Skills:      skillResults,
+	}
+
+	data, _ := json.Marshal(addResult)
 	return mcp.NewToolResultText(string(data)), nil
 }

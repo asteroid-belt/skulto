@@ -488,6 +488,110 @@ func TestHandleGetFavorites(t *testing.T) {
 	})
 }
 
+func TestHandleAdd(t *testing.T) {
+	database := setupTestDB(t)
+	cfg := &config.Config{
+		BaseDir: t.TempDir(),
+	}
+	favStore := setupTestFavorites(t)
+	server := NewServer(database, cfg, favStore)
+
+	ctx := context.Background()
+
+	t.Run("add requires url parameter", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{}
+
+		result, err := server.handleAdd(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "url parameter is required")
+	})
+
+	t.Run("add rejects empty url", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"url": "",
+		}
+
+		result, err := server.handleAdd(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "url parameter is required")
+	})
+
+	t.Run("add rejects invalid url format", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"url": "not-a-valid-url",
+		}
+
+		result, err := server.handleAdd(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "invalid repository URL")
+	})
+
+	t.Run("add detects duplicate source", func(t *testing.T) {
+		// First, insert a source directly into the DB
+		source := &models.Source{
+			ID:    "testowner/testrepo",
+			Owner: "testowner",
+			Repo:  "testrepo",
+			URL:   "https://github.com/testowner/testrepo",
+		}
+		require.NoError(t, database.UpsertSource(source))
+
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"url": "testowner/testrepo",
+		}
+
+		result, err := server.handleAdd(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "already exists")
+	})
+
+	t.Run("add with valid url inserts source into database", func(t *testing.T) {
+		// Use a fresh DB to avoid duplicate from prior test
+		freshDB := setupTestDB(t)
+		freshServer := NewServer(freshDB, cfg, favStore)
+
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"url": "someowner/somerepo",
+		}
+
+		// This will fail at the scrape step (no GitHub access in tests),
+		// but the source should be inserted into the DB before scraping
+		result, err := freshServer.handleAdd(ctx, req)
+		require.NoError(t, err)
+
+		// Verify the source was inserted into the database
+		src, err := freshDB.GetSource("someowner/somerepo")
+		require.NoError(t, err)
+		assert.NotNil(t, src)
+		assert.Equal(t, "someowner", src.Owner)
+		assert.Equal(t, "somerepo", src.Repo)
+
+		// The scrape will fail in test environment (no GitHub access),
+		// so we expect an error result
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "failed to sync")
+	})
+}
+
 func TestHandleInstall(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
@@ -509,7 +613,8 @@ func TestHandleInstall(t *testing.T) {
 	t.Run("install returns error for nonexistent skill", func(t *testing.T) {
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
-			"slug": "nonexistent-skill",
+			"slug":      "nonexistent-skill",
+			"platforms": []interface{}{"claude"},
 		}
 
 		result, err := server.handleInstall(ctx, req)
@@ -521,7 +626,8 @@ func TestHandleInstall(t *testing.T) {
 		// Skills from seedTestSkills have no source
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
-			"slug": "test-react-hooks",
+			"slug":      "test-react-hooks",
+			"platforms": []interface{}{"claude"},
 		}
 
 		result, err := server.handleInstall(ctx, req)
