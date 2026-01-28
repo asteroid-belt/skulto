@@ -299,7 +299,7 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		fmt.Println()
 		fmt.Print("Install anyway? [y/N] ")
 		var answer string
-		fmt.Scanln(&answer)
+		_, _ = fmt.Scanln(&answer)
 		if answer != "y" && answer != "Y" {
 			fmt.Println("Installation cancelled.")
 			_ = removeSourceAndSkills(database, source.ID)
