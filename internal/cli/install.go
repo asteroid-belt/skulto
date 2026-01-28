@@ -231,16 +231,29 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		return trackCLIError("install", fmt.Errorf("invalid repository URL: %w", err))
 	}
 
-	// Check if source exists
+	// Check if source already exists with skills
 	existing, _ := database.GetSource(source.ID)
-	if existing == nil {
-		// Add the source
-		fmt.Printf("Adding repository %s...\n", source.FullName)
+	needsScrape := existing == nil
+
+	if existing != nil {
+		existingSkills, _ := database.GetSkillsBySourceID(source.ID)
+		if len(existingSkills) == 0 {
+			needsScrape = true
+		} else {
+			fmt.Printf("Repository %s is already in the database.\n", source.FullName)
+		}
+	}
+
+	if needsScrape {
+		if existing == nil {
+			fmt.Printf("Adding repository %s...\n", source.FullName)
+		} else {
+			fmt.Printf("Re-syncing repository %s...\n", source.FullName)
+		}
 		if err := database.UpsertSource(source); err != nil {
 			return trackCLIError("install", fmt.Errorf("add repository: %w", err))
 		}
 
-		// Sync the repository
 		scraperCfg := scraper.ScraperConfig{
 			Token:        cfg.GitHub.Token,
 			DataDir:      cfg.BaseDir,
@@ -249,7 +262,7 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		}
 		s := scraper.NewScraperWithConfig(scraperCfg, database)
 
-		_, err := s.ScrapeRepository(ctx, source.Owner, source.Repo)
+		_, err = s.ScrapeRepository(ctx, source.Owner, source.Repo)
 		if err != nil {
 			return trackCLIError("install", fmt.Errorf("sync repository: %w", err))
 		}
@@ -307,7 +320,15 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		if !isInteractive() {
 			return trackCLIError("install", fmt.Errorf("interactive mode requires a terminal, use -y flag"))
 		}
-		selectedSlugs, err = prompts.RunSkillSelector(skills, nil)
+		// Pre-select skills that are already installed
+		var installedSlugs []string
+		for _, skill := range skills {
+			installations, _ := database.GetInstallations(skill.ID)
+			if len(installations) > 0 {
+				installedSlugs = append(installedSlugs, skill.Slug)
+			}
+		}
+		selectedSlugs, err = prompts.RunSkillSelector(skills, installedSlugs)
 		if err != nil {
 			return trackCLIError("install", fmt.Errorf("skill selection: %w", err))
 		}
@@ -454,12 +475,13 @@ func removeSourceAndSkills(database *db.DB, sourceID string) error {
 
 	for _, skill := range skills {
 		_ = database.RemoveAllInstallations(skill.ID)
-		if err := database.DeleteSkill(skill.ID); err != nil {
-			fmt.Printf("  Warning: failed to remove skill %s: %v\n", skill.Slug, err)
-		}
 	}
 
-	if err := database.DeleteSource(sourceID); err != nil {
+	if _, err := database.HardDeleteSkillsBySource(sourceID); err != nil {
+		return fmt.Errorf("remove skills: %w", err)
+	}
+
+	if err := database.HardDeleteSource(sourceID); err != nil {
 		return fmt.Errorf("remove source: %w", err)
 	}
 
