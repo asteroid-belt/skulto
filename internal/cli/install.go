@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -382,22 +383,173 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		return nil
 	}
 
-	// Install each selected skill with the same options
-	var installErrors []error
-	for _, slug := range selectedSlugs {
-		if err := executeInstall(ctx, service, slug, *opts); err != nil {
-			installErrors = append(installErrors, fmt.Errorf("%s: %w", slug, err))
+	// Install each selected skill with smart skip for already-installed skills
+	type installSummary struct {
+		slug    string
+		action  string // "installed", "added", "skipped", "error"
+		details string
+	}
+
+	var summaries []installSummary
+	skipAllInstalled := false
+	interactive := isInteractive()
+	reader := bufio.NewReader(os.Stdin)
+
+	// Build the set of selected platform+scope pairs for comparison
+	type platformScope struct {
+		platform string
+		scope    installer.InstallScope
+	}
+	selectedSet := make(map[platformScope]bool)
+	for _, p := range opts.Platforms {
+		for _, s := range opts.Scopes {
+			selectedSet[platformScope{p, s}] = true
 		}
 	}
 
-	if len(installErrors) > 0 {
-		fmt.Printf("\n%d skill(s) failed to install:\n", len(installErrors))
-		for _, e := range installErrors {
-			fmt.Printf("  ✗ %v\n", e)
+	for _, slug := range selectedSlugs {
+		// Check existing installations
+		existingLocs, _ := service.GetInstallLocations(ctx, slug)
+
+		if len(existingLocs) == 0 {
+			// Fresh skill — install directly
+			if err := executeInstall(ctx, service, slug, *opts); err != nil {
+				summaries = append(summaries, installSummary{slug, "error", err.Error()})
+			} else {
+				locs := formatOptLocations(opts.Platforms, opts.Scopes)
+				summaries = append(summaries, installSummary{slug, "installed", locs})
+			}
+			continue
+		}
+
+		// Already installed somewhere — check which selected locations are new
+		existingSet := make(map[platformScope]bool)
+		for _, loc := range existingLocs {
+			existingSet[platformScope{string(loc.Platform), loc.Scope}] = true
+		}
+
+		// Find genuinely new locations
+		var newPlatforms []string
+		var newScopes []installer.InstallScope
+		newScopesSet := make(map[installer.InstallScope]bool)
+		newPlatformsSet := make(map[string]bool)
+		for ps := range selectedSet {
+			if !existingSet[ps] {
+				if !newPlatformsSet[ps.platform] {
+					newPlatformsSet[ps.platform] = true
+					newPlatforms = append(newPlatforms, ps.platform)
+				}
+				if !newScopesSet[ps.scope] {
+					newScopesSet[ps.scope] = true
+					newScopes = append(newScopes, ps.scope)
+				}
+			}
+		}
+
+		if len(newPlatforms) == 0 {
+			// All selected locations already installed — auto-skip
+			summaries = append(summaries, installSummary{slug, "skipped", "already installed at all selected locations"})
+			continue
+		}
+
+		// Has existing installs + new locations to add — prompt unless skipping all
+		if skipAllInstalled {
+			summaries = append(summaries, installSummary{slug, "skipped", "already installed (skip all)"})
+			continue
+		}
+
+		if interactive && !installYes {
+			// Show existing locations
+			var existingParts []string
+			for _, loc := range existingLocs {
+				existingParts = append(existingParts, fmt.Sprintf("%s (%s)", loc.Platform, loc.Scope))
+			}
+			fmt.Printf("\n%s is already installed to:\n", slug)
+			for _, part := range existingParts {
+				fmt.Printf("  • %s\n", part)
+			}
+			fmt.Print("\nAlso install to your selected locations? [y/N/s] ")
+
+			answer, _ := reader.ReadString('\n')
+			answer = strings.TrimSpace(strings.ToLower(answer))
+
+			switch answer {
+			case "s":
+				skipAllInstalled = true
+				summaries = append(summaries, installSummary{slug, "skipped", "already installed (skip all)"})
+				continue
+			case "y":
+				// Proceed with new locations only
+			default:
+				// N or empty — skip
+				summaries = append(summaries, installSummary{slug, "skipped", "already installed"})
+				continue
+			}
+		} else {
+			// Non-interactive: default to skip
+			summaries = append(summaries, installSummary{slug, "skipped", "already installed"})
+			continue
+		}
+
+		// Install to new locations only
+		newOpts := installer.InstallOptions{
+			Platforms: newPlatforms,
+			Scopes:    newScopes,
+			Confirm:   opts.Confirm,
+		}
+		if err := executeInstall(ctx, service, slug, newOpts); err != nil {
+			summaries = append(summaries, installSummary{slug, "error", err.Error()})
+		} else {
+			locs := formatOptLocations(newPlatforms, newScopes)
+			summaries = append(summaries, installSummary{slug, "added", locs})
+		}
+	}
+
+	// Print final summary
+	fmt.Println()
+	var installed, skipped, errored []installSummary
+	for _, s := range summaries {
+		switch s.action {
+		case "installed", "added":
+			installed = append(installed, s)
+		case "skipped":
+			skipped = append(skipped, s)
+		case "error":
+			errored = append(errored, s)
+		}
+	}
+
+	if len(installed) > 0 {
+		fmt.Printf("Installed %d skill(s):\n", len(installed))
+		for _, s := range installed {
+			fmt.Printf("  ✓ %s → %s\n", s.slug, s.details)
+		}
+	}
+	if len(skipped) > 0 {
+		fmt.Printf("Skipped %d skill(s):\n", len(skipped))
+		for _, s := range skipped {
+			fmt.Printf("  ○ %s (%s)\n", s.slug, s.details)
+		}
+	}
+	if len(errored) > 0 {
+		fmt.Printf("Failed %d skill(s):\n", len(errored))
+		for _, s := range errored {
+			fmt.Printf("  ✗ %s: %s\n", s.slug, s.details)
 		}
 	}
 
 	return nil
+}
+
+// formatOptLocations formats platform+scope pairs for display.
+func formatOptLocations(platforms []string, scopes []installer.InstallScope) string {
+	var parts []string
+	for _, p := range platforms {
+		for _, s := range scopes {
+			parts = append(parts, fmt.Sprintf("%s (%s)", p, s))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // validatePlatformFlags validates that all platform flag values are valid platform IDs or aliases.
