@@ -44,6 +44,13 @@ URL Mode:
   When given a URL or owner/repo format, auto-adds the repository
   and shows a skill picker to select which skills to install.
 
+Supported platforms (-p flag):
+  claude, cursor, copilot, codex, opencode, windsurf,
+  amp, kimi-cli, antigravity, moltbot, cline, codebuddy,
+  command-code, continue, crush, droid, gemini-cli, goose,
+  junie, kilo, kiro-cli, kode, mcpjam, mux, openhands,
+  pi, qoder, qwen-code, roo, trae, zencoder, neovate, pochi
+
 Examples:
   # Interactive install
   skulto install docker-expert
@@ -56,6 +63,9 @@ Examples:
 
   # Install to multiple platforms and project scope
   skulto install docker-expert -p claude -p cursor -s project -y
+
+  # Install to a new agent
+  skulto install docker-expert -p cline -p roo -y
 
   # Install from repository URL
   skulto install https://github.com/owner/skills
@@ -78,6 +88,13 @@ func init() {
 func runInstall(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	input := args[0]
+
+	// Validate platform flags early
+	if len(installPlatforms) > 0 {
+		if err := validatePlatformFlags(installPlatforms); err != nil {
+			return trackCLIError("install", err)
+		}
+	}
 
 	// Load config and database
 	cfg, err := config.Load()
@@ -354,6 +371,16 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		}
 	}
 
+	return nil
+}
+
+// validatePlatformFlags validates that all platform flag values are valid platform IDs or aliases.
+func validatePlatformFlags(platforms []string) error {
+	for _, p := range platforms {
+		if installer.PlatformFromStringOrAlias(p) == "" {
+			return fmt.Errorf("unknown platform %q. Run 'skulto install --help' for valid platforms", p)
+		}
+	}
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
@@ -390,4 +391,79 @@ func (d *InstallLocationDialog) View() string {
 func (d *InstallLocationDialog) CenteredView(width, height int) string {
 	dialog := d.View()
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, dialog)
+}
+
+// NewInstallLocationDialogWithPrefs creates a dialog with merged preferences + detection.
+// Saved agents and newly detected agents are pre-selected (global scope).
+func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedPrefs []string, detectionResults []detect.DetectionResult) *InstallLocationDialog {
+	// Merge and reorder platforms
+	merged := mergePreferencesWithDetected(platforms, savedPrefs, detectionResults)
+
+	dialog := &InstallLocationDialog{
+		platforms: merged,
+		options:   make([]LocationOption, 0),
+	}
+	dialog.buildOptions()
+
+	// Pre-select: saved and detected platforms get global selected
+	savedSet := make(map[string]bool)
+	for _, s := range savedPrefs {
+		savedSet[s] = true
+	}
+	detectedSet := make(map[string]bool)
+	for _, d := range detectionResults {
+		if d.Detected {
+			detectedSet[string(d.Platform)] = true
+		}
+	}
+
+	for i := range dialog.options {
+		platformID := string(dialog.options[i].Location.Platform)
+		isPreferred := savedSet[platformID] || detectedSet[platformID]
+		if dialog.options[i].Location.Scope == installer.ScopeGlobal {
+			dialog.options[i].Selected = isPreferred
+		} else {
+			dialog.options[i].Selected = false
+		}
+	}
+
+	return dialog
+}
+
+// mergePreferencesWithDetected reorders platforms:
+// 1. Saved preferences (enabled) first
+// 2. Newly detected (not in saved) second
+// 3. All others last
+func mergePreferencesWithDetected(allPlatforms []installer.Platform, saved []string, detected []detect.DetectionResult) []installer.Platform {
+	savedSet := make(map[string]bool)
+	for _, s := range saved {
+		savedSet[s] = true
+	}
+	detectedSet := make(map[string]bool)
+	for _, d := range detected {
+		if d.Detected {
+			detectedSet[string(d.Platform)] = true
+		}
+	}
+
+	var result []installer.Platform
+	// Saved first (in platform order)
+	for _, p := range allPlatforms {
+		if savedSet[string(p)] {
+			result = append(result, p)
+		}
+	}
+	// Newly detected (not saved)
+	for _, p := range allPlatforms {
+		if detectedSet[string(p)] && !savedSet[string(p)] {
+			result = append(result, p)
+		}
+	}
+	// Everything else
+	for _, p := range allPlatforms {
+		if !savedSet[string(p)] && !detectedSet[string(p)] {
+			result = append(result, p)
+		}
+	}
+	return result
 }

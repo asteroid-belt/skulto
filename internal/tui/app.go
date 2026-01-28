@@ -10,6 +10,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
@@ -576,6 +577,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.showLocationDialog = false
 
+				// Persist newly selected platforms to agent_preferences
+				var newAgentIDs []string
+				for _, loc := range selectedLocations {
+					newAgentIDs = append(newAgentIDs, string(loc.Platform))
+				}
+				_ = m.db.EnableAdditionalAgents(newAgentIDs)
+
 				// Check if this is from onboarding flow (batch install)
 				if len(m.pendingInstallSkills) > 0 {
 					return m, m.installBatchSkillsCmd(m.pendingInstallSkills, selectedLocations)
@@ -776,25 +784,35 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Reset installing state - dialog is showing, not actually installing yet
 					m.detailView.SetInstallingState(false)
 
-					// Create dialog with user's platforms
-					userState, _ := m.db.GetUserState()
-					platforms := parsePlatformsFromState(userState)
-					// Fall back to legacy install if no platforms configured
-					if len(platforms) == 0 {
-						m.showLocationDialog = false
-						m.detailView.SetInstallingState(true)
-						if skill.IsLocal {
-							// Local skills without platforms configured - can't install
-							return m, func() tea.Msg {
-								return views.SkillInstalledMsg{
-									Success: false,
-									Err:     fmt.Errorf("no AI tool platforms configured - please run skulto setup"),
+					// Create dialog with saved preferences + detection
+					savedAgents, _ := m.db.GetEnabledAgents()
+					detectionResults := detect.DetectAll()
+					allPlatforms := installer.AllPlatforms()
+
+					// Fall back to legacy if no saved prefs and no detection
+					if len(savedAgents) == 0 && len(detectionResults) == 0 {
+						// Try legacy UserState
+						userState, _ := m.db.GetUserState()
+						platforms := parsePlatformsFromState(userState)
+						if len(platforms) == 0 {
+							m.showLocationDialog = false
+							m.detailView.SetInstallingState(true)
+							if skill.IsLocal {
+								return m, func() tea.Msg {
+									return views.SkillInstalledMsg{
+										Success: false,
+										Err:     fmt.Errorf("no AI tool platforms configured - please run skulto setup"),
+									}
 								}
 							}
+							return m, m.installCmd(skill)
 						}
-						return m, m.installCmd(skill)
+						m.locationDialog = components.NewInstallLocationDialog(platforms)
+					} else {
+						m.locationDialog = components.NewInstallLocationDialogWithPrefs(
+							allPlatforms, savedAgents, detectionResults,
+						)
 					}
-					m.locationDialog = components.NewInstallLocationDialog(platforms)
 					m.locationDialog.SetWidth(m.width)
 					return m, nil
 				}
@@ -1020,9 +1038,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					for _, platform := range selectedPlatforms {
 						platformCodes = append(platformCodes, string(platform))
 					}
+					// Save to UserState.AITools for backward compat
 					toolsString := strings.Join(platformCodes, ",")
 					if err := m.db.UpdateAITools(toolsString); err != nil {
 						m.setError(fmt.Errorf("failed to save AI tools: %w", err), "database")
+						return m, nil
+					}
+					// Save to agent_preferences table
+					if err := m.db.SetAgentsEnabled(platformCodes); err != nil {
+						m.setError(fmt.Errorf("failed to save agent preferences: %w", err), "database")
 						return m, nil
 					}
 				}
