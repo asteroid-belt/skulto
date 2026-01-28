@@ -12,7 +12,6 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
-	"github.com/asteroid-belt/skulto/internal/security"
 )
 
 // LicenseInfo holds detected license information for a repository.
@@ -70,15 +69,8 @@ type Scraper struct {
 	parser         *SkillParser
 	db             *db.DB
 	config         ScraperConfig
-	scanner        *security.Scanner    // Security scanner for threat detection
-	scanProgressCb ScanProgressCallback // Optional callback for scan progress
-	dedupMutex     sync.Mutex           // Protects deduplication checks to prevent race conditions
+	dedupMutex sync.Mutex // Protects deduplication checks to prevent race conditions
 	claimedSlugs   map[string]string    // Maps slug -> skillID for pending inserts (not yet in DB)
-}
-
-// SetScanProgressCallback sets the callback for security scan progress reporting.
-func (s *Scraper) SetScanProgressCallback(cb ScanProgressCallback) {
-	s.scanProgressCb = cb
 }
 
 // NewScraperWithConfig creates a new scraper with full configuration support.
@@ -87,7 +79,6 @@ func NewScraperWithConfig(cfg ScraperConfig, database *db.DB) *Scraper {
 		parser:       NewSkillParser(),
 		db:           database,
 		config:       cfg,
-		scanner:      security.NewScanner(),
 		claimedSlugs: make(map[string]string),
 	}
 
@@ -129,11 +120,6 @@ func (s *Scraper) CleanupOldRepositories() error {
 // and repoName is the name of the repository that just completed (empty if just starting).
 type ProgressCallback func(completed, total int, repoName string)
 
-// ScanProgressCallback is called to report security scanning progress.
-// scanned is the number of skills scanned, total is the total count,
-// and repoName is the repository being scanned.
-type ScanProgressCallback func(scanned, total int, repoName string)
-
 // ScrapeSeedsOptions configures the ScrapeSeeds behavior.
 type ScrapeSeedsOptions struct {
 	// Force bypasses the commit SHA check and re-scans all skills
@@ -142,8 +128,6 @@ type ScrapeSeedsOptions struct {
 	MaxConcurrency int
 	// OnProgress is called after each repository completes (thread-safe)
 	OnProgress ProgressCallback
-	// OnScanProgress is called during security scanning phase (thread-safe)
-	OnScanProgress ScanProgressCallback
 }
 
 // DefaultScrapeSeedsOptions returns sensible defaults.
@@ -432,33 +416,6 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 			tags:     tags,
 			existing: existing,
 		})
-	}
-
-	// Security scan phase - scan skills before DB insert
-	if s.scanner != nil && len(skillBatch) > 0 {
-		repoName := fmt.Sprintf("%s/%s", owner, repo)
-		totalSkills := len(skillBatch)
-
-		for i := range skillBatch {
-			// Use index to modify the actual slice element
-			sd := &skillBatch[i]
-
-			// Report scan progress
-			if s.scanProgressCb != nil {
-				s.scanProgressCb(i+1, totalSkills, repoName)
-			}
-
-			// Scan skill content
-			scanResult := s.scanner.ScanSkill(sd.skill)
-
-			// Update skill with scan results
-			sd.skill.SecurityStatus = models.SecurityStatusClean
-			sd.skill.ThreatLevel = scanResult.MaxThreatLevel()
-			sd.skill.ThreatSummary = scanResult.ThreatSummary
-			now := time.Now()
-			sd.skill.ScannedAt = &now
-			sd.skill.ContentHash = sd.skill.ComputeContentHash()
-		}
 	}
 
 	// Second pass: batch upsert skills in a transaction
