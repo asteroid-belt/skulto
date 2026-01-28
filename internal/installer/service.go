@@ -72,17 +72,11 @@ func (s *InstallService) DetectPlatforms(ctx context.Context) ([]DetectedPlatfor
 
 	for _, p := range allPlatforms {
 		info := p.Info()
-		// Get the global path for display - use a dummy slug then get parent dir
-		globalPath, _ := p.GetSkillPathForScope("_", ScopeGlobal)
-		if globalPath != "" {
-			// Strip the dummy slug to get the skills directory path
-			globalPath = filepath.Dir(globalPath)
-		}
 
 		platformInfo := DetectedPlatform{
 			ID:       string(p),
 			Name:     info.Name,
-			Path:     globalPath,
+			Path:     info.SkillsPath,
 			Detected: isPlatformDetected(p),
 		}
 		result = append(result, platformInfo)
@@ -92,52 +86,51 @@ func (s *InstallService) DetectPlatforms(ctx context.Context) ([]DetectedPlatfor
 }
 
 // isPlatformDetected checks if a platform is installed on the system.
-// It checks for command in PATH and common installation directories.
+// Uses the platform registry config for data-driven detection:
+// command in PATH, project directory, and global directory.
 func isPlatformDetected(p Platform) bool {
-	// Map platform to command name
-	commands := map[Platform]string{
-		PlatformClaude:   "claude",
-		PlatformCursor:   "cursor",
-		PlatformCopilot:  "copilot",
-		PlatformCodex:    "codex",
-		PlatformOpenCode: "opencode",
-		PlatformWindsurf: "windsurf",
-	}
-
-	cmd, ok := commands[p]
-	if !ok {
-		return false
-	}
-
-	// Check if command exists in PATH
-	if _, err := exec.LookPath(cmd); err == nil {
-		return true
-	}
-
-	// Check for platform directory in current directory (project-level)
 	info := p.Info()
-	if info.SkillsPath != "" {
-		// Extract the base directory (e.g., ".claude" from ".claude/skills")
-		parts := filepath.SplitList(info.SkillsPath)
-		if len(parts) > 0 {
-			baseDir := filepath.Dir(info.SkillsPath)
-			if _, err := os.Stat(baseDir); err == nil {
-				return true
-			}
+
+	// 1. Check command in PATH
+	if info.Command != "" {
+		if _, err := exec.LookPath(info.Command); err == nil {
+			return true
 		}
 	}
 
-	// Check for platform config directory in home
-	home, err := os.UserHomeDir()
-	if err == nil {
-		configDir := filepath.Join(home, info.SkillsPath)
-		parentDir := filepath.Dir(configDir) // e.g., ~/.claude
-		if _, err := os.Stat(parentDir); err == nil {
+	// 2. Check project-level directory
+	if info.ProjectDir != "" {
+		if _, err := os.Stat(info.ProjectDir); err == nil {
+			return true
+		}
+	}
+
+	// 3. Check global/home directory
+	if info.GlobalDir != "" {
+		globalPath := expandHomePath(info.GlobalDir)
+		if _, err := os.Stat(globalPath); err == nil {
+			return true
+		}
+	}
+
+	// 4. Check platform-specific paths
+	for _, path := range info.PlatformSpecificPaths {
+		expanded := os.ExpandEnv(path)
+		if _, err := os.Stat(expanded); err == nil {
 			return true
 		}
 	}
 
 	return false
+}
+
+// expandHomePath replaces ~ with the home directory.
+func expandHomePath(path string) string {
+	if len(path) >= 2 && path[0] == '~' && path[1] == '/' {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // Install installs a skill to the specified locations.

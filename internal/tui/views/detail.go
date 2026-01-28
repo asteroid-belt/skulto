@@ -346,12 +346,18 @@ func (dv *DetailView) SetInstallingState(isInstalling bool) {
 	if !isInstalling {
 		dv.installErr = nil
 	}
+	if dv.skill != nil {
+		dv.renderedHeader = dv.renderHeader()
+	}
 }
 
 // SetInstallError sets the install error state.
 func (dv *DetailView) SetInstallError(err error) {
 	dv.installErr = err
 	dv.installing = false
+	if dv.skill != nil {
+		dv.renderedHeader = dv.renderHeader()
+	}
 }
 
 // IsInstalling returns whether an installation is in progress.
@@ -394,6 +400,13 @@ func (dv *DetailView) View() string {
 	var parts []string
 	if dv.renderedHeader != "" {
 		parts = append(parts, dv.renderedHeader)
+	}
+	if dv.installErr != nil {
+		errStyle := lipgloss.NewStyle().
+			Foreground(theme.Current.Error).
+			Bold(true).
+			Width(dv.width)
+		parts = append(parts, errStyle.Render("Install error: "+dv.installErr.Error()))
 	}
 	parts = append(parts, content, "", scrollIndicator)
 

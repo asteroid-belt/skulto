@@ -49,7 +49,7 @@ func setupTestSkillDir(t *testing.T, cfg *config.Config, owner, repo, skillSlug 
 // TestPlatformRegistry tests the platform registry.
 func TestPlatformRegistry(t *testing.T) {
 	platforms := AllPlatforms()
-	assert.Len(t, platforms, 6)
+	assert.Len(t, platforms, 33)
 	assert.Contains(t, platforms, PlatformClaude)
 	assert.Contains(t, platforms, PlatformCursor)
 	assert.Contains(t, platforms, PlatformCopilot)
@@ -540,6 +540,76 @@ func TestInstallLocalSkillToNoLocations(t *testing.T) {
 	err := inst.InstallLocalSkillTo(context.Background(), skill, sourceDir, []InstallLocation{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no installation locations specified")
+}
+
+// TestInstallToGeminiCLIProjectScope tests installation to Gemini CLI at project scope.
+func TestInstallToGeminiCLIProjectScope(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source skill directory
+	sourceDir := filepath.Join(tempDir, "source", "gemini-skill")
+	require.NoError(t, os.MkdirAll(sourceDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "SKILL.md"), []byte("# Gemini Test"), 0644))
+
+	// Create mock project directory as CWD
+	projectDir := filepath.Join(tempDir, "project")
+	require.NoError(t, os.MkdirAll(projectDir, 0755))
+
+	cfg := setupTestConfig(t)
+	database := setupTestDB(t)
+
+	// Add skill to database
+	skill := &models.Skill{
+		ID:       "test-gemini-skill",
+		Slug:     "gemini-skill",
+		Title:    "Gemini CLI Skill",
+		Content:  "# Gemini Test",
+		FilePath: "skills/gemini-skill/SKILL.md",
+	}
+	source := &models.Source{
+		Owner: "test-owner",
+		Repo:  "test-repo",
+	}
+	require.NoError(t, database.CreateSkill(skill))
+
+	inst := New(database, cfg)
+
+	// Create install location with project scope pointing to temp project dir
+	loc := InstallLocation{
+		Platform: PlatformGeminiCLI,
+		Scope:    ScopeProject,
+		BasePath: projectDir,
+	}
+
+	// Install
+	err := inst.InstallTo(context.Background(), skill, source, []InstallLocation{loc})
+	// The source path won't exist in the mock repo structure for InstallTo,
+	// so we use InstallLocalSkillTo which takes an explicit source path
+	if err != nil {
+		// Expected: source path doesn't exist for InstallTo, test with InstallLocalSkillTo instead
+		err = inst.InstallLocalSkillTo(context.Background(), skill, sourceDir, []InstallLocation{loc})
+		require.NoError(t, err)
+	}
+
+	// Verify symlink created at correct path
+	expectedPath := loc.GetSkillPath(skill.Slug)
+	assert.Contains(t, expectedPath, ".gemini/skills/gemini-skill", "path should use .gemini/skills/")
+
+	info, err := os.Lstat(expectedPath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&os.ModeSymlink != 0, "should be symlink")
+
+	// Verify symlink target
+	target, err := os.Readlink(expectedPath)
+	require.NoError(t, err)
+	assert.Equal(t, sourceDir, target)
+
+	// Verify installation recorded with correct scope
+	installations, err := database.GetInstallations(skill.ID)
+	require.NoError(t, err)
+	assert.Len(t, installations, 1)
+	assert.Equal(t, "gemini-cli", installations[0].Platform)
+	assert.Equal(t, "project", installations[0].Scope)
 }
 
 // TestSyncInstallState tests that sync correctly reconciles database with symlinks.

@@ -3,6 +3,7 @@ package cli
 import (
 	"testing"
 
+	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,6 +133,33 @@ func TestScanSkillsForInstall_WithThreats(t *testing.T) {
 	hasThreats, err := scanSkillsForInstall(database, skills)
 	require.NoError(t, err)
 	assert.True(t, hasThreats, "Should detect threats in malicious skill content")
+}
+
+func TestValidatePlatformFlags_ValidPlatforms(t *testing.T) {
+	// All platform IDs should be accepted
+	err := validatePlatformFlags([]string{"claude", "cursor", "cline", "roo", "amp"})
+	assert.NoError(t, err)
+}
+
+func TestValidatePlatformFlags_InvalidPlatform(t *testing.T) {
+	err := validatePlatformFlags([]string{"claude", "nonexistent"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestValidatePlatformFlags_EmptyList(t *testing.T) {
+	err := validatePlatformFlags(nil)
+	assert.NoError(t, err)
+}
+
+func TestValidatePlatformFlags_AllRegisteredPlatforms(t *testing.T) {
+	// Every platform from AllPlatforms should be valid
+	var platformStrs []string
+	for _, p := range installer.AllPlatforms() {
+		platformStrs = append(platformStrs, string(p))
+	}
+	err := validatePlatformFlags(platformStrs)
+	assert.NoError(t, err)
 }
 
 func TestRemoveSourceAndSkills(t *testing.T) {

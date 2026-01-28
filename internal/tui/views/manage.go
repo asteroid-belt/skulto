@@ -214,8 +214,9 @@ func (mv *ManageView) getMaxVisibleItems() int {
 	// Header (2) + blank + content area + blank + footer (2) + margins
 	fixedHeight := 8
 	availableHeight := mv.height - fixedHeight
-	// Each item takes 1 line
-	maxItems := availableHeight
+	// Each item may take 1-3 lines depending on location wrapping
+	// Use 2 as average for multi-platform skills
+	maxItems := availableHeight / 2
 	if maxItems < 3 {
 		maxItems = 3
 	}
@@ -313,7 +314,7 @@ func (mv *ManageView) renderSkillsList() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderSkillRow renders a single skill row.
+// renderSkillRow renders a single skill row with wrapped locations.
 func (mv *ManageView) renderSkillRow(skill installer.InstalledSkillSummary, skillWidth int, isSelected bool) string {
 	// Selection indicator
 	indicator := "  "
@@ -331,8 +332,43 @@ func (mv *ManageView) renderSkillRow(skill installer.InstalledSkillSummary, skil
 
 	skillName := skillStyle.Render(fmt.Sprintf("%-*s", skillWidth, skill.Slug))
 
-	// Locations formatting
-	locations := mv.formatLocations(skill.Locations)
+	// Locations formatting - wrap to multiple lines if needed
+	locationParts := mv.formatLocationParts(skill.Locations)
+	// Prefix width: indicator(2) + skillName(skillWidth) + gap(2) + marginLeft(2)
+	prefixWidth := 2 + skillWidth + 2
+	// Available width for locations
+	locWidth := mv.width - prefixWidth - 4 // margin
+	if locWidth < 30 {
+		locWidth = 30
+	}
+
+	// Build wrapped location lines
+	var locLines []string
+	var currentLine string
+	mutedStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+
+	for i, part := range locationParts {
+		sep := ""
+		if i > 0 {
+			sep = ", "
+		}
+		candidate := currentLine + sep + part
+		// Rough length estimate (strip ANSI for length check)
+		plainLen := len(stripLocationPart(candidate))
+		if plainLen > locWidth && currentLine != "" {
+			locLines = append(locLines, currentLine)
+			currentLine = part
+		} else {
+			if currentLine == "" {
+				currentLine = part
+			} else {
+				currentLine += mutedStyle.Render(", ") + part
+			}
+		}
+	}
+	if currentLine != "" {
+		locLines = append(locLines, currentLine)
+	}
 
 	// Build row
 	rowStyle := lipgloss.NewStyle().MarginLeft(2)
@@ -340,13 +376,49 @@ func (mv *ManageView) renderSkillRow(skill installer.InstalledSkillSummary, skil
 		rowStyle = rowStyle.Background(theme.Current.Surface)
 	}
 
-	return rowStyle.Render(indicator + skillName + "  " + locations)
+	if len(locLines) <= 1 {
+		loc := ""
+		if len(locLines) == 1 {
+			loc = locLines[0]
+		}
+		return rowStyle.Render(indicator + skillName + "  " + loc)
+	}
+
+	// Multi-line: first line with skill name, subsequent lines indented
+	padding := strings.Repeat(" ", prefixWidth)
+	var rows []string
+	rows = append(rows, indicator+skillName+"  "+locLines[0])
+	for _, line := range locLines[1:] {
+		rows = append(rows, padding+line)
+	}
+	return rowStyle.Render(strings.Join(rows, "\n"))
 }
 
-// formatLocations formats the platform-scope map with styling.
-func (mv *ManageView) formatLocations(locations map[installer.Platform][]installer.InstallScope) string {
+// stripLocationPart returns a rough plain-text length estimate by removing ANSI escape sequences.
+func stripLocationPart(s string) string {
+	// Simple strip: remove \x1b[...m sequences
+	result := make([]byte, 0, len(s))
+	inEsc := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\x1b' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if s[i] == 'm' {
+				inEsc = false
+			}
+			continue
+		}
+		result = append(result, s[i])
+	}
+	return string(result)
+}
+
+// formatLocationParts returns individually styled "platform (scope)" strings.
+func (mv *ManageView) formatLocationParts(locations map[installer.Platform][]installer.InstallScope) []string {
 	if len(locations) == 0 {
-		return ""
+		return nil
 	}
 
 	// Get sorted platform names
@@ -366,8 +438,7 @@ func (mv *ManageView) formatLocations(locations map[installer.Platform][]install
 		parts = append(parts, fmt.Sprintf("%s (%s)", pStr, styledScope))
 	}
 
-	mutedStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
-	return strings.Join(parts, mutedStyle.Render(", "))
+	return parts
 }
 
 // formatScopes formats scopes and returns appropriate style.

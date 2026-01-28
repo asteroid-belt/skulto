@@ -288,17 +288,21 @@ func (hv *HomeView) adjustScrollForSelection() {
 	}
 
 	switch hv.selectedColumn {
-	case 0: // Loaded skills
+	case 0: // Loaded skills — always cap at 5 visible items
+		loadedMax := maxVisibleItems
+		if loadedMax > 5 {
+			loadedMax = 5
+		}
 		// Scroll down if selected item is below visible area
-		if hv.selectedIdx >= hv.loadedScrollOffset+maxVisibleItems {
-			hv.loadedScrollOffset = hv.selectedIdx - maxVisibleItems + 1
+		if hv.selectedIdx >= hv.loadedScrollOffset+loadedMax {
+			hv.loadedScrollOffset = hv.selectedIdx - loadedMax + 1
 		}
 		// Scroll up if selected item is above visible area
 		if hv.selectedIdx < hv.loadedScrollOffset {
 			hv.loadedScrollOffset = hv.selectedIdx
 		}
 		// Clamp scroll offset
-		maxScroll := len(hv.loadedSkills) - maxVisibleItems
+		maxScroll := len(hv.loadedSkills) - loadedMax
 		if maxScroll < 0 {
 			maxScroll = 0
 		}
@@ -575,7 +579,11 @@ func (hv *HomeView) renderRecentSkillsWithLimit(columnActive bool, maxItems int)
 }
 
 // renderLoadedSkillsWithLimit renders installed skills with scrolling support.
+// Always shows at most 5 items to keep the layout consistent with recently viewed.
 func (hv *HomeView) renderLoadedSkillsWithLimit(columnActive bool, maxItems int) string {
+	if maxItems > 5 {
+		maxItems = 5
+	}
 	// Make the title brighter if this column is active
 	titleColor := theme.Current.TextMuted
 	if columnActive {

@@ -64,13 +64,13 @@ type ScraperConfig struct {
 
 // Scraper orchestrates the GitHub scraping pipeline.
 type Scraper struct {
-	client         Client
-	gitClient      *GitClient // Keep reference for cleanup operations
-	parser         *SkillParser
-	db             *db.DB
-	config         ScraperConfig
-	dedupMutex sync.Mutex // Protects deduplication checks to prevent race conditions
-	claimedSlugs   map[string]string    // Maps slug -> skillID for pending inserts (not yet in DB)
+	client       Client
+	gitClient    *GitClient // Keep reference for cleanup operations
+	parser       *SkillParser
+	db           *db.DB
+	config       ScraperConfig
+	dedupMutex   sync.Mutex        // Protects deduplication checks to prevent race conditions
+	claimedSlugs map[string]string // Maps slug -> skillID for pending inserts (not yet in DB)
 }
 
 // NewScraperWithConfig creates a new scraper with full configuration support.
