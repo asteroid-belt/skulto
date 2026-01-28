@@ -9,7 +9,8 @@ import (
 type ConfirmDialog struct {
 	title    string
 	message  string
-	selected bool // false = no, true = yes
+	footer   string // optional footer text below buttons
+	selected bool   // false = no, true = yes
 }
 
 // NewConfirmDialog creates a new confirmation dialog.
@@ -39,6 +40,11 @@ func (c *ConfirmDialog) IsYesSelected() bool {
 // Toggle switches between Yes and No.
 func (c *ConfirmDialog) Toggle() {
 	c.selected = !c.selected
+}
+
+// SetFooter sets optional footer text displayed below the buttons.
+func (c *ConfirmDialog) SetFooter(footer string) {
+	c.footer = footer
 }
 
 // View renders the confirmation dialog.
@@ -72,6 +78,21 @@ func (c *ConfirmDialog) View() string {
 		" ]",
 	)
 
+	// Build content elements
+	elements := []string{
+		lipgloss.NewStyle().Bold(true).Foreground(theme.Current.Text).Render(c.title),
+		"",
+		c.message,
+		"",
+		buttons,
+	}
+
+	// Add footer if set
+	if c.footer != "" {
+		footerStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+		elements = append(elements, "", footerStyle.Render(c.footer))
+	}
+
 	dialog := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Current.Primary).
@@ -79,11 +100,7 @@ func (c *ConfirmDialog) View() string {
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Center,
-				lipgloss.NewStyle().Bold(true).Foreground(theme.Current.Text).Render(c.title),
-				"",
-				c.message,
-				"",
-				buttons,
+				elements...,
 			),
 		)
 

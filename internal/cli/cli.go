@@ -59,6 +59,7 @@ func init() {
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(favoritesCmd)
+	rootCmd.AddCommand(feedbackCmd)
 	rootCmd.AddCommand(infoCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(listCmd)

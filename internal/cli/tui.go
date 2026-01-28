@@ -115,7 +115,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		log.Println("\nTelemetry: OFF")
 	}
 
-	log.Println("\n\U0001F480 Launching Skulto TUI...")
+	log.Println("\n🚀 Launching Skulto TUI...")
 	return tui.RunWithIndexer(database, cfg, bgIndexer, telemetryClient)
 }
 

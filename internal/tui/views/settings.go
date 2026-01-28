@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/asteroid-belt/skulto/internal/config"
+	"github.com/asteroid-belt/skulto/internal/constants"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
@@ -479,12 +480,16 @@ func (sv *SettingsView) renderFooter() string {
 		telemetryLines = telemetryStyle.Render("Telemetry: OFF")
 	}
 
+	// Feedback link
+	feedbackStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+	feedbackLine := feedbackStyle.Render(fmt.Sprintf("Feedback? %s", constants.FeedbackURL))
+
 	// Navigation line
 	navStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted).
 		PaddingTop(1)
 	navLine := navStyle.Render(fmt.Sprintf("%s | %s | %s", positionStr, sectionStr, helpStr))
 
-	return telemetryLines + "\n" + navLine
+	return telemetryLines + "\n\n" + feedbackLine + "\n" + navLine
 }
 
 // HandleSettingsLoaded handles the SettingsLoadedMsg

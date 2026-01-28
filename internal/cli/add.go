@@ -105,7 +105,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		fmt.Println("   Run 'skulto' and press 'p' to sync later")
 	}
 
-	fmt.Printf("\n\U0001F480 Repository %s added successfully!\n", source.ID)
+	fmt.Printf("\n🚀 Repository %s added successfully!\n", source.ID)
 
 	// Track telemetry event
 	skillCount := 0

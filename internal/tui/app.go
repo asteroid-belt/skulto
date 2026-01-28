@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asteroid-belt/skulto/internal/config"
+	"github.com/asteroid-belt/skulto/internal/constants"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/favorites"
@@ -236,7 +237,7 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 		installer:            inst,
 		installService:       instService,
 		newSkillDialog:       components.NewNewSkillDialog(),
-		quitConfirmDialog:    components.NewConfirmDialog("Quit Skulto?", "Are you sure you want to exit?"),
+		quitConfirmDialog:    newQuitDialog(),
 	}
 }
 
@@ -323,8 +324,15 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 		ticker:               time.NewTicker(500 * time.Millisecond),
 		animTick:             0,
 		newSkillDialog:       components.NewNewSkillDialog(),
-		quitConfirmDialog:    components.NewConfirmDialog("Quit Skulto?", "Are you sure you want to exit?"),
+		quitConfirmDialog:    newQuitDialog(),
 	}
+}
+
+// newQuitDialog creates a quit confirmation dialog with feedback URL in footer.
+func newQuitDialog() *components.ConfirmDialog {
+	dialog := components.NewConfirmDialog("Quit Skulto?", "Are you sure you want to exit?")
+	dialog.SetFooter("Feedback? " + constants.FeedbackURL)
+	return dialog
 }
 
 // viewName returns a string name for a ViewType.
