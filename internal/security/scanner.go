@@ -288,6 +288,24 @@ func (s *Scanner) extractContext(content string, start, end int) string {
 	return context
 }
 
+// ScanAndClassify scans a skill and applies the correct security status.
+// This centralizes the scan-result-to-status logic, including the
+// HasWarning → Quarantined check. All callers should use this instead
+// of manually applying scan results.
+func (s *Scanner) ScanAndClassify(skill *models.Skill) *ScanResult {
+	result := s.ScanSkill(skill)
+	now := time.Now()
+	skill.SecurityStatus = models.SecurityStatusClean
+	skill.ThreatLevel = result.MaxThreatLevel()
+	skill.ThreatSummary = result.ThreatSummary
+	skill.ScannedAt = &now
+	skill.ContentHash = skill.ComputeContentHash()
+	if result.HasWarning {
+		skill.SecurityStatus = models.SecurityStatusQuarantined
+	}
+	return result
+}
+
 // QuickScan performs a fast check returning just threat status.
 func (s *Scanner) QuickScan(content string) bool {
 	for _, pattern := range s.patterns {

@@ -1450,20 +1450,6 @@ func (m *Model) syncCmd(githubToken string) tea.Cmd {
 		}
 		s := scraper.NewScraperWithConfig(cfg, m.db)
 
-		// Set up security scan progress callback
-		s.SetScanProgressCallback(func(scanned, total int, repoName string) {
-			// Non-blocking send to scan progress channel
-			select {
-			case m.scanProgressCh <- scanProgressMsg{
-				scanned:  scanned,
-				total:    total,
-				repoName: repoName,
-			}:
-			default:
-				// Channel full, skip this update
-			}
-		})
-
 		// Set timeout for syncing
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
@@ -1492,6 +1478,26 @@ func (m *Model) syncCmd(githubToken string) tea.Cmd {
 			return pullCompleteMsg{err: fmt.Errorf("failed to sync seeds: %w", err)}
 		}
 		totalSkillsNew := result.SkillsNew
+
+		// Scan pending skills (newly scraped skills have PENDING status)
+		pendingSkills, _ := m.db.GetPendingSkills()
+		if len(pendingSkills) > 0 {
+			scanner := security.NewScanner()
+			for i := range pendingSkills {
+				// Report scan progress
+				select {
+				case m.scanProgressCh <- scanProgressMsg{
+					scanned:  i + 1,
+					total:    len(pendingSkills),
+					repoName: pendingSkills[i].Slug,
+				}:
+				default:
+				}
+
+				scanner.ScanAndClassify(&pendingSkills[i])
+				_ = m.db.UpdateSkillSecurity(&pendingSkills[i])
+			}
+		}
 
 		// Sync local skills from ~/.skulto/skills
 		localSynced := m.syncLocalSkillsInternal()
@@ -2150,15 +2156,7 @@ func (m *Model) scanSkillCmd(skillID string) tea.Cmd {
 
 		// Create scanner and scan
 		scanner := security.NewScanner()
-		result := scanner.ScanSkill(skill)
-
-		// Update skill with scan results
-		skill.SecurityStatus = models.SecurityStatusClean
-		skill.ThreatLevel = result.MaxThreatLevel()
-		skill.ThreatSummary = result.ThreatSummary
-		now := time.Now()
-		skill.ScannedAt = &now
-		skill.ContentHash = skill.ComputeContentHash()
+		scanner.ScanAndClassify(skill)
 
 		// Save to database
 		if err := m.db.UpdateSkillSecurity(skill); err != nil {

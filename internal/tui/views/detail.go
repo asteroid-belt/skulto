@@ -75,6 +75,7 @@ type DetailView struct {
 
 	// Content cache
 	renderedContent []string
+	renderedHeader  string // cached rendered metadata+banner header
 
 	// Cached markdown renderer (expensive to create)
 	glamourRenderer *glamour.TermRenderer
@@ -109,6 +110,7 @@ func (dv *DetailView) Init(tc telemetry.Client) {
 	dv.scrollOffset = 0
 	dv.maxScroll = 0
 	dv.renderedContent = []string{}
+	dv.renderedHeader = ""
 }
 
 // SetSkill initiates async loading of a skill by ID.
@@ -121,6 +123,7 @@ func (dv *DetailView) SetSkill(skillID string) tea.Cmd {
 	dv.scrollOffset = 0
 	dv.skill = nil
 	dv.renderedContent = nil
+	dv.renderedHeader = ""
 
 	// Return a command that loads the skill asynchronously
 	return dv.loadSkillCmd(skillID)
@@ -172,6 +175,7 @@ func (dv *DetailView) HandleSkillLoaded(msg SkillLoadedMsg) {
 func (dv *DetailView) updateRenderedContent() {
 	if dv.skill == nil {
 		dv.renderedContent = []string{}
+		dv.renderedHeader = ""
 		dv.maxScroll = 0
 		return
 	}
@@ -180,9 +184,11 @@ func (dv *DetailView) updateRenderedContent() {
 	contentLines := dv.renderMarkdownContent(dv.skill.Content)
 	dv.renderedContent = contentLines
 
-	// Calculate max scroll
-	metadataHeight := dv.estimateMetadataHeight()
-	viewportHeight := dv.height - metadataHeight - 2 // 2 for footer/indicators
+	// Render and cache header, measure actual height
+	dv.renderedHeader = dv.renderHeader()
+	hh := dv.headerHeight()
+
+	viewportHeight := dv.height - hh - 2 // 2 for empty line + scroll indicator
 	if viewportHeight < 5 {
 		viewportHeight = 5
 	}
@@ -246,30 +252,24 @@ func (dv *DetailView) stripFrontmatter(content string) string {
 	return content
 }
 
-// estimateMetadataHeight estimates how many lines the metadata section takes.
-func (dv *DetailView) estimateMetadataHeight() int {
-	// Metadata section:
-	// Title: 2 lines
-	// Author/Category/Difficulty: 1 line
-	// Stats: 1 line
-	// Source/FilePath: 1 line
-	// Version/License: 1 line
-	// License URL: 1 line (if available)
-	// Tags: variable, assume 1-2 lines
-	// Timestamps: 1 line
-	// Installed: 1 line
-	// Divider: 1 line
-	// Subtotal: 11 lines
+// renderHeader renders the metadata header (without the warning banner, which
+// is embedded inside renderRemoteDetails / renderLocalDetails where appropriate).
+func (dv *DetailView) renderHeader() string {
+	if dv.skill == nil {
+		return ""
+	}
+	if dv.skill.IsLocal {
+		return dv.renderLocalDetails()
+	}
+	return dv.renderRemoteDetails()
+}
 
-	// Frontmatter section:
-	// Blank line before: 1 line
-	// "---": 1 line
-	// Fields (name, description, version, author, license, tags, source): ~6 lines
-	// "---": 1 line
-	// Blank line after: 1 line
-	// Subtotal: ~9 lines
-
-	return 12
+// headerHeight returns the actual rendered height of the cached header.
+func (dv *DetailView) headerHeight() int {
+	if dv.renderedHeader == "" {
+		return 0
+	}
+	return lipgloss.Height(dv.renderedHeader)
 }
 
 // Update handles keyboard input and returns (shouldGoBack, cmd).
@@ -311,11 +311,13 @@ func (dv *DetailView) Update(key string) (back bool, cmd tea.Cmd) {
 				if err := dv.favorites.Remove(dv.skill.Slug); err == nil {
 					dv.isFavorite = false
 					dv.telemetry.TrackFavoriteRemoved(dv.skill.Slug)
+					dv.renderedHeader = dv.renderHeader()
 				}
 			} else {
 				if err := dv.favorites.Add(dv.skill.Slug); err == nil {
 					dv.isFavorite = true
 					dv.telemetry.TrackFavoriteAdded(dv.skill.Slug)
+					dv.renderedHeader = dv.renderHeader()
 				}
 			}
 		}
@@ -381,32 +383,19 @@ func (dv *DetailView) View() string {
 		return dv.renderError()
 	}
 
-	// Build warning banner - FIXED at top, not scrollable
-	// Only show for skills with actual threats
-	var warningBanner string
-	if dv.skill.ThreatLevel != models.ThreatLevelNone && dv.skill.ThreatLevel != "" {
-		warningBanner = dv.renderWarningBanner()
+	// Ensure header is cached (e.g. on first render before updateRenderedContent)
+	if dv.renderedHeader == "" {
+		dv.renderedHeader = dv.renderHeader()
 	}
 
-	// Render metadata and content sections (scrollable)
-	var metadata string
-	if dv.skill.IsLocal {
-		metadata = dv.renderLocalDetails()
-	} else {
-		metadata = dv.renderRemoteDetails()
-	}
 	content := dv.renderContent()
 	scrollIndicator := dv.renderScrollIndicator()
 
-	// Build scrollable area
-	scrollableContent := strings.Join([]string{metadata, content}, "\n")
-
-	// Build final output: fixed banner at top, then scrollable content, then footer
 	var parts []string
-	if warningBanner != "" {
-		parts = append(parts, warningBanner)
+	if dv.renderedHeader != "" {
+		parts = append(parts, dv.renderedHeader)
 	}
-	parts = append(parts, scrollableContent, "", scrollIndicator)
+	parts = append(parts, content, "", scrollIndicator)
 
 	return strings.Join(parts, "\n")
 }
@@ -705,8 +694,8 @@ func (dv *DetailView) renderContent() string {
 		return ""
 	}
 
-	metadataHeight := dv.estimateMetadataHeight()
-	viewportHeight := dv.height - metadataHeight - 3 // 3 for spacing and scroll indicator
+	hh := dv.headerHeight()
+	viewportHeight := dv.height - hh - 3 // 3 for spacing and scroll indicator
 	if viewportHeight < 5 {
 		viewportHeight = 5
 	}
@@ -747,8 +736,8 @@ func (dv *DetailView) renderScrollIndicator() string {
 		return scanStyle.Render("🔒 Scanning skill for security threats...")
 	}
 
-	metadataHeight := dv.estimateMetadataHeight()
-	viewportHeight := dv.height - metadataHeight - 3
+	hh := dv.headerHeight()
+	viewportHeight := dv.height - hh - 3
 	if viewportHeight < 5 {
 		viewportHeight = 5
 	}

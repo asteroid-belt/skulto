@@ -10,7 +10,10 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
+	"github.com/asteroid-belt/skulto/internal/security"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -228,16 +231,29 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		return trackCLIError("install", fmt.Errorf("invalid repository URL: %w", err))
 	}
 
-	// Check if source exists
+	// Check if source already exists with skills
 	existing, _ := database.GetSource(source.ID)
-	if existing == nil {
-		// Add the source
-		fmt.Printf("Adding repository %s...\n", source.FullName)
+	needsScrape := existing == nil
+
+	if existing != nil {
+		existingSkills, _ := database.GetSkillsBySourceID(source.ID)
+		if len(existingSkills) == 0 {
+			needsScrape = true
+		} else {
+			fmt.Printf("Repository %s is already in the database.\n", source.FullName)
+		}
+	}
+
+	if needsScrape {
+		if existing == nil {
+			fmt.Printf("Adding repository %s...\n", source.FullName)
+		} else {
+			fmt.Printf("Re-syncing repository %s...\n", source.FullName)
+		}
 		if err := database.UpsertSource(source); err != nil {
 			return trackCLIError("install", fmt.Errorf("add repository: %w", err))
 		}
 
-		// Sync the repository
 		scraperCfg := scraper.ScraperConfig{
 			Token:        cfg.GitHub.Token,
 			DataDir:      cfg.BaseDir,
@@ -246,7 +262,7 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		}
 		s := scraper.NewScraperWithConfig(scraperCfg, database)
 
-		_, err := s.ScrapeRepository(ctx, source.Owner, source.Repo)
+		_, err = s.ScrapeRepository(ctx, source.Owner, source.Repo)
 		if err != nil {
 			return trackCLIError("install", fmt.Errorf("sync repository: %w", err))
 		}
@@ -263,7 +279,35 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		return nil
 	}
 
-	fmt.Printf("Found %d skills.\n\n", len(skills))
+	fmt.Printf("Found %d skill(s).\n\n", len(skills))
+
+	// Security scan all skills
+	hasThreats, err := scanSkillsForInstall(database, skills)
+	if err != nil {
+		return trackCLIError("install", fmt.Errorf("security scan: %w", err))
+	}
+
+	// If threats found, prompt for confirmation (unless -y)
+	if hasThreats && !installYes {
+		if !isInteractive() {
+			fmt.Println()
+			fmt.Println("Threats detected. Use -y to install anyway, or run interactively to confirm.")
+			_ = removeSourceAndSkills(database, source.ID)
+			return trackCLIError("install", fmt.Errorf("security threats detected, installation blocked"))
+		}
+
+		fmt.Println()
+		fmt.Print("Install anyway? [y/N] ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" {
+			fmt.Println("Installation cancelled.")
+			_ = removeSourceAndSkills(database, source.ID)
+			return nil
+		}
+	}
+
+	fmt.Println()
 
 	// Show skill selector if not -y
 	var selectedSlugs []string
@@ -276,7 +320,15 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		if !isInteractive() {
 			return trackCLIError("install", fmt.Errorf("interactive mode requires a terminal, use -y flag"))
 		}
-		selectedSlugs, err = prompts.RunSkillSelector(skills, nil)
+		// Pre-select skills that are already installed
+		var installedSlugs []string
+		for _, skill := range skills {
+			installations, _ := database.GetInstallations(skill.ID)
+			if len(installations) > 0 {
+				installedSlugs = append(installedSlugs, skill.Slug)
+			}
+		}
+		selectedSlugs, err = prompts.RunSkillSelector(skills, installedSlugs)
 		if err != nil {
 			return trackCLIError("install", fmt.Errorf("skill selection: %w", err))
 		}
@@ -325,4 +377,113 @@ func isInteractive() bool {
 		return false
 	}
 	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+// scanSkillsForInstall scans all skills for security threats and prints a report.
+// Returns true if any threats were found.
+func scanSkillsForInstall(database *db.DB, skills []models.Skill) (bool, error) {
+	fmt.Println("Scanning skills for security threats...")
+	fmt.Println()
+
+	scanner := security.NewScanner()
+	hasThreats := false
+
+	categoriesChecked := []string{
+		"Frontmatter injection",
+		"Dangerous shell patterns",
+		"External references",
+		"Encoded payloads",
+	}
+
+	var threatResults []security.ScanResult
+	for i := range skills {
+		skill := &skills[i]
+		result := scanner.ScanAndClassify(skill)
+
+		if err := database.UpdateSkillSecurity(skill); err != nil {
+			fmt.Printf("  Error scanning %s: %v\n", skill.Slug, err)
+			continue
+		}
+
+		printScanResult(result, i+1, len(skills))
+
+		if result.HasWarning {
+			hasThreats = true
+			threatResults = append(threatResults, *result)
+		}
+	}
+
+	fmt.Println()
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#555")).
+		Padding(1, 2)
+
+	if !hasThreats {
+		var content string
+		content += cleanStyle.Render("PASSED") + " - No threats detected\n\n"
+		content += "Checked:\n"
+		for _, cat := range categoriesChecked {
+			content += fmt.Sprintf("  %s  %s\n", cleanStyle.Render("✓"), cat)
+		}
+		fmt.Println(borderStyle.Render(content))
+	} else {
+		totalThreats := 0
+		critCount, highCount, medCount, lowCount := 0, 0, 0, 0
+		for _, r := range threatResults {
+			totalThreats += r.TotalMatchCount()
+			switch r.ThreatLevel {
+			case models.ThreatLevelCritical:
+				critCount++
+			case models.ThreatLevelHigh:
+				highCount++
+			case models.ThreatLevelMedium:
+				medCount++
+			case models.ThreatLevelLow:
+				lowCount++
+			}
+		}
+
+		var content string
+		content += highStyle.Render(fmt.Sprintf("⚠ %d RISKY PATTERNS", totalThreats)) + "\n\n"
+		if critCount > 0 {
+			content += criticalStyle.Render(fmt.Sprintf("  CRITICAL  %d skill(s)", critCount)) + "\n"
+		}
+		if highCount > 0 {
+			content += highStyle.Render(fmt.Sprintf("  HIGH      %d skill(s)", highCount)) + "\n"
+		}
+		if medCount > 0 {
+			content += mediumStyle.Render(fmt.Sprintf("  MEDIUM    %d skill(s)", medCount)) + "\n"
+		}
+		if lowCount > 0 {
+			content += lowStyle.Render(fmt.Sprintf("  LOW       %d skill(s)", lowCount)) + "\n"
+		}
+		fmt.Println(borderStyle.Render(content))
+	}
+
+	return hasThreats, nil
+}
+
+// removeSourceAndSkills removes a source and all its skills from the database.
+// Used when a user declines to install after security threats are found.
+func removeSourceAndSkills(database *db.DB, sourceID string) error {
+	skills, err := database.GetSkillsBySourceID(sourceID)
+	if err != nil {
+		return fmt.Errorf("get skills for cleanup: %w", err)
+	}
+
+	for _, skill := range skills {
+		_ = database.RemoveAllInstallations(skill.ID)
+	}
+
+	if _, err := database.HardDeleteSkillsBySource(sourceID); err != nil {
+		return fmt.Errorf("remove skills: %w", err)
+	}
+
+	if err := database.HardDeleteSource(sourceID); err != nil {
+		return fmt.Errorf("remove source: %w", err)
+	}
+
+	return nil
 }

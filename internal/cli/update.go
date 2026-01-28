@@ -11,6 +11,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/asteroid-belt/skulto/internal/security"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -214,14 +215,6 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 		skills, err = database.GetAllSkills()
 	} else {
 		skills, err = database.GetPendingSkills()
-		if len(skills) == 0 {
-			// Also scan any skills that were just updated
-			for _, skill := range result.UpdatedSkills {
-				if skill.SecurityStatus == models.SecurityStatusPending {
-					skills = append(skills, skill)
-				}
-			}
-		}
 	}
 
 	if err != nil {
@@ -246,19 +239,7 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 		ClearLine()
 		fmt.Print("   " + progress.RenderScan())
 
-		scanResult := scanner.ScanSkill(skill)
-
-		// Update skill in database
-		now := time.Now()
-		skill.SecurityStatus = models.SecurityStatusClean
-		skill.ThreatLevel = scanResult.MaxThreatLevel()
-		skill.ThreatSummary = scanResult.ThreatSummary
-		skill.ScannedAt = &now
-		skill.ContentHash = skill.ComputeContentHash()
-
-		if scanResult.HasWarning {
-			skill.SecurityStatus = models.SecurityStatusQuarantined
-		}
+		scanResult := scanner.ScanAndClassify(skill)
 
 		if err := database.UpdateSkillSecurity(skill); err != nil {
 			ClearLine()
@@ -293,42 +274,47 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 }
 
 func printUpdateReport(result *UpdateResult) {
-	// Summary box
-	fmt.Println("   ┌─────────────────────────────────────")
-	fmt.Println("   │ REPOSITORIES")
-	fmt.Printf("   │   Synced:  %d\n", result.ReposSynced)
-	if result.ReposErrored > 0 {
-		fmt.Printf("   │   Errors:  %s\n", errorStyle.Render(fmt.Sprintf("%d", result.ReposErrored)))
-	}
-	fmt.Println("   │")
-	fmt.Println("   │ SKILLS")
-	fmt.Printf("   │   New:     %d\n", result.SkillsNew)
-	fmt.Printf("   │   Updated: %d\n", result.SkillsUpdated)
-	fmt.Println("   │")
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#555")).
+		Padding(1, 2)
 
-	// Scan summary
-	fmt.Println("   │ SECURITY SCAN")
-	fmt.Printf("   │   Scanned: %d\n", result.SkillsScanned)
-	fmt.Printf("   │   Clean:   %s\n", cleanStyle.Render(fmt.Sprintf("%d", result.SkillsClean)))
+	var content string
+
+	content += "REPOSITORIES\n"
+	content += fmt.Sprintf("  Synced:  %d\n", result.ReposSynced)
+	if result.ReposErrored > 0 {
+		content += fmt.Sprintf("  Errors:  %s\n", errorStyle.Render(fmt.Sprintf("%d", result.ReposErrored)))
+	}
+	content += "\n"
+
+	content += "SKILLS\n"
+	content += fmt.Sprintf("  New:     %d\n", result.SkillsNew)
+	content += fmt.Sprintf("  Updated: %d\n", result.SkillsUpdated)
+	content += "\n"
+
+	content += "SECURITY SCAN\n"
+	content += fmt.Sprintf("  Scanned: %d\n", result.SkillsScanned)
+	content += fmt.Sprintf("  Clean:   %s\n", cleanStyle.Render(fmt.Sprintf("%d", result.SkillsClean)))
 
 	totalThreats := result.ThreatsCritical + result.ThreatsHigh + result.ThreatsMedium + result.ThreatsLow
 	if totalThreats > 0 {
-		fmt.Printf("   │   Threats: %d\n", totalThreats)
+		content += fmt.Sprintf("  Threats: %d\n", totalThreats)
 		if result.ThreatsCritical > 0 {
-			fmt.Printf("   │     %s\n", criticalStyle.Render(fmt.Sprintf("CRITICAL: %d", result.ThreatsCritical)))
+			content += fmt.Sprintf("    %s\n", criticalStyle.Render(fmt.Sprintf("CRITICAL: %d", result.ThreatsCritical)))
 		}
 		if result.ThreatsHigh > 0 {
-			fmt.Printf("   │     %s\n", highStyle.Render(fmt.Sprintf("HIGH: %d", result.ThreatsHigh)))
+			content += fmt.Sprintf("    %s\n", highStyle.Render(fmt.Sprintf("HIGH: %d", result.ThreatsHigh)))
 		}
 		if result.ThreatsMedium > 0 {
-			fmt.Printf("   │     %s\n", mediumStyle.Render(fmt.Sprintf("MEDIUM: %d", result.ThreatsMedium)))
+			content += fmt.Sprintf("    %s\n", mediumStyle.Render(fmt.Sprintf("MEDIUM: %d", result.ThreatsMedium)))
 		}
 		if result.ThreatsLow > 0 {
-			fmt.Printf("   │     %s\n", lowStyle.Render(fmt.Sprintf("LOW: %d", result.ThreatsLow)))
+			content += fmt.Sprintf("    %s\n", lowStyle.Render(fmt.Sprintf("LOW: %d", result.ThreatsLow)))
 		}
 	}
 
-	fmt.Println("   └─────────────────────────────────────")
+	fmt.Println(borderStyle.Render(content))
 
 	// List updated skills grouped by change type
 	if len(result.Changes) > 0 {
