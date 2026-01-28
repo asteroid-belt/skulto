@@ -106,15 +106,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	for i := range skills {
 		skill := &skills[i]
-		result := scanner.ScanSkill(skill)
-
-		// Update skill in database
-		now := time.Now()
-		skill.SecurityStatus = models.SecurityStatusClean
-		skill.ThreatLevel = result.MaxThreatLevel()
-		skill.ThreatSummary = result.ThreatSummary
-		skill.ScannedAt = &now
-		skill.ContentHash = skill.ComputeContentHash()
+		result := scanner.ScanAndClassify(skill)
 
 		if err := database.UpdateSkillSecurity(skill); err != nil {
 			fmt.Println(errorStyle.Render(fmt.Sprintf("Error updating %s: %v", skill.Slug, err)))

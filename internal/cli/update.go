@@ -214,14 +214,6 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 		skills, err = database.GetAllSkills()
 	} else {
 		skills, err = database.GetPendingSkills()
-		if len(skills) == 0 {
-			// Also scan any skills that were just updated
-			for _, skill := range result.UpdatedSkills {
-				if skill.SecurityStatus == models.SecurityStatusPending {
-					skills = append(skills, skill)
-				}
-			}
-		}
 	}
 
 	if err != nil {
@@ -246,19 +238,7 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 		ClearLine()
 		fmt.Print("   " + progress.RenderScan())
 
-		scanResult := scanner.ScanSkill(skill)
-
-		// Update skill in database
-		now := time.Now()
-		skill.SecurityStatus = models.SecurityStatusClean
-		skill.ThreatLevel = scanResult.MaxThreatLevel()
-		skill.ThreatSummary = scanResult.ThreatSummary
-		skill.ScannedAt = &now
-		skill.ContentHash = skill.ComputeContentHash()
-
-		if scanResult.HasWarning {
-			skill.SecurityStatus = models.SecurityStatusQuarantined
-		}
+		scanResult := scanner.ScanAndClassify(skill)
 
 		if err := database.UpdateSkillSecurity(skill); err != nil {
 			ClearLine()
