@@ -56,3 +56,18 @@ func (db *DB) GetAllInstallations() ([]models.SkillInstallation, error) {
 	err := db.Find(&installations).Error
 	return installations, err
 }
+
+// GetLastInstallLocations returns the platform+scope pairs from the most recent
+// install event. An "install event" is a group of installations sharing the same
+// installed_at timestamp (i.e. all locations chosen in one dialog confirmation).
+func (db *DB) GetLastInstallLocations() ([]models.SkillInstallation, error) {
+	// Find the most recent installed_at timestamp
+	var latest models.SkillInstallation
+	if err := db.Order("installed_at DESC").First(&latest).Error; err != nil {
+		return nil, err
+	}
+	// Return all installations with that same timestamp
+	var installations []models.SkillInstallation
+	err := db.Where("installed_at = ?", latest.InstalledAt).Find(&installations).Error
+	return installations, err
+}

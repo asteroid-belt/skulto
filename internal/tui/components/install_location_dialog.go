@@ -639,18 +639,43 @@ func (d *InstallLocationDialog) CenteredView(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, dialog)
 }
 
+// LastInstallChoice represents a platform+scope pair from a previous install.
+type LastInstallChoice struct {
+	Platform string // e.g. "claude"
+	Scope    string // e.g. "global"
+}
+
 // NewInstallLocationDialogWithPrefs creates a dialog with merged preferences + detection.
-// savedScopes maps platform agent_id → preferred scope ("global" or "project").
-// Group 1 = preferred (saved + detected), Group 2 = all others (collapsed).
-func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScopes map[string]string, detectionResults []detect.DetectionResult) *InstallLocationDialog {
+// lastInstall contains platform+scope pairs from the most recent install event.
+// Group 1 = only the platforms from lastInstall (pre-selected with their scopes).
+// Group 2 = all other platforms (collapsed).
+// If lastInstall is empty, falls back to saved+detected for Group 1.
+func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScopes map[string]string, detectionResults []detect.DetectionResult, lastInstall []LastInstallChoice) *InstallLocationDialog {
+	// Build the set of "last install" platforms for Group 1
+	lastInstallPlatforms := make(map[string]string) // platform → scope
+	for _, li := range lastInstall {
+		// Keep the first scope seen per platform (they come from same event)
+		if _, exists := lastInstallPlatforms[li.Platform]; !exists {
+			lastInstallPlatforms[li.Platform] = li.Scope
+		}
+	}
+
+	// Determine which platforms go in Group 1
+	useLastInstall := len(lastInstallPlatforms) > 0
+
 	// Build plain saved list for merge ordering
 	var plainSaved []string
 	for p := range savedScopes {
 		plainSaved = append(plainSaved, p)
 	}
 
-	// Merge and reorder platforms
-	merged := mergePreferencesWithDetected(platforms, plainSaved, detectionResults)
+	// Merge and reorder platforms: last-install first, then others
+	var merged []installer.Platform
+	if useLastInstall {
+		merged = reorderWithLastInstall(platforms, lastInstallPlatforms)
+	} else {
+		merged = mergePreferencesWithDetected(platforms, plainSaved, detectionResults)
+	}
 
 	dialog := &InstallLocationDialog{
 		platforms: merged,
@@ -658,45 +683,85 @@ func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScop
 	}
 	dialog.buildOptions()
 
-	// Determine preferred count: saved + detected platforms
-	detectedSet := make(map[string]bool)
-	for _, dr := range detectionResults {
-		if dr.Detected {
-			detectedSet[string(dr.Platform)] = true
+	if useLastInstall {
+		// Count options belonging to last-install platforms (Group 1)
+		preferredCount := 0
+		for _, opt := range dialog.options {
+			platformID := string(opt.Location.Platform)
+			if _, inLast := lastInstallPlatforms[platformID]; inLast {
+				preferredCount++
+			} else {
+				break // Options are ordered: last-install first, then others
+			}
 		}
-	}
+		dialog.preferredCount = preferredCount
 
-	// Count options that belong to preferred platforms
-	preferredCount := 0
-	for _, opt := range dialog.options {
-		platformID := string(opt.Location.Platform)
-		_, isSaved := savedScopes[platformID]
-		if isSaved || detectedSet[platformID] {
-			preferredCount++
-		} else {
-			break // Options are ordered: preferred first, then others
+		// Pre-select: match last-install scope for Group 1, nothing for Group 2
+		for i := range dialog.options {
+			platformID := string(dialog.options[i].Location.Platform)
+			optScope := string(dialog.options[i].Location.Scope)
+
+			if lastScope, inLast := lastInstallPlatforms[platformID]; inLast {
+				dialog.options[i].Selected = (optScope == lastScope)
+			} else {
+				dialog.options[i].Selected = false
+			}
 		}
-	}
-	dialog.preferredCount = preferredCount
+	} else {
+		// Fallback: use saved + detected for Group 1
+		detectedSet := make(map[string]bool)
+		for _, dr := range detectionResults {
+			if dr.Detected {
+				detectedSet[string(dr.Platform)] = true
+			}
+		}
 
-	// Pre-select: use saved scope for saved platforms, global for detected-only
-	for i := range dialog.options {
-		platformID := string(dialog.options[i].Location.Platform)
-		optScope := string(dialog.options[i].Location.Scope)
+		preferredCount := 0
+		for _, opt := range dialog.options {
+			platformID := string(opt.Location.Platform)
+			_, isSaved := savedScopes[platformID]
+			if isSaved || detectedSet[platformID] {
+				preferredCount++
+			} else {
+				break
+			}
+		}
+		dialog.preferredCount = preferredCount
 
-		if prefScope, isSaved := savedScopes[platformID]; isSaved {
-			// Match the saved scope for this platform
-			dialog.options[i].Selected = (optScope == prefScope)
-		} else if detectedSet[platformID] {
-			// Detected but not saved: default to global
-			dialog.options[i].Selected = (dialog.options[i].Location.Scope == installer.ScopeGlobal)
-		} else {
-			dialog.options[i].Selected = false
+		for i := range dialog.options {
+			platformID := string(dialog.options[i].Location.Platform)
+			optScope := string(dialog.options[i].Location.Scope)
+
+			if prefScope, isSaved := savedScopes[platformID]; isSaved {
+				dialog.options[i].Selected = (optScope == prefScope)
+			} else if detectedSet[platformID] {
+				dialog.options[i].Selected = (dialog.options[i].Location.Scope == installer.ScopeGlobal)
+			} else {
+				dialog.options[i].Selected = false
+			}
 		}
 	}
 
 	dialog.buildDisplayItems()
 	return dialog
+}
+
+// reorderWithLastInstall puts last-install platforms first, then everything else.
+func reorderWithLastInstall(allPlatforms []installer.Platform, lastInstall map[string]string) []installer.Platform {
+	var result []installer.Platform
+	// Last-install platforms first (in platform order)
+	for _, p := range allPlatforms {
+		if _, inLast := lastInstall[string(p)]; inLast {
+			result = append(result, p)
+		}
+	}
+	// Everything else
+	for _, p := range allPlatforms {
+		if _, inLast := lastInstall[string(p)]; !inLast {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 // NewInstallLocationDialogForOnboarding creates a dialog with collapsible groups

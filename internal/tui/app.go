@@ -809,8 +809,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						m.locationDialog = components.NewInstallLocationDialog(platforms)
 					} else {
+						// Get last install locations for above-the-fold grouping
+						var lastInstall []components.LastInstallChoice
+						if lastLocs, err := m.db.GetLastInstallLocations(); err == nil {
+							for _, loc := range lastLocs {
+								lastInstall = append(lastInstall, components.LastInstallChoice{
+									Platform: loc.Platform,
+									Scope:    loc.Scope,
+								})
+							}
+						}
 						m.locationDialog = components.NewInstallLocationDialogWithPrefs(
-							allPlatforms, savedScopes, detectionResults,
+							allPlatforms, savedScopes, detectionResults, lastInstall,
 						)
 					}
 					m.locationDialog.SetWidth(m.width)
