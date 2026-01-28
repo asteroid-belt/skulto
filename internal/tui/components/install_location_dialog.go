@@ -1,6 +1,8 @@
 package components
 
 import (
+	"fmt"
+
 	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/tui/theme"
@@ -16,29 +18,59 @@ type LocationOption struct {
 	Selected    bool
 }
 
-// InstallLocationDialog presents installation location choices with multi-select.
+// dialogItemKind identifies the type of a display item in the dialog.
+type dialogItemKind int
+
+const (
+	dkOption    dialogItemKind = iota // Selectable location option
+	dkHeader                          // Non-interactive group header
+	dkToggle                          // Collapsible group header (interactive)
+	dkRemember                        // Remember locations checkbox
+	dkSeparator                       // Visual separator
+)
+
+// dialogDisplayItem represents a single row in the dialog's display list.
+type dialogDisplayItem struct {
+	kind      dialogItemKind
+	optionIdx int    // Index into options slice (for dkOption)
+	label     string // Display text (for headers/toggle)
+}
+
+// InstallLocationDialog presents installation location choices with multi-select
+// and collapsible groups for preferred vs other agents.
 type InstallLocationDialog struct {
 	options           []LocationOption
-	currentIndex      int
 	width             int
+	height            int
 	cancelled         bool
 	confirmed         bool
-	platforms         []installer.Platform // User's selected platforms
-	rememberLocations bool                 // If true, cache these locations for future installs
-	onRememberOption  bool                 // True when cursor is on the "remember" checkbox
+	platforms         []installer.Platform
+	rememberLocations bool
+
+	// Collapsible groups
+	preferredCount int  // options[0:preferredCount] = group 1 (preferred)
+	group2Expanded bool // Whether "Other Agents" group is expanded
+
+	// Display items for navigation
+	displayItems []dialogDisplayItem
+	currentIndex int // Index into displayItems
+	scrollOffset int // Scroll offset for viewport
 }
 
 // NewInstallLocationDialog creates a new install location dialog.
+// All platforms are in group 1 (no collapsible group 2).
 func NewInstallLocationDialog(platforms []installer.Platform) *InstallLocationDialog {
 	dialog := &InstallLocationDialog{
 		platforms: platforms,
 		options:   make([]LocationOption, 0),
 	}
 	dialog.buildOptions()
+	dialog.preferredCount = len(dialog.options) // All in group 1
+	dialog.buildDisplayItems()
 	return dialog
 }
 
-// buildOptions creates location options for each platform × scope combination.
+// buildOptions creates location options for each platform x scope combination.
 func (d *InstallLocationDialog) buildOptions() {
 	d.options = make([]LocationOption, 0, len(d.platforms)*2)
 
@@ -69,36 +101,87 @@ func (d *InstallLocationDialog) buildOptions() {
 	}
 }
 
+// buildDisplayItems creates the flattened display item list for navigation and rendering.
+func (d *InstallLocationDialog) buildDisplayItems() {
+	d.displayItems = nil
+
+	hasGroups := d.preferredCount > 0 && d.preferredCount < len(d.options)
+
+	if hasGroups {
+		// Group 1: Preferred agents
+		d.displayItems = append(d.displayItems, dialogDisplayItem{
+			kind: dkHeader, label: "Your Agents",
+		})
+		for i := 0; i < d.preferredCount; i++ {
+			d.displayItems = append(d.displayItems, dialogDisplayItem{
+				kind: dkOption, optionIdx: i,
+			})
+		}
+
+		d.displayItems = append(d.displayItems, dialogDisplayItem{kind: dkSeparator})
+
+		// Group 2: Other agents (collapsible)
+		otherPlatforms := d.countOtherPlatforms()
+		label := fmt.Sprintf("Other Agents (%d)", otherPlatforms)
+		d.displayItems = append(d.displayItems, dialogDisplayItem{
+			kind: dkToggle, label: label,
+		})
+
+		if d.group2Expanded {
+			for i := d.preferredCount; i < len(d.options); i++ {
+				d.displayItems = append(d.displayItems, dialogDisplayItem{
+					kind: dkOption, optionIdx: i,
+				})
+			}
+		}
+	} else {
+		// Single group: all options
+		for i := range d.options {
+			d.displayItems = append(d.displayItems, dialogDisplayItem{
+				kind: dkOption, optionIdx: i,
+			})
+		}
+	}
+
+	// Remember option always at end
+	d.displayItems = append(d.displayItems, dialogDisplayItem{
+		kind: dkRemember,
+	})
+}
+
+// countOtherPlatforms returns the number of unique platforms in group 2.
+func (d *InstallLocationDialog) countOtherPlatforms() int {
+	seen := make(map[installer.Platform]bool)
+	for i := d.preferredCount; i < len(d.options); i++ {
+		seen[d.options[i].Location.Platform] = true
+	}
+	return len(seen)
+}
+
+// isInteractiveDialogItem returns true if the item can be navigated to.
+func isInteractiveDialogItem(kind dialogItemKind) bool {
+	return kind == dkOption || kind == dkToggle || kind == dkRemember
+}
+
 // SetWidth sets the dialog width.
 func (d *InstallLocationDialog) SetWidth(w int) {
 	d.width = w
 }
 
+// SetHeight sets the dialog height for viewport calculations.
+func (d *InstallLocationDialog) SetHeight(h int) {
+	d.height = h
+}
+
 // Update handles keyboard input for the dialog.
 func (d *InstallLocationDialog) Update(msg tea.KeyMsg) {
-	// Total items = options + 1 (remember checkbox)
-	totalItems := len(d.options) + 1
-
 	switch msg.Type {
 	case tea.KeyUp, tea.KeyShiftTab:
-		d.currentIndex--
-		if d.currentIndex < 0 {
-			d.currentIndex = totalItems - 1
-		}
-		d.onRememberOption = d.currentIndex == len(d.options)
+		d.moveCursor(-1)
 	case tea.KeyDown, tea.KeyTab:
-		d.currentIndex++
-		if d.currentIndex >= totalItems {
-			d.currentIndex = 0
-		}
-		d.onRememberOption = d.currentIndex == len(d.options)
+		d.moveCursor(1)
 	case tea.KeySpace:
-		// Toggle selection
-		if d.onRememberOption {
-			d.rememberLocations = !d.rememberLocations
-		} else if d.currentIndex >= 0 && d.currentIndex < len(d.options) {
-			d.options[d.currentIndex].Selected = !d.options[d.currentIndex].Selected
-		}
+		d.handleToggle()
 	case tea.KeyEnter:
 		if d.hasAnySelected() {
 			d.confirmed = true
@@ -109,45 +192,28 @@ func (d *InstallLocationDialog) Update(msg tea.KeyMsg) {
 		if msg.Type == tea.KeyRunes {
 			switch string(msg.Runes) {
 			case "j":
-				d.currentIndex++
-				if d.currentIndex >= totalItems {
-					d.currentIndex = 0
-				}
-				d.onRememberOption = d.currentIndex == len(d.options)
+				d.moveCursor(1)
 			case "k":
-				d.currentIndex--
-				if d.currentIndex < 0 {
-					d.currentIndex = totalItems - 1
-				}
-				d.onRememberOption = d.currentIndex == len(d.options)
+				d.moveCursor(-1)
 			case " ":
-				if d.onRememberOption {
-					d.rememberLocations = !d.rememberLocations
-				} else if d.currentIndex >= 0 && d.currentIndex < len(d.options) {
-					d.options[d.currentIndex].Selected = !d.options[d.currentIndex].Selected
-				}
+				d.handleToggle()
 			case "a":
-				// Select all
 				for i := range d.options {
 					d.options[i].Selected = true
 				}
 			case "n":
-				// Select none (then user must select at least one)
 				for i := range d.options {
 					d.options[i].Selected = false
 				}
 			case "g":
-				// Select all global locations
 				for i := range d.options {
 					d.options[i].Selected = d.options[i].Location.Scope == installer.ScopeGlobal
 				}
 			case "p":
-				// Select all project locations
 				for i := range d.options {
 					d.options[i].Selected = d.options[i].Location.Scope == installer.ScopeProject
 				}
 			case "r":
-				// Toggle remember locations
 				d.rememberLocations = !d.rememberLocations
 			}
 		}
@@ -156,28 +222,13 @@ func (d *InstallLocationDialog) Update(msg tea.KeyMsg) {
 
 // HandleKey processes string key for compatibility.
 func (d *InstallLocationDialog) HandleKey(key string) {
-	// Total items = options + 1 (remember checkbox)
-	totalItems := len(d.options) + 1
-
 	switch key {
 	case "up", "k":
-		d.currentIndex--
-		if d.currentIndex < 0 {
-			d.currentIndex = totalItems - 1
-		}
-		d.onRememberOption = d.currentIndex == len(d.options)
+		d.moveCursor(-1)
 	case "down", "j":
-		d.currentIndex++
-		if d.currentIndex >= totalItems {
-			d.currentIndex = 0
-		}
-		d.onRememberOption = d.currentIndex == len(d.options)
+		d.moveCursor(1)
 	case "space", " ":
-		if d.onRememberOption {
-			d.rememberLocations = !d.rememberLocations
-		} else if d.currentIndex >= 0 && d.currentIndex < len(d.options) {
-			d.options[d.currentIndex].Selected = !d.options[d.currentIndex].Selected
-		}
+		d.handleToggle()
 	case "enter":
 		if d.hasAnySelected() {
 			d.confirmed = true
@@ -187,6 +238,96 @@ func (d *InstallLocationDialog) HandleKey(key string) {
 	case "r":
 		d.rememberLocations = !d.rememberLocations
 	}
+}
+
+// moveCursor moves the cursor by delta, skipping non-interactive items.
+func (d *InstallLocationDialog) moveCursor(delta int) {
+	next := d.currentIndex + delta
+	for next >= 0 && next < len(d.displayItems) {
+		if isInteractiveDialogItem(d.displayItems[next].kind) {
+			d.currentIndex = next
+			d.ensureVisible()
+			return
+		}
+		next += delta
+	}
+	// Wrap around
+	if delta > 0 {
+		for i := 0; i < len(d.displayItems); i++ {
+			if isInteractiveDialogItem(d.displayItems[i].kind) {
+				d.currentIndex = i
+				d.ensureVisible()
+				return
+			}
+		}
+	} else {
+		for i := len(d.displayItems) - 1; i >= 0; i-- {
+			if isInteractiveDialogItem(d.displayItems[i].kind) {
+				d.currentIndex = i
+				d.ensureVisible()
+				return
+			}
+		}
+	}
+}
+
+// handleToggle handles space/enter on the current display item.
+func (d *InstallLocationDialog) handleToggle() {
+	if d.currentIndex < 0 || d.currentIndex >= len(d.displayItems) {
+		return
+	}
+	item := d.displayItems[d.currentIndex]
+	switch item.kind {
+	case dkOption:
+		d.options[item.optionIdx].Selected = !d.options[item.optionIdx].Selected
+	case dkToggle:
+		d.group2Expanded = !d.group2Expanded
+		d.buildDisplayItems()
+		// Keep cursor on toggle header
+		for i, di := range d.displayItems {
+			if di.kind == dkToggle {
+				d.currentIndex = i
+				break
+			}
+		}
+		d.ensureVisible()
+	case dkRemember:
+		d.rememberLocations = !d.rememberLocations
+	}
+}
+
+// ensureVisible adjusts scroll offset so the cursor is visible.
+func (d *InstallLocationDialog) ensureVisible() {
+	vpHeight := d.calcViewportHeight()
+	if vpHeight <= 0 || vpHeight >= len(d.displayItems) {
+		d.scrollOffset = 0
+		return
+	}
+	if d.currentIndex < d.scrollOffset {
+		d.scrollOffset = d.currentIndex
+	}
+	if d.currentIndex >= d.scrollOffset+vpHeight {
+		d.scrollOffset = d.currentIndex - vpHeight + 1
+	}
+}
+
+// calcViewportHeight returns the number of display items visible at once.
+func (d *InstallLocationDialog) calcViewportHeight() int {
+	if d.height <= 0 {
+		return len(d.displayItems) // No height constraint, show all
+	}
+	// Each option takes ~3 lines (name + desc + gap), headers take ~1-2 lines
+	// Account for title, subtitle, footer, borders, padding (~14 lines)
+	vpLines := d.height - 14
+	if vpLines < 10 {
+		vpLines = 10
+	}
+	// Estimate ~2 lines per display item on average
+	vpItems := vpLines / 2
+	if vpItems < 5 {
+		vpItems = 5
+	}
+	return vpItems
 }
 
 // hasAnySelected returns true if at least one option is selected.
@@ -230,12 +371,15 @@ func (d *InstallLocationDialog) Reset() {
 	d.currentIndex = 0
 	d.cancelled = false
 	d.confirmed = false
-	d.onRememberOption = false
 	d.rememberLocations = false
+	d.scrollOffset = 0
 	// Reset selections to default (global selected, project not)
 	for i := range d.options {
 		d.options[i].Selected = d.options[i].Location.Scope == installer.ScopeGlobal
 	}
+	// Collapse group 2 on reset
+	d.group2Expanded = false
+	d.buildDisplayItems()
 }
 
 // View renders the dialog.
@@ -275,76 +419,141 @@ func (d *InstallLocationDialog) View() string {
 	title := titleStyle.Render("Install Location")
 	subtitle := subtitleStyle.Render("Select where to install this skill (multi-select)")
 
-	// Render options
-	var optionViews []string
+	// Viewport for scrolling
+	vpHeight := d.calcViewportHeight()
+	start := d.scrollOffset
+	if start < 0 {
+		start = 0
+	}
+	end := start + vpHeight
+	if end > len(d.displayItems) {
+		end = len(d.displayItems)
+	}
 
-	for i, opt := range d.options {
-		isCurrent := i == d.currentIndex
+	// Render display items
+	var itemViews []string
 
-		// Checkbox
-		var checkbox string
-		if opt.Selected {
-			checkbox = lipgloss.NewStyle().Foreground(successColor).Render("☑")
-		} else {
-			checkbox = lipgloss.NewStyle().Foreground(mutedColor).Render("☐")
+	for idx := start; idx < end; idx++ {
+		item := d.displayItems[idx]
+		isCurrent := idx == d.currentIndex
+
+		switch item.kind {
+		case dkHeader:
+			headerStyle := lipgloss.NewStyle().
+				Foreground(accentColor).
+				Bold(true).
+				Width(contentWidth).
+				MarginTop(1)
+			itemViews = append(itemViews, headerStyle.Render(item.label))
+
+		case dkSeparator:
+			sepStyle := lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Width(contentWidth)
+			itemViews = append(itemViews, sepStyle.Render("───"))
+
+		case dkToggle:
+			arrow := "▶"
+			if d.group2Expanded {
+				arrow = "▼"
+			}
+			toggleStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(accentColor).
+				Width(contentWidth).
+				MarginTop(1)
+			if isCurrent {
+				toggleStyle = toggleStyle.
+					Foreground(goldColor).
+					Background(selectedBgColor).
+					Padding(0, 1)
+			}
+			itemViews = append(itemViews, toggleStyle.Render(arrow+" "+item.label))
+
+		case dkOption:
+			opt := d.options[item.optionIdx]
+
+			var checkbox string
+			if opt.Selected {
+				checkbox = lipgloss.NewStyle().Foreground(successColor).Render("☑")
+			} else {
+				checkbox = lipgloss.NewStyle().Foreground(mutedColor).Render("☐")
+			}
+
+			nameStyle := lipgloss.NewStyle().Foreground(textColor)
+			descStyle := lipgloss.NewStyle().Foreground(mutedColor).Italic(true)
+
+			if isCurrent {
+				nameStyle = nameStyle.Foreground(goldColor).Bold(true)
+			}
+
+			line := checkbox + " " + nameStyle.Render(opt.DisplayName)
+			desc := "    " + descStyle.Render(opt.Description)
+
+			optContent := lipgloss.JoinVertical(lipgloss.Left, line, desc)
+
+			optStyle := lipgloss.NewStyle().
+				Width(contentWidth).
+				Padding(0, 1)
+
+			if isCurrent {
+				optStyle = optStyle.Background(selectedBgColor)
+			}
+
+			itemViews = append(itemViews, optStyle.Render(optContent))
+
+		case dkRemember:
+			var rememberCheckbox string
+			if d.rememberLocations {
+				rememberCheckbox = lipgloss.NewStyle().Foreground(successColor).Render("☑")
+			} else {
+				rememberCheckbox = lipgloss.NewStyle().Foreground(mutedColor).Render("☐")
+			}
+
+			rememberNameStyle := lipgloss.NewStyle().Foreground(textColor)
+			rememberDescStyle := lipgloss.NewStyle().Foreground(mutedColor).Italic(true)
+
+			if isCurrent {
+				rememberNameStyle = rememberNameStyle.Foreground(goldColor).Bold(true)
+			}
+
+			rememberLine := rememberCheckbox + " " + rememberNameStyle.Render("Remember these locations")
+			rememberDesc := "    " + rememberDescStyle.Render("Skip this dialog for future installs")
+
+			rememberContent := lipgloss.JoinVertical(lipgloss.Left, rememberLine, rememberDesc)
+
+			rememberStyle := lipgloss.NewStyle().
+				Width(contentWidth).
+				Padding(0, 1).
+				MarginTop(1)
+
+			if isCurrent {
+				rememberStyle = rememberStyle.Background(selectedBgColor)
+			}
+
+			itemViews = append(itemViews, rememberStyle.Render(rememberContent))
 		}
+	}
 
-		// Option text
-		nameStyle := lipgloss.NewStyle().Foreground(textColor)
-		descStyle := lipgloss.NewStyle().Foreground(mutedColor).Italic(true)
+	options := lipgloss.JoinVertical(lipgloss.Left, itemViews...)
 
-		if isCurrent {
-			nameStyle = nameStyle.Foreground(goldColor).Bold(true)
-		}
-
-		line := checkbox + " " + nameStyle.Render(opt.DisplayName)
-		desc := "    " + descStyle.Render(opt.Description)
-
-		optContent := lipgloss.JoinVertical(lipgloss.Left, line, desc)
-
-		optStyle := lipgloss.NewStyle().
+	// Scroll indicators
+	var scrollUp string
+	if start > 0 {
+		scrollUp = lipgloss.NewStyle().
+			Foreground(mutedColor).
 			Width(contentWidth).
-			Padding(0, 1)
-
-		if isCurrent {
-			optStyle = optStyle.Background(selectedBgColor)
-		}
-
-		optionViews = append(optionViews, optStyle.Render(optContent))
+			Align(lipgloss.Center).
+			Render("↑ more above")
 	}
-
-	options := lipgloss.JoinVertical(lipgloss.Left, optionViews...)
-
-	// Remember locations checkbox
-	var rememberCheckbox string
-	if d.rememberLocations {
-		rememberCheckbox = lipgloss.NewStyle().Foreground(successColor).Render("☑")
-	} else {
-		rememberCheckbox = lipgloss.NewStyle().Foreground(mutedColor).Render("☐")
+	var scrollDown string
+	if end < len(d.displayItems) {
+		scrollDown = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Width(contentWidth).
+			Align(lipgloss.Center).
+			Render("↓ more below")
 	}
-
-	rememberNameStyle := lipgloss.NewStyle().Foreground(textColor)
-	rememberDescStyle := lipgloss.NewStyle().Foreground(mutedColor).Italic(true)
-
-	if d.onRememberOption {
-		rememberNameStyle = rememberNameStyle.Foreground(goldColor).Bold(true)
-	}
-
-	rememberLine := rememberCheckbox + " " + rememberNameStyle.Render("Remember these locations")
-	rememberDesc := "    " + rememberDescStyle.Render("Skip this dialog for future installs")
-
-	rememberContent := lipgloss.JoinVertical(lipgloss.Left, rememberLine, rememberDesc)
-
-	rememberStyle := lipgloss.NewStyle().
-		Width(contentWidth).
-		Padding(0, 1).
-		MarginTop(1)
-
-	if d.onRememberOption {
-		rememberStyle = rememberStyle.Background(selectedBgColor)
-	}
-
-	rememberOption := rememberStyle.Render(rememberContent)
 
 	// Validation message
 	var validationMsg string
@@ -376,7 +585,14 @@ func (d *InstallLocationDialog) View() string {
 		Padding(1, 2).
 		Width(dialogWidth)
 
-	parts := []string{title, subtitle, "", options, rememberOption}
+	parts := []string{title, subtitle, ""}
+	if scrollUp != "" {
+		parts = append(parts, scrollUp)
+	}
+	parts = append(parts, options)
+	if scrollDown != "" {
+		parts = append(parts, scrollDown)
+	}
 	if validationMsg != "" {
 		parts = append(parts, "", validationMsg)
 	}
@@ -389,15 +605,23 @@ func (d *InstallLocationDialog) View() string {
 
 // CenteredView renders the dialog centered within the given dimensions.
 func (d *InstallLocationDialog) CenteredView(width, height int) string {
+	d.height = height
 	dialog := d.View()
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, dialog)
 }
 
 // NewInstallLocationDialogWithPrefs creates a dialog with merged preferences + detection.
-// Saved agents and newly detected agents are pre-selected (global scope).
-func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedPrefs []string, detectionResults []detect.DetectionResult) *InstallLocationDialog {
+// savedScopes maps platform agent_id → preferred scope ("global" or "project").
+// Group 1 = preferred (saved + detected), Group 2 = all others (collapsed).
+func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScopes map[string]string, detectionResults []detect.DetectionResult) *InstallLocationDialog {
+	// Build plain saved list for merge ordering
+	var plainSaved []string
+	for p := range savedScopes {
+		plainSaved = append(plainSaved, p)
+	}
+
 	// Merge and reorder platforms
-	merged := mergePreferencesWithDetected(platforms, savedPrefs, detectionResults)
+	merged := mergePreferencesWithDetected(platforms, plainSaved, detectionResults)
 
 	dialog := &InstallLocationDialog{
 		platforms: merged,
@@ -405,28 +629,44 @@ func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedPref
 	}
 	dialog.buildOptions()
 
-	// Pre-select: saved and detected platforms get global selected
-	savedSet := make(map[string]bool)
-	for _, s := range savedPrefs {
-		savedSet[s] = true
-	}
+	// Determine preferred count: saved + detected platforms
 	detectedSet := make(map[string]bool)
-	for _, d := range detectionResults {
-		if d.Detected {
-			detectedSet[string(d.Platform)] = true
+	for _, dr := range detectionResults {
+		if dr.Detected {
+			detectedSet[string(dr.Platform)] = true
 		}
 	}
 
+	// Count options that belong to preferred platforms
+	preferredCount := 0
+	for _, opt := range dialog.options {
+		platformID := string(opt.Location.Platform)
+		_, isSaved := savedScopes[platformID]
+		if isSaved || detectedSet[platformID] {
+			preferredCount++
+		} else {
+			break // Options are ordered: preferred first, then others
+		}
+	}
+	dialog.preferredCount = preferredCount
+
+	// Pre-select: use saved scope for saved platforms, global for detected-only
 	for i := range dialog.options {
 		platformID := string(dialog.options[i].Location.Platform)
-		isPreferred := savedSet[platformID] || detectedSet[platformID]
-		if dialog.options[i].Location.Scope == installer.ScopeGlobal {
-			dialog.options[i].Selected = isPreferred
+		optScope := string(dialog.options[i].Location.Scope)
+
+		if prefScope, isSaved := savedScopes[platformID]; isSaved {
+			// Match the saved scope for this platform
+			dialog.options[i].Selected = (optScope == prefScope)
+		} else if detectedSet[platformID] {
+			// Detected but not saved: default to global
+			dialog.options[i].Selected = (dialog.options[i].Location.Scope == installer.ScopeGlobal)
 		} else {
 			dialog.options[i].Selected = false
 		}
 	}
 
+	dialog.buildDisplayItems()
 	return dialog
 }
 

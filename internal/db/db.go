@@ -105,6 +105,10 @@ func New(cfg Config) (*DB, error) {
 	// Migrate agent preferences from UserState.AITools (one-time, idempotent)
 	_ = wrapped.MigrateFromAITools()
 
+	// Clean up any agent_preference records with "platform:scope" format agent_ids
+	// (created by a bug that encoded scope into the agent_id primary key)
+	_ = wrapped.CleanupScopedAgentIDs()
+
 	return wrapped, nil
 }
 

@@ -577,12 +577,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.showLocationDialog = false
 
-				// Persist newly selected platforms to agent_preferences
-				var newAgentIDs []string
+				// Persist newly selected platforms with scope to agent_preferences
+				agentScopes := make(map[string]string)
 				for _, loc := range selectedLocations {
-					newAgentIDs = append(newAgentIDs, string(loc.Platform))
+					agentScopes[string(loc.Platform)] = string(loc.Scope)
 				}
-				_ = m.db.EnableAdditionalAgents(newAgentIDs)
+				_ = m.db.EnableAgentsWithScopes(agentScopes)
 
 				// Check if this is from onboarding flow (batch install)
 				if len(m.pendingInstallSkills) > 0 {
@@ -785,12 +785,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.detailView.SetInstallingState(false)
 
 					// Create dialog with saved preferences + detection
-					savedAgents, _ := m.db.GetEnabledAgents()
+					savedScopes, _ := m.db.GetEnabledAgentScopes()
 					detectionResults := detect.DetectAll()
 					allPlatforms := installer.AllPlatforms()
 
 					// Fall back to legacy if no saved prefs and no detection
-					if len(savedAgents) == 0 && len(detectionResults) == 0 {
+					if len(savedScopes) == 0 && len(detectionResults) == 0 {
 						// Try legacy UserState
 						userState, _ := m.db.GetUserState()
 						platforms := parsePlatformsFromState(userState)
@@ -810,7 +810,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.locationDialog = components.NewInstallLocationDialog(platforms)
 					} else {
 						m.locationDialog = components.NewInstallLocationDialogWithPrefs(
-							allPlatforms, savedAgents, detectionResults,
+							allPlatforms, savedScopes, detectionResults,
 						)
 					}
 					m.locationDialog.SetWidth(m.width)

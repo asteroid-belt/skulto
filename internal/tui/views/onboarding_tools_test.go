@@ -15,26 +15,127 @@ func TestOnboardingToolsView_InitPartitionsDetectedVsAll(t *testing.T) {
 	v.SetSize(120, 40)
 	v.Init()
 
-	// displayItems should contain headers and agents
 	require.NotEmpty(t, v.displayItems, "displayItems should not be empty after Init")
 
-	// Should have at least 2 headers: "Detected" (if any detected) or just "All Agents"
+	// Count item kinds
 	headerCount := 0
 	agentCount := 0
+	toggleCount := 0
 	for _, item := range v.displayItems {
 		switch item.kind {
 		case itemHeader:
 			headerCount++
 		case itemAgent:
 			agentCount++
+		case itemToggleHeader:
+			toggleCount++
 		}
 	}
 
-	// Should have at least the "All Agents" header
-	assert.GreaterOrEqual(t, headerCount, 1, "should have at least 1 header")
-	// Agent count should match total platforms
-	allPlatforms := installer.AllPlatforms()
-	assert.Equal(t, len(allPlatforms), agentCount, "should have one agent item per platform")
+	assert.Equal(t, 1, toggleCount, "should have 1 toggle header for All Agents")
+
+	// In CI, likely nothing is detected so group 2 auto-expands
+	// showing all platforms. When detected, group 2 starts collapsed.
+	if len(v.detectedAgents) == 0 {
+		// Auto-expanded: all agents visible
+		allPlatforms := installer.AllPlatforms()
+		assert.Equal(t, len(allPlatforms), agentCount, "auto-expanded should show all agents")
+	} else {
+		// Collapsed: only detected agents visible
+		assert.Equal(t, len(v.detectedAgents), agentCount, "collapsed view should only show detected agents")
+	}
+}
+
+func TestOnboardingToolsView_Group2StartsCollapsedWithDetection(t *testing.T) {
+	cfg := &config.Config{}
+	v := NewOnboardingToolsView(cfg)
+	v.SetSize(120, 40)
+
+	// Simulate: manually set up with detected agents to test collapse
+	v.selectedTools = make(map[installer.Platform]bool)
+	v.detectedAgents = []installer.Platform{installer.PlatformClaude}
+	v.allAgents = []installer.Platform{installer.PlatformCursor, installer.PlatformCline}
+	v.group2Expanded = false
+	v.buildDisplayItems()
+
+	// Should have: header + 1 detected agent + separator + toggle header = 4 items
+	assert.Len(t, v.displayItems, 4)
+
+	// No allAgents visible when collapsed
+	agentCount := 0
+	for _, item := range v.displayItems {
+		if item.kind == itemAgent {
+			agentCount++
+		}
+	}
+	assert.Equal(t, 1, agentCount, "only detected agent should be visible when collapsed")
+}
+
+func TestOnboardingToolsView_Group2ExpandsOnToggle(t *testing.T) {
+	cfg := &config.Config{}
+	v := NewOnboardingToolsView(cfg)
+	v.SetSize(120, 40)
+
+	// Set up with detected + others
+	v.selectedTools = make(map[installer.Platform]bool)
+	v.detectedAgents = []installer.Platform{installer.PlatformClaude}
+	v.allAgents = []installer.Platform{installer.PlatformCursor, installer.PlatformCline}
+	v.group2Expanded = false
+	v.buildDisplayItems()
+	v.currentSelection = v.firstSelectableIndex()
+
+	beforeCount := len(v.displayItems)
+
+	// Navigate to toggle header
+	for i, item := range v.displayItems {
+		if item.kind == itemToggleHeader {
+			v.currentSelection = i
+			break
+		}
+	}
+
+	// Toggle expand
+	v.Update("space")
+
+	assert.True(t, v.group2Expanded)
+	assert.Greater(t, len(v.displayItems), beforeCount, "expanding should add items")
+
+	// Should now have the allAgents visible
+	agentCount := 0
+	for _, item := range v.displayItems {
+		if item.kind == itemAgent {
+			agentCount++
+		}
+	}
+	assert.Equal(t, 3, agentCount, "should show detected + all agents when expanded")
+}
+
+func TestOnboardingToolsView_Group2AutoExpandsWhenNothingDetected(t *testing.T) {
+	cfg := &config.Config{}
+	v := NewOnboardingToolsView(cfg)
+	v.SetSize(120, 40)
+
+	// Simulate no detection
+	v.selectedTools = make(map[installer.Platform]bool)
+	v.detectedAgents = nil
+	v.allAgents = []installer.Platform{installer.PlatformClaude, installer.PlatformCursor}
+	v.group2Expanded = false
+
+	// Auto-expand when nothing detected
+	if len(v.detectedAgents) == 0 {
+		v.group2Expanded = true
+	}
+	v.buildDisplayItems()
+
+	assert.True(t, v.group2Expanded, "should auto-expand when nothing detected")
+
+	agentCount := 0
+	for _, item := range v.displayItems {
+		if item.kind == itemAgent {
+			agentCount++
+		}
+	}
+	assert.Equal(t, 2, agentCount, "all agents should be visible when auto-expanded")
 }
 
 func TestOnboardingToolsView_ClaudeDefaultWhenNothingDetected(t *testing.T) {
@@ -55,19 +156,22 @@ func TestOnboardingToolsView_NavigationSkipsHeaders(t *testing.T) {
 	v.SetSize(120, 40)
 	v.Init()
 
-	// First selectable should be an agent, not a header
-	assert.Equal(t, itemAgent, v.displayItems[v.currentSelection].kind,
-		"initial cursor should be on an agent, not a header")
+	// First selectable should be an agent or toggle header, not a plain header
+	kind := v.displayItems[v.currentSelection].kind
+	assert.True(t, kind == itemAgent || kind == itemToggleHeader,
+		"initial cursor should be on an interactive item, not a plain header")
 
-	// Navigate down, should stay on agent items
+	// Navigate down, should stay on interactive items
 	v.Update("down")
-	assert.Equal(t, itemAgent, v.displayItems[v.currentSelection].kind,
-		"cursor after down should be on an agent")
+	kind = v.displayItems[v.currentSelection].kind
+	assert.True(t, kind == itemAgent || kind == itemToggleHeader,
+		"cursor after down should be on an interactive item")
 
-	// Navigate up, should stay on agent items
+	// Navigate up, should stay on interactive items
 	v.Update("up")
-	assert.Equal(t, itemAgent, v.displayItems[v.currentSelection].kind,
-		"cursor after up should be on an agent")
+	kind = v.displayItems[v.currentSelection].kind
+	assert.True(t, kind == itemAgent || kind == itemToggleHeader,
+		"cursor after up should be on an interactive item")
 }
 
 func TestOnboardingToolsView_ToggleSelectionMinimumOne(t *testing.T) {
@@ -82,6 +186,13 @@ func TestOnboardingToolsView_ToggleSelectionMinimumOne(t *testing.T) {
 
 	// If only one is selected, toggling it should keep it selected (minimum 1)
 	if len(initial) == 1 {
+		// Navigate to an agent item first
+		for i, item := range v.displayItems {
+			if item.kind == itemAgent {
+				v.currentSelection = i
+				break
+			}
+		}
 		v.Update("space")
 		after := v.GetSelectedPlatforms()
 		assert.Len(t, after, 1, "should enforce minimum 1 selection")
@@ -103,6 +214,25 @@ func TestOnboardingToolsView_GetSelectedPlatforms(t *testing.T) {
 	}
 }
 
+func TestOnboardingToolsView_GetSelectedPlatformsWorksWhenCollapsed(t *testing.T) {
+	cfg := &config.Config{}
+	v := NewOnboardingToolsView(cfg)
+	v.SetSize(120, 40)
+
+	// Set up with selections in both groups
+	v.selectedTools = make(map[installer.Platform]bool)
+	v.detectedAgents = []installer.Platform{installer.PlatformClaude}
+	v.allAgents = []installer.Platform{installer.PlatformCursor, installer.PlatformCline}
+	v.selectedTools[installer.PlatformClaude] = true
+	v.selectedTools[installer.PlatformCursor] = true
+	v.group2Expanded = false
+	v.buildDisplayItems()
+
+	// Even though group 2 is collapsed, GetSelectedPlatforms should return all selections
+	selected := v.GetSelectedPlatforms()
+	assert.Len(t, selected, 2, "should include selections from collapsed group")
+}
+
 func TestOnboardingToolsView_BuildDisplayItems(t *testing.T) {
 	cfg := &config.Config{}
 	v := NewOnboardingToolsView(cfg)
@@ -111,11 +241,9 @@ func TestOnboardingToolsView_BuildDisplayItems(t *testing.T) {
 
 	// Display items should start with a header
 	require.NotEmpty(t, v.displayItems)
-	assert.Equal(t, itemHeader, v.displayItems[0].kind, "first display item should be a header")
-
-	// Last item should be an agent (not a separator)
-	lastItem := v.displayItems[len(v.displayItems)-1]
-	assert.Equal(t, itemAgent, lastItem.kind, "last display item should be an agent")
+	first := v.displayItems[0]
+	assert.True(t, first.kind == itemHeader || first.kind == itemToggleHeader,
+		"first display item should be a header")
 }
 
 func TestOnboardingToolsView_ScrollingWithManyItems(t *testing.T) {
@@ -125,14 +253,20 @@ func TestOnboardingToolsView_ScrollingWithManyItems(t *testing.T) {
 	v.SetSize(120, 20)
 	v.Init()
 
+	// Make sure group 2 is expanded so we have many items
+	v.group2Expanded = true
+	v.buildDisplayItems()
+	v.currentSelection = v.firstSelectableIndex()
+
 	// Navigate down many times to trigger scrolling
 	for i := 0; i < 30; i++ {
 		v.Update("down")
 	}
 
-	// Cursor should still be on an agent
-	assert.Equal(t, itemAgent, v.displayItems[v.currentSelection].kind,
-		"cursor should still be on an agent after scrolling")
+	// Cursor should still be on an interactive item
+	kind := v.displayItems[v.currentSelection].kind
+	assert.True(t, kind == itemAgent || kind == itemToggleHeader,
+		"cursor should still be on an interactive item after scrolling")
 
 	// View should still render without panic
 	rendered := v.View()

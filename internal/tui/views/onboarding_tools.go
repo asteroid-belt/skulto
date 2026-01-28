@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/asteroid-belt/skulto/internal/config"
@@ -14,9 +15,10 @@ import (
 type itemKind int
 
 const (
-	itemHeader    itemKind = iota // Group header ("Detected on your system", "All Agents")
-	itemAgent                     // Selectable agent entry
-	itemSeparator                 // Visual separator between groups
+	itemHeader       itemKind = iota // Group header ("Detected on your system")
+	itemAgent                        // Selectable agent entry
+	itemSeparator                    // Visual separator between groups
+	itemToggleHeader                 // Collapsible group header (interactive)
 )
 
 // displayItem represents a single row in the grouped list.
@@ -27,7 +29,7 @@ type displayItem struct {
 }
 
 // OnboardingToolsView displays AI tool detection and selection
-// with grouped display: detected agents at top, all others below.
+// with grouped display: detected agents at top, all others below in a collapsible group.
 type OnboardingToolsView struct {
 	cfg              *config.Config
 	detectionResults []detect.DetectionResult
@@ -38,6 +40,7 @@ type OnboardingToolsView struct {
 	detectedAgents []installer.Platform // Detected, shown first
 	allAgents      []installer.Platform // All others, alphabetical
 	displayItems   []displayItem        // Flattened for rendering
+	group2Expanded bool                 // Whether "All Agents" group is expanded
 
 	// Scrolling
 	scrollOffset   int
@@ -62,6 +65,7 @@ func (v *OnboardingToolsView) Init() {
 	v.detectedAgents = nil
 	v.allAgents = nil
 	v.scrollOffset = 0
+	v.group2Expanded = false
 
 	// Partition platforms into detected vs all-others
 	detectedMap := make(map[installer.Platform]bool)
@@ -82,6 +86,11 @@ func (v *OnboardingToolsView) Init() {
 	sort.Slice(v.allAgents, func(i, j int) bool {
 		return v.allAgents[i].Info().Name < v.allAgents[j].Info().Name
 	})
+
+	// Auto-expand group 2 if nothing was detected
+	if len(v.detectedAgents) == 0 {
+		v.group2Expanded = true
+	}
 
 	// Build display items
 	v.buildDisplayItems()
@@ -111,20 +120,25 @@ func (v *OnboardingToolsView) buildDisplayItems() {
 		v.displayItems = append(v.displayItems, displayItem{kind: itemSeparator})
 	}
 
+	// Collapsible "All Agents" group
+	label := fmt.Sprintf("All Agents (%d)", len(v.allAgents))
 	v.displayItems = append(v.displayItems, displayItem{
-		kind: itemHeader, label: "All Agents",
+		kind: itemToggleHeader, label: label,
 	})
-	for _, p := range v.allAgents {
-		v.displayItems = append(v.displayItems, displayItem{
-			kind: itemAgent, platform: p,
-		})
+
+	if v.group2Expanded {
+		for _, p := range v.allAgents {
+			v.displayItems = append(v.displayItems, displayItem{
+				kind: itemAgent, platform: p,
+			})
+		}
 	}
 }
 
-// firstSelectableIndex returns the index of the first agent item.
+// firstSelectableIndex returns the index of the first interactive item.
 func (v *OnboardingToolsView) firstSelectableIndex() int {
 	for i, item := range v.displayItems {
-		if item.kind == itemAgent {
+		if item.kind == itemAgent || item.kind == itemToggleHeader {
 			return i
 		}
 	}
@@ -147,12 +161,24 @@ func (v *OnboardingToolsView) Update(key string) (bool, bool) {
 	case "space", "enter":
 		if v.currentSelection >= 0 && v.currentSelection < len(v.displayItems) {
 			item := v.displayItems[v.currentSelection]
-			if item.kind == itemAgent {
+			switch item.kind {
+			case itemAgent:
 				v.selectedTools[item.platform] = !v.selectedTools[item.platform]
 				// Enforce minimum 1 selection
 				if v.countSelected() == 0 {
 					v.selectedTools[item.platform] = true
 				}
+			case itemToggleHeader:
+				v.group2Expanded = !v.group2Expanded
+				v.buildDisplayItems()
+				// Keep cursor on toggle header
+				for i, di := range v.displayItems {
+					if di.kind == itemToggleHeader {
+						v.currentSelection = i
+						break
+					}
+				}
+				v.ensureVisible()
 			}
 		}
 	case "c":
@@ -163,11 +189,12 @@ func (v *OnboardingToolsView) Update(key string) (bool, bool) {
 	return false, false
 }
 
-// moveCursor moves the cursor by delta, skipping non-agent items.
+// moveCursor moves the cursor by delta, skipping non-interactive items.
 func (v *OnboardingToolsView) moveCursor(delta int) {
 	next := v.currentSelection + delta
 	for next >= 0 && next < len(v.displayItems) {
-		if v.displayItems[next].kind == itemAgent {
+		kind := v.displayItems[next].kind
+		if kind == itemAgent || kind == itemToggleHeader {
 			v.currentSelection = next
 			v.ensureVisible()
 			return
@@ -202,10 +229,15 @@ func (v *OnboardingToolsView) calcViewportHeight() int {
 // GetSelectedPlatforms returns the list of selected platforms.
 func (v *OnboardingToolsView) GetSelectedPlatforms() []installer.Platform {
 	var platforms []installer.Platform
-	// Return in display order
-	for _, item := range v.displayItems {
-		if item.kind == itemAgent && v.selectedTools[item.platform] {
-			platforms = append(platforms, item.platform)
+	// Return from both groups regardless of collapse state
+	for _, p := range v.detectedAgents {
+		if v.selectedTools[p] {
+			platforms = append(platforms, p)
+		}
+	}
+	for _, p := range v.allAgents {
+		if v.selectedTools[p] {
+			platforms = append(platforms, p)
 		}
 	}
 	return platforms
@@ -285,6 +317,23 @@ func (v *OnboardingToolsView) View() string {
 			sepStyle := lipgloss.NewStyle().
 				Foreground(theme.Current.TextMuted)
 			itemViews = append(itemViews, sepStyle.Render("───"))
+
+		case itemToggleHeader:
+			arrow := "▶"
+			if v.group2Expanded {
+				arrow = "▼"
+			}
+			headerStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(theme.Current.Primary).
+				MarginTop(1)
+			if i == v.currentSelection {
+				headerStyle = headerStyle.
+					Background(theme.Current.Surface).
+					Foreground(theme.Current.Accent).
+					Padding(0, 1)
+			}
+			itemViews = append(itemViews, headerStyle.Render(arrow+" "+item.label))
 
 		case itemAgent:
 			selected := v.selectedTools[item.platform]

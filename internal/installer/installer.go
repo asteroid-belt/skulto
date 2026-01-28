@@ -9,6 +9,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/log"
 	"github.com/asteroid-belt/skulto/internal/models"
 )
 
@@ -200,6 +201,9 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 	var createdInstalls []models.SkillInstallation
 	var lastErr error
 
+	// Track directories created by MkdirAll for cleanup on total failure
+	createdDirs := make(map[string]bool)
+
 	for _, loc := range locations {
 		targetPath := loc.GetSkillPath(skill.Slug)
 		if targetPath == "" {
@@ -208,9 +212,14 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 
 		// Ensure target parent directory exists
 		targetDir := filepath.Dir(targetPath)
+		dirExisted := exists(targetDir)
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Printf("skulto: mkdir failed for %s: %v", targetDir, err)
 			lastErr = err
 			continue
+		}
+		if !dirExisted {
+			createdDirs[targetDir] = true
 		}
 
 		// Remove existing symlink or directory
@@ -223,6 +232,7 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 
 		// Create symlink: targetPath -> sourcePath
 		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			log.Printf("skulto: symlink failed %s → %s: %v", sourcePath, targetPath, err)
 			lastErr = err
 			continue
 		}
@@ -237,6 +247,7 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 		}
 		if err := i.db.AddInstallation(&install); err != nil {
 			// Rollback symlink
+			log.Printf("skulto: AddInstallation failed for %s, rolling back symlink: %v", targetPath, err)
 			_ = os.Remove(targetPath)
 			lastErr = err
 			continue
@@ -245,8 +256,11 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 		createdInstalls = append(createdInstalls, install)
 	}
 
-	// If no locations succeeded, return error
+	// If no locations succeeded, clean up empty directories and return error
 	if len(createdInstalls) == 0 {
+		for dir := range createdDirs {
+			_ = os.Remove(dir) // only removes if empty
+		}
 		if lastErr != nil {
 			return fmt.Errorf("failed to install to any location: %w", lastErr)
 		}
@@ -291,6 +305,9 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 	var createdInstalls []models.SkillInstallation
 	var lastErr error
 
+	// Track directories created by MkdirAll for cleanup on total failure
+	createdDirs := make(map[string]bool)
+
 	for _, loc := range locations {
 		targetPath := loc.GetSkillPath(skill.Slug)
 		if targetPath == "" {
@@ -299,9 +316,14 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 
 		// Ensure target parent directory exists
 		targetDir := filepath.Dir(targetPath)
+		dirExisted := exists(targetDir)
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Printf("skulto: mkdir failed for %s: %v", targetDir, err)
 			lastErr = err
 			continue
+		}
+		if !dirExisted {
+			createdDirs[targetDir] = true
 		}
 
 		// Remove existing symlink or directory
@@ -314,6 +336,7 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 
 		// Create symlink: targetPath -> sourcePath
 		if err := os.Symlink(sourcePath, targetPath); err != nil {
+			log.Printf("skulto: symlink failed %s → %s: %v", sourcePath, targetPath, err)
 			lastErr = err
 			continue
 		}
@@ -328,6 +351,7 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 		}
 		if err := i.db.AddInstallation(&install); err != nil {
 			// Rollback symlink
+			log.Printf("skulto: AddInstallation failed for %s, rolling back symlink: %v", targetPath, err)
 			_ = os.Remove(targetPath)
 			lastErr = err
 			continue
@@ -336,8 +360,11 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 		createdInstalls = append(createdInstalls, install)
 	}
 
-	// If no locations succeeded, return error
+	// If no locations succeeded, clean up empty directories and return error
 	if len(createdInstalls) == 0 {
+		for dir := range createdDirs {
+			_ = os.Remove(dir) // only removes if empty
+		}
 		if lastErr != nil {
 			return fmt.Errorf("failed to install to any location: %w", lastErr)
 		}

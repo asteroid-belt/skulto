@@ -113,6 +113,98 @@ func (db *DB) EnableAdditionalAgents(agentIDs []string) error {
 	return nil
 }
 
+// EnableAgentsWithScopes enables agents and records their preferred scopes.
+// Each entry maps a platform agent_id to its preferred scope ("global" or "project").
+func (db *DB) EnableAgentsWithScopes(agentScopes map[string]string) error {
+	if len(agentScopes) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	for agentID, scope := range agentScopes {
+		var existing models.AgentPreference
+		result := db.Where("agent_id = ?", agentID).First(&existing)
+		if result.Error != nil {
+			pref := models.AgentPreference{
+				AgentID:        agentID,
+				Enabled:        true,
+				PreferredScope: scope,
+				SelectedAt:     &now,
+			}
+			if err := db.Create(&pref).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := db.Model(&existing).Updates(map[string]any{
+				"enabled":         true,
+				"preferred_scope": scope,
+				"selected_at":     &now,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// GetEnabledAgentScopes returns enabled agent IDs mapped to their preferred scope.
+// Agents without a preferred_scope default to "global".
+func (db *DB) GetEnabledAgentScopes() (map[string]string, error) {
+	var prefs []models.AgentPreference
+	if err := db.Where("enabled = ?", true).Find(&prefs).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(prefs))
+	for _, p := range prefs {
+		scope := p.PreferredScope
+		if scope == "" {
+			scope = "global"
+		}
+		result[p.AgentID] = scope
+	}
+	return result, nil
+}
+
+// CleanupScopedAgentIDs migrates scope info from "platform:scope" records into
+// the plain "platform" record's preferred_scope column, then removes the
+// "platform:scope" duplicates.
+func (db *DB) CleanupScopedAgentIDs() error {
+	var scoped []models.AgentPreference
+	if err := db.Where("agent_id LIKE '%:%'").Find(&scoped).Error; err != nil {
+		return err
+	}
+	if len(scoped) == 0 {
+		return nil
+	}
+
+	for _, rec := range scoped {
+		// Parse "platform:scope" → platform, scope
+		parts := splitAgentID(rec.AgentID)
+		if len(parts) != 2 {
+			continue
+		}
+		platformID, scope := parts[0], parts[1]
+
+		// Update the plain platform record with the scope
+		db.Model(&models.AgentPreference{}).
+			Where("agent_id = ?", platformID).
+			Update("preferred_scope", scope)
+	}
+
+	// Remove all "platform:scope" records
+	return db.Where("agent_id LIKE '%:%'").Delete(&models.AgentPreference{}).Error
+}
+
+// splitAgentID splits "platform:scope" into ["platform", "scope"].
+func splitAgentID(id string) []string {
+	for i, c := range id {
+		if c == ':' {
+			return []string{id[:i], id[i+1:]}
+		}
+	}
+	return []string{id}
+}
+
 // UpdateDetectionState updates detected status for agents after detection.
 func (db *DB) UpdateDetectionState(detected map[string]bool) error {
 	now := time.Now()

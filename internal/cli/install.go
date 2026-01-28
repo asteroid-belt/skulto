@@ -120,56 +120,60 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	return runInstallBySlug(ctx, service, input)
 }
 
-func runInstallBySlug(ctx context.Context, service *installer.InstallService, slug string) error {
+// selectPlatformsAndScope resolves the platforms and scopes for installation.
+// It shows interactive prompts when needed and returns the resolved options.
+// If all platforms are already installed for the given slug, it prints a message and returns nil opts.
+func selectPlatformsAndScope(service *installer.InstallService, ctx context.Context, slug string) (*installer.InstallOptions, error) {
 	// Detect platforms
 	platforms, err := service.DetectPlatforms(ctx)
 	if err != nil {
-		return trackCLIError("install", fmt.Errorf("detect platforms: %w", err))
+		return nil, fmt.Errorf("detect platforms: %w", err)
 	}
 
 	// Get current install locations for this skill
-	installedLocations, err := service.GetInstallLocations(ctx, slug)
-	if err != nil {
-		// Skill might not exist yet, continue with empty installed list
-		installedLocations = nil
+	var installedLocations []installer.InstallLocation
+	if slug != "" {
+		installedLocations, err = service.GetInstallLocations(ctx, slug)
+		if err != nil {
+			installedLocations = nil
+		}
 	}
 
 	// Determine selected platforms
 	selectedPlatforms := installPlatforms
 
 	if !installYes && len(selectedPlatforms) == 0 {
-		// Interactive mode - show platform selector with installed info
 		if !isInteractive() {
-			return trackCLIError("install", fmt.Errorf("interactive mode requires a terminal, use -y flag"))
+			return nil, fmt.Errorf("interactive mode requires a terminal, use -y flag")
 		}
 
-		result, err := prompts.RunPlatformSelectorWithInstalled(platforms, installedLocations, installPlatforms)
+		result, err := prompts.RunGroupedPlatformSelector(platforms, installedLocations, installPlatforms)
 		if err != nil {
-			return trackCLIError("install", fmt.Errorf("platform selection: %w", err))
+			return nil, fmt.Errorf("platform selection: %w", err)
 		}
 
-		// Handle fully installed case
 		if result.AllAlreadyInstalled {
-			fmt.Printf("✓ %s is already installed to all detected platforms.\n\n", slug)
-			fmt.Println("Installed locations:")
-			for _, loc := range installedLocations {
-				fmt.Printf("  • %s (%s)\n", loc.Platform, loc.Scope)
+			if slug != "" {
+				fmt.Printf("✓ %s is already installed to all detected platforms.\n\n", slug)
+				fmt.Println("Installed locations:")
+				for _, loc := range installedLocations {
+					fmt.Printf("  • %s (%s)\n", loc.Platform, loc.Scope)
+				}
+				fmt.Printf("\nTo install to additional platforms, use: skulto install %s -p <platform>\n", slug)
+				fmt.Printf("To remove from locations, use: skulto uninstall %s\n", slug)
 			}
-			fmt.Printf("\nTo install to additional platforms, use: skulto install %s -p <platform>\n", slug)
-			fmt.Printf("To remove from locations, use: skulto uninstall %s\n", slug)
-			return nil
+			return nil, nil // All installed, nothing to do
 		}
 
 		selectedPlatforms = result.Selected
 	}
 
 	if len(selectedPlatforms) == 0 {
-		// Default to detected platforms (excluding already installed)
 		selectedPlatforms = prompts.GetDefaultSelectablePlatforms(platforms, installedLocations)
 	}
 	if len(selectedPlatforms) == 0 {
 		fmt.Println("No platforms selected. Nothing to install.")
-		return nil
+		return nil, nil
 	}
 
 	// Determine scope
@@ -177,11 +181,10 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 	if installScope != "" {
 		scopes = prompts.ParseScopeStrings([]string{installScope})
 	} else if !installYes {
-		// Interactive mode - show scope selector
 		if isInteractive() {
 			scopeStrs, err := prompts.RunScopeSelector(nil)
 			if err != nil {
-				return trackCLIError("install", fmt.Errorf("scope selection: %w", err))
+				return nil, fmt.Errorf("scope selection: %w", err)
 			}
 			scopes = prompts.ParseScopeStrings(scopeStrs)
 		}
@@ -190,12 +193,29 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		scopes = []installer.InstallScope{installer.ScopeGlobal}
 	}
 
-	// Perform installation
-	opts := installer.InstallOptions{
+	return &installer.InstallOptions{
 		Platforms: selectedPlatforms,
 		Scopes:    scopes,
 		Confirm:   true,
+	}, nil
+}
+
+func runInstallBySlug(ctx context.Context, service *installer.InstallService, slug string) error {
+	opts, err := selectPlatformsAndScope(service, ctx, slug)
+	if err != nil {
+		return trackCLIError("install", err)
 	}
+	if opts == nil {
+		return nil // All installed or no platforms selected
+	}
+
+	return executeInstall(ctx, service, slug, *opts)
+}
+
+// executeInstall performs the actual installation with pre-resolved options.
+func executeInstall(ctx context.Context, service *installer.InstallService, slug string, opts installer.InstallOptions) error {
+	// Get current install locations for comparison
+	installedLocations, _ := service.GetInstallLocations(ctx, slug)
 
 	fmt.Printf("Installing %s...\n", slug)
 	result, err := service.Install(ctx, slug, opts)
@@ -203,12 +223,9 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 		return trackCLIError("install", fmt.Errorf("install failed: %w", err))
 	}
 
-	// Print results
-	// Note: result.Locations contains ALL installed locations (not just new ones)
 	newInstalls := 0
 	alreadyInstalledCount := 0
 	for _, loc := range result.Locations {
-		// Check if this was a new install or already existed
 		wasAlreadyInstalled := false
 		for _, existingLoc := range installedLocations {
 			if existingLoc.Platform == loc.Platform && existingLoc.Scope == loc.Scope {
@@ -356,10 +373,19 @@ func runInstallFromURL(ctx context.Context, service *installer.InstallService, d
 		return nil
 	}
 
-	// Install each selected skill
+	// Select platforms and scope ONCE for all skills
+	opts, err := selectPlatformsAndScope(service, ctx, "")
+	if err != nil {
+		return trackCLIError("install", err)
+	}
+	if opts == nil {
+		return nil
+	}
+
+	// Install each selected skill with the same options
 	var installErrors []error
 	for _, slug := range selectedSlugs {
-		if err := runInstallBySlug(ctx, service, slug); err != nil {
+		if err := executeInstall(ctx, service, slug, *opts); err != nil {
 			installErrors = append(installErrors, fmt.Errorf("%s: %w", slug, err))
 		}
 	}
