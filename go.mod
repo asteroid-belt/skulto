@@ -4,7 +4,6 @@ go 1.25.3
 
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
-	github.com/adrg/xdg v0.5.3
 	github.com/anthropics/anthropic-sdk-go v1.19.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
