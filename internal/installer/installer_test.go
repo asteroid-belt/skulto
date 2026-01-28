@@ -49,7 +49,7 @@ func setupTestSkillDir(t *testing.T, cfg *config.Config, owner, repo, skillSlug 
 // TestPlatformRegistry tests the platform registry.
 func TestPlatformRegistry(t *testing.T) {
 	platforms := AllPlatforms()
-	assert.Len(t, platforms, 6)
+	assert.Len(t, platforms, 33)
 	assert.Contains(t, platforms, PlatformClaude)
 	assert.Contains(t, platforms, PlatformCursor)
 	assert.Contains(t, platforms, PlatformCopilot)

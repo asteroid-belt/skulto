@@ -102,6 +102,9 @@ func New(cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("ensure mine tag: %w", err)
 	}
 
+	// Migrate agent preferences from UserState.AITools (one-time, idempotent)
+	_ = wrapped.MigrateFromAITools()
+
 	return wrapped, nil
 }
 
@@ -117,6 +120,7 @@ func (db *DB) migrate() error {
 		&models.SkillInstallation{},
 		&models.AuxiliaryFile{},
 		&models.SecurityScan{},
+		&models.AgentPreference{},
 	)
 }
 
