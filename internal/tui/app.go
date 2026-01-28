@@ -981,13 +981,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case views.ManageActionSelectSkill:
 				if skill := m.manageView.GetSelectedSkill(); skill != nil {
-					// Get user's configured platforms
-					userState, _ := m.db.GetUserState()
-					platforms := parsePlatformsFromState(userState)
-					if len(platforms) == 0 {
-						// No platforms configured
-						return m, nil
-					}
+					// Use all known platforms so the dialog shows everything
+					platforms := installer.AllPlatforms()
 
 					m.manageDialog = components.NewManageSkillDialog(*skill, platforms)
 					m.manageDialog.SetWidth(m.width)

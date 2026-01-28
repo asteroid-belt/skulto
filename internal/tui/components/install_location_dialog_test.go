@@ -182,8 +182,8 @@ func TestInstallLocationDialog_CollapsibleGroups(t *testing.T) {
 	// preferredCount should cover claude + cline options (global + project each = 4)
 	assert.Equal(t, 4, dialog.preferredCount, "preferred count should be 4 (2 platforms x 2 scopes)")
 
-	// Display items should have: header + 4 preferred options + separator + toggle + remember = 8
-	assert.Len(t, dialog.displayItems, 8, "collapsed display should have 8 items")
+	// Display items should have: header + platformHdr(claude) + 2 opts + platformHdr(cline) + 2 opts + separator + toggle + remember = 10
+	assert.Len(t, dialog.displayItems, 10, "collapsed display should have 10 items")
 
 	// Find and verify toggle header exists
 	hasToggle := false

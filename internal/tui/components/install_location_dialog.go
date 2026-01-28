@@ -22,11 +22,12 @@ type LocationOption struct {
 type dialogItemKind int
 
 const (
-	dkOption    dialogItemKind = iota // Selectable location option
-	dkHeader                          // Non-interactive group header
-	dkToggle                          // Collapsible group header (interactive)
-	dkRemember                        // Remember locations checkbox
-	dkSeparator                       // Visual separator
+	dkOption         dialogItemKind = iota // Selectable location option
+	dkHeader                               // Non-interactive group header ("Your Agents")
+	dkPlatformHeader                       // Non-interactive platform name header
+	dkToggle                               // Collapsible group header (interactive)
+	dkRemember                             // Remember locations checkbox
+	dkSeparator                            // Visual separator
 )
 
 // dialogDisplayItem represents a single row in the dialog's display list.
@@ -82,7 +83,7 @@ func (d *InstallLocationDialog) buildOptions() {
 		if err == nil {
 			d.options = append(d.options, LocationOption{
 				Location:    globalLoc,
-				DisplayName: info.Name + " - Global",
+				DisplayName: "Global",
 				Description: "~/" + info.SkillsPath + "/",
 				Selected:    true, // Default to global selected
 			})
@@ -93,7 +94,7 @@ func (d *InstallLocationDialog) buildOptions() {
 		if err == nil {
 			d.options = append(d.options, LocationOption{
 				Location:    projectLoc,
-				DisplayName: info.Name + " - Project",
+				DisplayName: "Project",
 				Description: "./" + info.SkillsPath + "/",
 				Selected:    false, // Default to project not selected
 			})
@@ -112,11 +113,7 @@ func (d *InstallLocationDialog) buildDisplayItems() {
 		d.displayItems = append(d.displayItems, dialogDisplayItem{
 			kind: dkHeader, label: "Your Agents",
 		})
-		for i := 0; i < d.preferredCount; i++ {
-			d.displayItems = append(d.displayItems, dialogDisplayItem{
-				kind: dkOption, optionIdx: i,
-			})
-		}
+		d.appendOptionsWithPlatformHeaders(0, d.preferredCount)
 
 		d.displayItems = append(d.displayItems, dialogDisplayItem{kind: dkSeparator})
 
@@ -128,25 +125,36 @@ func (d *InstallLocationDialog) buildDisplayItems() {
 		})
 
 		if d.group2Expanded {
-			for i := d.preferredCount; i < len(d.options); i++ {
-				d.displayItems = append(d.displayItems, dialogDisplayItem{
-					kind: dkOption, optionIdx: i,
-				})
-			}
+			d.appendOptionsWithPlatformHeaders(d.preferredCount, len(d.options))
 		}
 	} else {
-		// Single group: all options
-		for i := range d.options {
-			d.displayItems = append(d.displayItems, dialogDisplayItem{
-				kind: dkOption, optionIdx: i,
-			})
-		}
+		// Single group: all options with platform headers
+		d.appendOptionsWithPlatformHeaders(0, len(d.options))
 	}
 
 	// Remember option always at end
 	d.displayItems = append(d.displayItems, dialogDisplayItem{
 		kind: dkRemember,
 	})
+}
+
+// appendOptionsWithPlatformHeaders adds options from start to end, inserting
+// platform name headers before each new platform's checkboxes.
+func (d *InstallLocationDialog) appendOptionsWithPlatformHeaders(start, end int) {
+	var lastPlatform installer.Platform
+	for i := start; i < end; i++ {
+		opt := d.options[i]
+		if opt.Location.Platform != lastPlatform {
+			d.displayItems = append(d.displayItems, dialogDisplayItem{
+				kind:  dkPlatformHeader,
+				label: opt.Location.Platform.Info().Name,
+			})
+			lastPlatform = opt.Location.Platform
+		}
+		d.displayItems = append(d.displayItems, dialogDisplayItem{
+			kind: dkOption, optionIdx: i,
+		})
+	}
 }
 
 // countOtherPlatforms returns the number of unique platforms in group 2.
@@ -297,6 +305,7 @@ func (d *InstallLocationDialog) handleToggle() {
 }
 
 // ensureVisible adjusts scroll offset so the cursor is visible.
+// When scrolling up, includes preceding non-interactive headers for context.
 func (d *InstallLocationDialog) ensureVisible() {
 	vpHeight := d.calcViewportHeight()
 	if vpHeight <= 0 || vpHeight >= len(d.displayItems) {
@@ -304,7 +313,12 @@ func (d *InstallLocationDialog) ensureVisible() {
 		return
 	}
 	if d.currentIndex < d.scrollOffset {
-		d.scrollOffset = d.currentIndex
+		// Include preceding non-interactive items (headers) so they stay visible
+		target := d.currentIndex
+		for target > 0 && !isInteractiveDialogItem(d.displayItems[target-1].kind) {
+			target--
+		}
+		d.scrollOffset = target
 	}
 	if d.currentIndex >= d.scrollOffset+vpHeight {
 		d.scrollOffset = d.currentIndex - vpHeight + 1
@@ -446,6 +460,13 @@ func (d *InstallLocationDialog) View() string {
 				MarginTop(1)
 			itemViews = append(itemViews, headerStyle.Render(item.label))
 
+		case dkPlatformHeader:
+			platformHeaderStyle := lipgloss.NewStyle().
+				Foreground(textColor).
+				Bold(true).
+				MarginTop(1)
+			itemViews = append(itemViews, platformHeaderStyle.Render(item.label))
+
 		case dkSeparator:
 			sepStyle := lipgloss.NewStyle().
 				Foreground(mutedColor).
@@ -456,6 +477,10 @@ func (d *InstallLocationDialog) View() string {
 			arrow := "▶"
 			if d.group2Expanded {
 				arrow = "▼"
+			}
+			indicator := "  "
+			if isCurrent {
+				indicator = "▸ "
 			}
 			toggleStyle := lipgloss.NewStyle().
 				Bold(true).
@@ -468,7 +493,7 @@ func (d *InstallLocationDialog) View() string {
 					Background(selectedBgColor).
 					Padding(0, 1)
 			}
-			itemViews = append(itemViews, toggleStyle.Render(arrow+" "+item.label))
+			itemViews = append(itemViews, toggleStyle.Render(indicator+arrow+" "+item.label))
 
 		case dkOption:
 			opt := d.options[item.optionIdx]
@@ -480,6 +505,12 @@ func (d *InstallLocationDialog) View() string {
 				checkbox = lipgloss.NewStyle().Foreground(mutedColor).Render("☐")
 			}
 
+			// Selection indicator
+			indicator := "  "
+			if isCurrent {
+				indicator = lipgloss.NewStyle().Foreground(goldColor).Render("▸ ")
+			}
+
 			nameStyle := lipgloss.NewStyle().Foreground(textColor)
 			descStyle := lipgloss.NewStyle().Foreground(mutedColor).Italic(true)
 
@@ -487,20 +518,18 @@ func (d *InstallLocationDialog) View() string {
 				nameStyle = nameStyle.Foreground(goldColor).Bold(true)
 			}
 
-			line := checkbox + " " + nameStyle.Render(opt.DisplayName)
-			desc := "    " + descStyle.Render(opt.Description)
-
-			optContent := lipgloss.JoinVertical(lipgloss.Left, line, desc)
+			line := indicator + checkbox + " " + nameStyle.Render(opt.DisplayName)
+			line += "    " + descStyle.Render("("+opt.Description+")")
 
 			optStyle := lipgloss.NewStyle().
 				Width(contentWidth).
-				Padding(0, 1)
+				PaddingLeft(2)
 
 			if isCurrent {
 				optStyle = optStyle.Background(selectedBgColor)
 			}
 
-			itemViews = append(itemViews, optStyle.Render(optContent))
+			itemViews = append(itemViews, optStyle.Render(line))
 
 		case dkRemember:
 			var rememberCheckbox string
