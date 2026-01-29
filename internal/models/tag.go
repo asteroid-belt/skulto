@@ -119,3 +119,102 @@ func MineTag() Tag {
 		Priority: 100, // Always first
 	}
 }
+
+// MaxTagsPerSkill limits the number of tags assigned to a single skill.
+const MaxTagsPerSkill = 5
+
+// TagAliases maps common abbreviations/variants to canonical tag names.
+var TagAliases = map[string]string{
+	// Languages
+	"js":           "javascript",
+	"ts":           "typescript",
+	"py":           "python",
+	"golang":       "go",
+	"c#":           "csharp",
+	"c++":          "cpp",
+	// Tools
+	"k8s":          "kubernetes",
+	"postgres":     "postgresql",
+	"mongo":        "mongodb",
+	"node":         "nodejs",
+	"node.js":      "nodejs",
+	"es":           "elasticsearch",
+	// Frameworks
+	"next":         "nextjs",
+	"next.js":      "nextjs",
+	"nuxt":         "vue",
+	"nuxt.js":      "vue",
+	"react-native": "react",
+	"rn":           "react",
+	// AI
+	"gpt":          "openai",
+	"chatgpt":      "openai",
+	"gpt-4":        "openai",
+	"anthropic":    "claude",
+	"llama":        "ollama",
+}
+
+// ImpliedTags maps tags to other tags they imply (framework → language, etc.).
+var ImpliedTags = map[string][]string{
+	// JavaScript frameworks
+	"react":     {"javascript", "frontend"},
+	"nextjs":    {"javascript", "react", "frontend"},
+	"vue":       {"javascript", "frontend"},
+	"angular":   {"typescript", "frontend"},
+	"svelte":    {"javascript", "frontend"},
+	"express":   {"javascript", "nodejs", "backend"},
+	"nestjs":    {"typescript", "nodejs", "backend"},
+	// Python frameworks
+	"django":    {"python", "backend"},
+	"fastapi":   {"python", "backend"},
+	"flask":     {"python", "backend"},
+	"langchain": {"python", "ai", "llm"},
+	"llamaindex": {"python", "ai", "llm"},
+	"pydantic":  {"python"},
+	// Other frameworks
+	"rails":     {"ruby", "backend"},
+	"laravel":   {"php", "backend"},
+	"spring":    {"java", "backend"},
+	// Tools → domains
+	"terraform": {"devops", "cloud"},
+	"kubernetes": {"devops", "cloud"},
+	"docker":    {"devops"},
+	"aws":       {"cloud"},
+	"gcp":       {"cloud"},
+	"azure":     {"cloud"},
+	// AI tools
+	"claude":    {"ai", "llm"},
+	"openai":    {"ai", "llm"},
+	"ollama":    {"ai", "llm"},
+	"gemini":    {"ai", "llm"},
+	// Concepts
+	"rag":       {"ai", "llm"},
+	"agents":    {"ai", "llm"},
+	"mcp":       {"ai", "agents"},
+}
+
+// MinOccurrences specifies minimum mentions required for generic tags.
+// Tags not in this map default to 1 occurrence.
+var MinOccurrences = map[string]int{
+	// Very generic domain tags need multiple mentions
+	"web":        2,
+	"data":       2,
+	"cloud":      2,
+	"ai":         2,
+	"ml":         2,
+	"backend":    2,
+	"frontend":   2,
+	"devops":     2,
+	"automation": 2,
+	"workflows":  2,
+	// Generic concepts
+	"security":   2,
+	"testing":    2,
+	"performance": 2,
+}
+
+// TitleBoostMultiplier is the weight multiplier for words found in the title.
+const TitleBoostMultiplier = 3
+
+// DescriptionBoostMultiplier is the weight multiplier for words found in the description.
+const DescriptionBoostMultiplier = 2

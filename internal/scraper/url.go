@@ -64,8 +64,11 @@ func ParseRepositoryURL(urlStr string) (*models.Source, error) {
 	}
 
 	// Validate characters (alphanumeric, hyphens, underscores)
-	if !isValidGitHubName(owner) || !isValidGitHubName(repo) {
-		return nil, fmt.Errorf("invalid owner or repo name: owner=%s, repo=%s", owner, repo)
+	if !isValidGitHubUsername(owner) {
+		return nil, fmt.Errorf("invalid owner name: %s (must be 1-39 alphanumeric chars, hyphens, or underscores)", owner)
+	}
+	if !isValidGitHubRepoName(repo) {
+		return nil, fmt.Errorf("invalid repo name: %s (must be 1-100 alphanumeric chars, hyphens, underscores, or dots)", repo)
 	}
 
 	// Create Source struct with sensible defaults for user-added sources
@@ -88,12 +91,12 @@ func ParseRepositoryURL(urlStr string) (*models.Source, error) {
 	return source, nil
 }
 
-// isValidGitHubName validates a GitHub username or repository name.
-// GitHub names must:
+// isValidGitHubUsername validates a GitHub username.
+// GitHub usernames must:
 // - Start and end with alphanumeric character
 // - Contain only alphanumeric characters, hyphens, and underscores
 // - Be 1-39 characters long
-func isValidGitHubName(name string) bool {
+func isValidGitHubUsername(name string) bool {
 	if len(name) == 0 || len(name) > 39 {
 		return false
 	}
@@ -106,6 +109,31 @@ func isValidGitHubName(name string) bool {
 	// Check all characters are alphanumeric, hyphen, or underscore
 	for _, ch := range name {
 		if !isAlphanumeric(ch) && ch != '-' && ch != '_' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isValidGitHubRepoName validates a GitHub repository name.
+// GitHub repo names must:
+// - Start and end with alphanumeric character
+// - Contain only alphanumeric characters, hyphens, underscores, and dots
+// - Be 1-100 characters long
+func isValidGitHubRepoName(name string) bool {
+	if len(name) == 0 || len(name) > 100 {
+		return false
+	}
+
+	// Check first and last character are alphanumeric
+	if !isAlphanumeric(rune(name[0])) || !isAlphanumeric(rune(name[len(name)-1])) {
+		return false
+	}
+
+	// Check all characters are alphanumeric, hyphen, underscore, or dot
+	for _, ch := range name {
+		if !isAlphanumeric(ch) && ch != '-' && ch != '_' && ch != '.' {
 			return false
 		}
 	}

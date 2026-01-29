@@ -63,23 +63,11 @@ const (
 )
 
 // SeedSource represents a known source of skills for initial scraping.
+// NOTE: Actual seed definitions are in internal/scraper/seeds.go
 type SeedSource struct {
 	Owner     string
 	Repo      string
 	Priority  int
 	Type      SourceType
 	SkillPath string // Path to skills, default is root
-}
-
-// OfficialSeeds are first-party skill repositories.
-var OfficialSeeds = []SeedSource{
-	{Owner: "anthropics", Repo: "anthropic-cookbook", Priority: 10, Type: SourceTypeOfficial},
-	{Owner: "anthropics", Repo: "courses", Priority: 10, Type: SourceTypeOfficial},
-	{Owner: "modelcontextprotocol", Repo: "servers", Priority: 10, Type: SourceTypeOfficial},
-}
-
-// CuratedSeeds are high-quality community repositories.
-var CuratedSeeds = []SeedSource{
-	{Owner: "pontusab", Repo: "cursor-rules", Priority: 8, Type: SourceTypeCurated},
-	{Owner: "PatrickJS", Repo: "awesome-cursorrules", Priority: 8, Type: SourceTypeCurated},
 }

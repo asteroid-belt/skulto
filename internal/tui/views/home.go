@@ -156,10 +156,10 @@ func (hv *HomeView) Init(tc telemetry.Client) {
 		hv.recentSkills = skills
 	}
 
-	// Load top tags
-	tags, err := hv.db.GetTopTags(10)
+	// Load top tags (excluding "mine" tag which is always zero)
+	tags, err := hv.db.GetTopTags(11) // Fetch one extra in case "mine" is included
 	if err == nil {
-		hv.topTags = tags
+		hv.topTags = filterOutMineTag(tags, 10)
 	}
 
 	// Load installed skills
@@ -1001,4 +1001,19 @@ func (hv *HomeView) GetKeyboardCommands() ViewCommands {
 			{Key: "n", Description: "New skill - create a skill from a prompt"},
 		},
 	}
+}
+
+// filterOutMineTag removes the "mine" tag from a slice and limits to maxTags.
+func filterOutMineTag(tags []models.Tag, maxTags int) []models.Tag {
+	result := make([]models.Tag, 0, len(tags))
+	for _, tag := range tags {
+		if tag.ID == "mine" || tag.Slug == "mine" {
+			continue
+		}
+		result = append(result, tag)
+		if len(result) >= maxTags {
+			break
+		}
+	}
+	return result
 }

@@ -112,9 +112,23 @@ func (sv *SearchView) Init(tc telemetry.Client) {
 func (sv *SearchView) loadAllTags() {
 	tags, err := sv.db.ListTags("")
 	if err == nil {
-		sv.allTags = tags
-		sv.tagGrid.SetTags(tags)
+		// Filter out "mine" tag which is always zero count
+		sv.allTags = filterOutMineTagSearch(tags)
+		sv.tagGrid.SetTags(sv.allTags)
 	}
+}
+
+// filterOutMineTagSearch removes the "mine" tag from a list of tags.
+// The "mine" tag is a special category that always shows zero count in the UI.
+func filterOutMineTagSearch(tags []models.Tag) []models.Tag {
+	result := make([]models.Tag, 0, len(tags))
+	for _, tag := range tags {
+		if tag.ID == "mine" || tag.Slug == "mine" {
+			continue
+		}
+		result = append(result, tag)
+	}
+	return result
 }
 
 // Update handles user input and search logic.

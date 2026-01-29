@@ -1654,7 +1654,7 @@ func (m *Model) syncCwdSkillsInternal() int {
 			skill.Category = skillInfo.Category
 		}
 
-		tags := scraper.ExtractTags(string(content))
+		tags := scraper.ExtractTagsWithContext(skill.Title, skill.Description, string(content))
 		tags = append([]models.Tag{mineTag}, tags...)
 
 		// Add category as a tag if present
@@ -2052,7 +2052,7 @@ func (m *Model) syncCwdSkillsCmd() tea.Cmd {
 			}
 
 			// Extract tags from content and add "mine" tag
-			tags := scraper.ExtractTags(string(content))
+			tags := scraper.ExtractTagsWithContext(skill.Title, skill.Description, string(content))
 			tags = append([]models.Tag{mineTag}, tags...) // Prepend mine tag
 
 			// Add category as a tag if present

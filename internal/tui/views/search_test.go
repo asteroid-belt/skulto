@@ -204,7 +204,8 @@ func TestSearchViewTagModeNavigation(t *testing.T) {
 	database := setupSearchTestDB(t)
 	defer func() { _ = database.Close() }()
 
-	// Add tags with slugs. Order will be: mine (priority), python (10), react (5), docker (3)
+	// Add tags with slugs. Order will be: python (10), react (5), docker (3)
+	// Note: "mine" tag is filtered out from the UI
 	tags := []models.Tag{
 		{ID: "python", Name: "python", Slug: "python", Count: 10},
 		{ID: "react", Name: "react", Slug: "react", Count: 5},
@@ -219,16 +220,11 @@ func TestSearchViewTagModeNavigation(t *testing.T) {
 	sv.SetSize(80, 24)
 	sv.Init(noopTelemetry())
 
-	// Move to tag grid - first tag is "mine"
+	// Move to tag grid - first tag is "python" (mine is filtered out)
 	sv.Update("tab")
 
 	tag := sv.GetSelectedTag()
 	assert.NotNil(t, tag)
-	assert.Equal(t, "mine", tag.Name)
-
-	// Navigate right -> python
-	sv.Update("right")
-	tag = sv.GetSelectedTag()
 	assert.Equal(t, "python", tag.Name)
 
 	// Navigate right -> react
@@ -245,15 +241,21 @@ func TestSearchViewTagModeNavigation(t *testing.T) {
 	sv.Update("left")
 	tag = sv.GetSelectedTag()
 	assert.Equal(t, "react", tag.Name)
+
+	// Navigate left -> python
+	sv.Update("left")
+	tag = sv.GetSelectedTag()
+	assert.Equal(t, "python", tag.Name)
 }
 
 func TestSearchViewTagModeVimNavigation(t *testing.T) {
 	database := setupSearchTestDB(t)
 	defer func() { _ = database.Close() }()
 
-	// Add a tag. Order: mine, python
+	// Add tags. Note: "mine" tag is filtered out from the UI
 	tags := []models.Tag{
 		{ID: "python", Name: "python", Slug: "python", Count: 10},
+		{ID: "react", Name: "react", Slug: "react", Count: 5},
 	}
 	for _, tag := range tags {
 		err := database.CreateTag(&tag)
@@ -264,18 +266,20 @@ func TestSearchViewTagModeVimNavigation(t *testing.T) {
 	sv.SetSize(80, 24)
 	sv.Init(noopTelemetry())
 
-	// Move to tag grid - starts at "mine"
+	// Move to tag grid - starts at "python" (mine is filtered out)
 	sv.Update("tab")
-
-	// Navigate with 'l' (vim right) -> python
-	sv.Update("l")
 	tag := sv.GetSelectedTag()
 	assert.Equal(t, "python", tag.Name)
 
-	// Navigate with 'h' (vim left) -> mine
+	// Navigate with 'l' (vim right) -> react
+	sv.Update("l")
+	tag = sv.GetSelectedTag()
+	assert.Equal(t, "react", tag.Name)
+
+	// Navigate with 'h' (vim left) -> python
 	sv.Update("h")
 	tag = sv.GetSelectedTag()
-	assert.Equal(t, "mine", tag.Name)
+	assert.Equal(t, "python", tag.Name)
 }
 
 func TestSearchViewGetKeyboardCommandsTagMode(t *testing.T) {
@@ -308,11 +312,12 @@ func TestSearchViewGetKeyboardCommandsSearchMode(t *testing.T) {
 	assert.Equal(t, "Search", cmds.ViewName)
 }
 
-func TestSearchViewMineTagAlwaysFirst(t *testing.T) {
+func TestSearchViewMineTagFiltered(t *testing.T) {
 	database := setupSearchTestDB(t)
 	defer func() { _ = database.Close() }()
 
-	// Add high-count tags - mine should still be first due to priority
+	// The database auto-creates a "mine" tag on init.
+	// Add a regular tag - the "mine" tag should be filtered out from the UI.
 	tags := []models.Tag{
 		{ID: "python", Name: "python", Slug: "python", Count: 1000},
 	}
@@ -325,12 +330,17 @@ func TestSearchViewMineTagAlwaysFirst(t *testing.T) {
 	sv.SetSize(80, 24)
 	sv.Init(noopTelemetry())
 
-	// Move to tag grid - first tag should be "mine" despite lower count
+	// Move to tag grid - first tag should be "python" (mine is filtered out)
 	sv.Update("tab")
 
 	tag := sv.GetSelectedTag()
 	assert.NotNil(t, tag)
-	assert.Equal(t, "mine", tag.Name)
+	assert.Equal(t, "python", tag.Name)
+
+	// Verify mine tag is not in the list
+	for _, tag := range sv.allTags {
+		assert.NotEqual(t, "mine", tag.ID)
+	}
 }
 
 func TestSearchViewTagEnterFromSearchBar(t *testing.T) {

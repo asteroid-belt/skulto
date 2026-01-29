@@ -18,7 +18,6 @@ var OfficialSeeds = []SeedRepository{
 
 	// Anthropic official
 	{Owner: "anthropics", Repo: "skills", Priority: 10, Type: "official"},
-	{Owner: "anthropics", Repo: "anthropic-cookbook", Priority: 10, Type: "official"},
 }
 
 // PrimarySkillsRepo is the hardcoded primary skills repository.
@@ -30,19 +29,32 @@ var PrimarySkillsRepo = SeedRepository{
 	Type:     "official",
 }
 
-// CuratedSeeds are high-quality community repositories.
+// CuratedSeeds are high-quality verified repositories from major companies and trusted community members.
 var CuratedSeeds = []SeedRepository{
-	// Awesome-list
-	{Owner: "skillcreatorai", Repo: "Awesome-Agent-Skills", Priority: 9, Type: "curated"},
-	{Owner: "travisvn", Repo: "awesome-claude-skills", Priority: 9, Type: "curated"},
-	{Owner: "alirezarezvani", Repo: "claude-skills", Priority: 9, Type: "curated"},
-	{Owner: "abubakarsiddik31", Repo: "claude-skills-collection", Priority: 9, Type: "curated"},
-	{Owner: "jqueryscript", Repo: "awesome-claude-code", Priority: 9, Type: "curated"},
-	{Owner: "hesreallyhim", Repo: "awesome-claude-code", Priority: 9, Type: "curated"},
-	{Owner: "VoltAgent", Repo: "awesome-claude-skills", Priority: 9, Type: "curated"},
-	{Owner: "sickn33", Repo: "antigravity-awesome-skills", Priority: 9, Type: "curated"},
-	{Owner: "ComposioHQ", Repo: "awesome-claude-skills", Priority: 9, Type: "curated"},
-	{Owner: "obra", Repo: "superpowers", Priority: 9, Type: "curated", SkillPath: "skills"},
+	// Major Companies - Verified Organizations
+	{Owner: "vercel-labs", Repo: "agent-skills", Priority: 9, Type: "curated"},       // React/Vercel best practices, 17.6K stars
+	{Owner: "supabase", Repo: "agent-skills", Priority: 9, Type: "curated"},           // Postgres optimization
+	{Owner: "expo", Repo: "skills", Priority: 9, Type: "curated"},                     // Official Expo team, React Native
+	{Owner: "trailofbits", Repo: "skills", Priority: 9, Type: "curated"},              // Security auditing, 24 skills
+	{Owner: "remotion-dev", Repo: "skills", Priority: 9, Type: "curated"},             // Video rendering
+	{Owner: "better-auth", Repo: "skills", Priority: 8, Type: "curated"},              // Authentication patterns
+	{Owner: "neondatabase", Repo: "agent-skills", Priority: 8, Type: "curated"},       // Serverless Postgres
+	{Owner: "cloudflare", Repo: "skills", Priority: 8, Type: "curated"},               // Workers/Edge
+	{Owner: "getsentry", Repo: "skills", Priority: 8, Type: "curated"},                // Error tracking
+	{Owner: "tinybirdco", Repo: "tinybird-agent-skills", Priority: 8, Type: "curated"}, // Real-time analytics
+
+	// High-Quality Community
+	{Owner: "obra", Repo: "superpowers", Priority: 9, Type: "curated", SkillPath: "skills"}, // Jesse Vincent's TDD/debugging methodology
+	{Owner: "alirezarezvani", Repo: "claude-skills", Priority: 8, Type: "curated"},          // 48 domain expert skills
+	{Owner: "muratcankoylan", Repo: "Agent-Skills-for-Context-Engineering", Priority: 8, Type: "curated"}, // Context engineering
+
+	// Specialized Skills
+	{Owner: "antonbabenko", Repo: "terraform-skill", Priority: 7, Type: "curated"},    // Terraform/IaC expert
+	{Owner: "zxkane", Repo: "aws-skills", Priority: 7, Type: "curated"},               // AWS
+	{Owner: "lackeyjb", Repo: "playwright-skill", Priority: 7, Type: "curated"},       // E2E testing
+	{Owner: "ibelick", Repo: "ui-skills", Priority: 7, Type: "curated"},               // UI design
+	{Owner: "callstackincubator", Repo: "agent-skills", Priority: 7, Type: "curated"}, // React Native (Callstack)
+	{Owner: "czlonkowski", Repo: "n8n-skills", Priority: 7, Type: "curated"},          // n8n automation
 }
 
 // SearchQueries for discovering new skill repositories.

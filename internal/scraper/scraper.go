@@ -408,8 +408,8 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 			skill.Author = owner
 		}
 
-		// Extract tags from content
-		tags := ExtractTags(content)
+		// Extract tags from content with title/description boosting
+		tags := ExtractTagsWithContext(skill.Title, skill.Description, content)
 
 		skillBatch = append(skillBatch, skillData{
 			skill:    skill,
@@ -654,40 +654,183 @@ func (s *Scraper) Stats() ScraperStats {
 }
 
 // ExtractTags extracts tags from skill content based on keyword matching.
+// For backward compatibility, accepts a single content string.
+// Use ExtractTagsWithContext for better results with title/description separation.
 func ExtractTags(content string) []models.Tag {
-	var tags []models.Tag
-	seen := make(map[string]bool)
+	return ExtractTagsWithContext("", "", content)
+}
 
-	// Check for each predefined tag
+// tagScore holds a tag candidate with its weighted score.
+type tagScore struct {
+	tag   models.Tag
+	score int
+}
+
+// ExtractTagsWithContext extracts tags with title/description boosting.
+// Title matches count 3x, description matches count 2x, content matches count 1x.
+func ExtractTagsWithContext(title, description, content string) []models.Tag {
+	// Track scores for each tag candidate
+	scores := make(map[string]*tagScore)
+
+	// Helper to get or create a tag score entry
+	getOrCreate := func(name string, category models.TagCategory) *tagScore {
+		if ts, ok := scores[name]; ok {
+			return ts
+		}
+		ts := &tagScore{
+			tag: models.Tag{
+				ID:       name,
+				Name:     name,
+				Slug:     name,
+				Category: string(category),
+				Color:    models.TagColors[category],
+			},
+			score: 0,
+		}
+		scores[name] = ts
+		return ts
+	}
+
+	// Check for each predefined tag and its aliases
 	for category, tagNames := range models.PredefinedTags {
 		for _, name := range tagNames {
-			if seen[name] {
-				continue
+			// Count occurrences in each section
+			titleCount := countWordOccurrences(title, name)
+			descCount := countWordOccurrences(description, name)
+			contentCount := countWordOccurrences(content, name)
+
+			// Also check aliases that map to this tag
+			for alias, canonical := range models.TagAliases {
+				if canonical == name {
+					titleCount += countWordOccurrences(title, alias)
+					descCount += countWordOccurrences(description, alias)
+					contentCount += countWordOccurrences(content, alias)
+				}
 			}
 
-			// Simple case-insensitive substring match
-			if containsWord(content, name) {
-				tags = append(tags, models.Tag{
-					ID:       name,
-					Name:     name,
-					Slug:     name,
-					Category: string(category),
-					Color:    models.TagColors[category],
-				})
-				seen[name] = true
+			// Calculate weighted score
+			weightedScore := titleCount*models.TitleBoostMultiplier +
+				descCount*models.DescriptionBoostMultiplier +
+				contentCount
+
+			if weightedScore > 0 {
+				ts := getOrCreate(name, category)
+				ts.score += weightedScore
 			}
 		}
 	}
 
-	// Sort tags by category for consistency
-	sort.Slice(tags, func(i, j int) bool {
-		if tags[i].Category != tags[j].Category {
-			return tags[i].Category < tags[j].Category
+	// Also check aliases directly (in case alias appears but canonical doesn't)
+	for alias, canonical := range models.TagAliases {
+		titleCount := countWordOccurrences(title, alias)
+		descCount := countWordOccurrences(description, alias)
+		contentCount := countWordOccurrences(content, alias)
+
+		weightedScore := titleCount*models.TitleBoostMultiplier +
+			descCount*models.DescriptionBoostMultiplier +
+			contentCount
+
+		if weightedScore > 0 {
+			// Find the category for the canonical tag
+			category := findTagCategory(canonical)
+			if category != "" {
+				ts := getOrCreate(canonical, category)
+				ts.score += weightedScore
+			}
 		}
-		return tags[i].Name < tags[j].Name
+	}
+
+	// Filter by minimum occurrences and collect qualifying tags
+	var candidates []tagScore
+	for name, ts := range scores {
+		minRequired := 1
+		if min, ok := models.MinOccurrences[name]; ok {
+			minRequired = min
+		}
+		if ts.score >= minRequired {
+			candidates = append(candidates, *ts)
+		}
+	}
+
+	// Add implied tags for qualifying candidates
+	impliedScores := make(map[string]*tagScore)
+	for _, ts := range candidates {
+		if implied, ok := models.ImpliedTags[ts.tag.Name]; ok {
+			for _, impliedName := range implied {
+				// Only add if not already a direct match
+				if _, exists := scores[impliedName]; !exists {
+					category := findTagCategory(impliedName)
+					if category != "" {
+						if its, ok := impliedScores[impliedName]; ok {
+							its.score++ // Boost for multiple implications
+						} else {
+							impliedScores[impliedName] = &tagScore{
+								tag: models.Tag{
+									ID:       impliedName,
+									Name:     impliedName,
+									Slug:     impliedName,
+									Category: string(category),
+									Color:    models.TagColors[category],
+								},
+								score: 1,
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Add implied tags to candidates
+	for _, ts := range impliedScores {
+		candidates = append(candidates, *ts)
+	}
+
+	// Sort by score descending, then by category for consistency
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		if candidates[i].tag.Category != candidates[j].tag.Category {
+			return candidates[i].tag.Category < candidates[j].tag.Category
+		}
+		return candidates[i].tag.Name < candidates[j].tag.Name
 	})
 
+	// Cap at MaxTagsPerSkill
+	if len(candidates) > models.MaxTagsPerSkill {
+		candidates = candidates[:models.MaxTagsPerSkill]
+	}
+
+	// Extract tags from candidates
+	tags := make([]models.Tag, len(candidates))
+	for i, ts := range candidates {
+		tags[i] = ts.tag
+	}
+
 	return tags
+}
+
+// findTagCategory returns the category for a tag name, or empty string if not found.
+func findTagCategory(name string) models.TagCategory {
+	for category, tagNames := range models.PredefinedTags {
+		for _, tagName := range tagNames {
+			if tagName == name {
+				return category
+			}
+		}
+	}
+	return ""
+}
+
+// countWordOccurrences counts how many times a word appears in content.
+func countWordOccurrences(content, word string) int {
+	if content == "" || word == "" {
+		return 0
+	}
+	pattern := getTagPattern(word)
+	matches := pattern.FindAllStringIndex(content, -1)
+	return len(matches)
 }
 
 // tagPatterns caches compiled regex patterns for performance.
