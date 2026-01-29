@@ -1,6 +1,6 @@
 # Skulto
 
-> Offline-first tool for syncing and managing agent skills
+> Scan AI agent skills for prompt injection before you install them
 
 [![CI](https://github.com/asteroid-belt/skulto/actions/workflows/ci.yml/badge.svg)](https://github.com/asteroid-belt/skulto/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
