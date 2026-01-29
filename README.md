@@ -35,6 +35,8 @@ Skulto is a cross-platform CLI tool for managing AI coding assistant skills acro
 
 ## Features
 
+![Skill Creation](assets/skill-create-small.gif)
+
 - **30+ platform support** - Claude Code, Cursor, Windsurf, GitHub Copilot, OpenAI Codex, OpenCode, Cline, Roo Code, Gemini CLI, Kiro CLI, Amp, Continue, Goose, Junie, Qwen Code, Trae, and more
 - **Platform detection** - Detects installed AI tools and surfaces them in platform choosers
 - **Offline-first** - Works without internet after initial sync
@@ -126,6 +128,8 @@ On first launch, Skulto walks you through onboarding:
 skulto
 ```
 
+![Search Demo](assets/search-small.gif)
+
 **Key Bindings:**
 
 | Key | Action |
@@ -176,6 +180,8 @@ When installing a skill, you choose where to install it:
 
 Press `i` on an installed skill to manage its locations:
 
+![Manage Skill Demo](assets/manage-small.gif)
+
 - **Installed platforms** shown at top with checkboxes pre-selected
 - **Other platforms** collapsed below in an expandable group
 - **Add/remove** locations across any combination of platforms and scopes
@@ -204,6 +210,8 @@ Skulto provides CLI subcommands for scripting and automation:
 
 Install skills by slug or directly from a GitHub repository:
 
+![Install Demo](assets/install-indexed-skill-small.gif)
+
 ```bash
 # Install a single skill by slug
 skulto install superplan
@@ -229,6 +237,8 @@ When installing from a repository URL:
 
 Add a skill repository to Skulto:
 
+![Add Repository Demo](assets/add-small.gif)
+
 ```bash
 # Short format
 skulto add asteroid-belt/skills
@@ -243,6 +253,8 @@ skulto add asteroid-belt/skills --no-sync
 #### `skulto pull`
 
 Sync all registered repositories:
+
+![Pull Demo](assets/update-small.gif)
 
 ```bash
 skulto pull
@@ -269,6 +281,8 @@ skulto remove asteroid-belt/skills --force
 
 Scan skills for security threats:
 
+![Scan Demo](assets/scan-all-small.gif)
+
 ```bash
 # Scan all skills
 skulto scan --all
@@ -288,6 +302,8 @@ Reports threat levels: CRITICAL, HIGH, MEDIUM, LOW
 #### `skulto update`
 
 Combined pull + scan with reporting:
+
+![Update Demo](assets/skulto-update-small.gif)
 
 ```bash
 # Update and scan new/updated skills
@@ -317,6 +333,10 @@ You can also toggle favorites in the TUI by pressing `f` on any skill detail vie
 ### MCP Server (`skulto-mcp`)
 
 Skulto includes an MCP (Model Context Protocol) server that exposes skills to Claude Code and other MCP-compatible clients. This enables AI assistants to search, browse, install, and manage skills and repositories programmatically.
+
+![MCP Add Repository](assets/mcp-add-small.gif)
+
+![MCP Install Skill](assets/mcp-install-small.gif)
 
 Add to your Claude Code settings (`.claude.json`):
 
