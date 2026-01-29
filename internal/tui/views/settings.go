@@ -320,8 +320,8 @@ func (sv *SettingsView) renderRepositoriesLines() []string {
 		timeDiff := time.Since(lastSync)
 		timeStr := formatTimeDiff(timeDiff)
 
-		line := fmt.Sprintf("  %s %-40s [%s %s | %d skills]",
-			statusIcon, source.FullName, statusText, timeStr, source.SkillCount)
+		line := fmt.Sprintf("  %s %-40s [%s %s]",
+			statusIcon, source.FullName, statusText, timeStr)
 		lines = append(lines, line)
 	}
 
