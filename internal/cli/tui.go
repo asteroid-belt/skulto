@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/asteroid-belt/skulto/internal/config"
@@ -114,6 +115,9 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	} else {
 		log.Println("\nTelemetry: OFF")
 	}
+
+	// Show startup notification for unnotified discovered skills
+	showStartupNotification(database, os.Stdout)
 
 	log.Println("\n🚀 Launching Skulto TUI...")
 	return tui.RunWithIndexer(database, cfg, bgIndexer, telemetryClient)

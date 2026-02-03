@@ -376,6 +376,7 @@ func (m *Model) trackViewNavigation(toView ViewType) {
 // Init initializes the model and starts the animation ticker.
 func (m *Model) Init() tea.Cmd {
 	m.homeView.Init(m.telemetry)
+	m.updateDiscoveryCount() // Update discovery badge count
 	m.searchView.Init(m.telemetry)
 	m.detailView.Init(m.telemetry)
 	m.onboardingIntroView.Init()
@@ -995,6 +996,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case views.ManageActionBack:
 				m.currentView = ViewHome
 				m.homeView.Init(m.telemetry)
+				m.updateDiscoveryCount()
 				return m, nil
 
 			case views.ManageActionSelectSkill:
@@ -1448,6 +1450,7 @@ func (m *Model) finishResetWithNewDB() {
 	// Set header and footer for home view (empty DB, so 0 counts)
 	m.homeView.SetStats(0, 1) // 1 tag = "mine" tag
 	m.homeView.Init(m.telemetry)
+	m.updateDiscoveryCount()
 	m.searchView.Init(m.telemetry)
 	m.detailView.Init(m.telemetry)
 	m.helpView.Init(m.telemetry)
@@ -1687,6 +1690,18 @@ func (m *Model) syncCwdSkillsInternal() int {
 func (m *Model) setError(err error, errorType string) {
 	m.err = err
 	m.telemetry.TrackErrorDisplayed(errorType, m.currentView.String())
+}
+
+// updateDiscoveryCount fetches the count of undismissed discovered skills and updates the home view.
+func (m *Model) updateDiscoveryCount() {
+	if m.db == nil {
+		return
+	}
+	count, err := m.db.CountUndismissedDiscoveredSkills()
+	if err != nil {
+		return
+	}
+	m.homeView.SetDiscoveryCount(count)
 }
 
 // trackSessionExit tracks session summary and app exit.

@@ -76,6 +76,13 @@ func (db *DB) CountDiscoveredSkills() (int64, error) {
 	return count, err
 }
 
+// CountUndismissedDiscoveredSkills returns the count of discovered skills that haven't been dismissed.
+func (db *DB) CountUndismissedDiscoveredSkills() (int64, error) {
+	var count int64
+	err := db.Model(&models.DiscoveredSkill{}).Where("dismissed_at IS NULL").Count(&count).Error
+	return count, err
+}
+
 // CleanupStaleDiscoveries removes discoveries whose paths no longer exist or are now symlinks.
 func (db *DB) CleanupStaleDiscoveries(pathChecker func(string) bool) error {
 	skills, err := db.ListDiscoveredSkills()

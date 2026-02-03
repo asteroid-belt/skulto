@@ -265,6 +265,76 @@ func TestDB_CountDiscoveredSkills(t *testing.T) {
 	assert.Equal(t, int64(2), count)
 }
 
+func TestDB_CountUndismissedDiscoveredSkills(t *testing.T) {
+	db := testDB(t)
+	now := time.Now()
+
+	// Insert an undismissed skill
+	undismissed := models.DiscoveredSkill{
+		Platform:     "claude",
+		Scope:        "project",
+		Path:         "/test/.claude/skills/undismissed",
+		Name:         "undismissed",
+		DiscoveredAt: now,
+		DismissedAt:  nil,
+	}
+	undismissed.ID = undismissed.GenerateID()
+	require.NoError(t, db.UpsertDiscoveredSkill(&undismissed))
+
+	// Insert a dismissed skill
+	dismissed := models.DiscoveredSkill{
+		Platform:     "claude",
+		Scope:        "project",
+		Path:         "/test/.claude/skills/dismissed",
+		Name:         "dismissed",
+		DiscoveredAt: now,
+		DismissedAt:  &now,
+	}
+	dismissed.ID = dismissed.GenerateID()
+	require.NoError(t, db.UpsertDiscoveredSkill(&dismissed))
+
+	// CountDiscoveredSkills should return all
+	totalCount, err := db.CountDiscoveredSkills()
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), totalCount)
+
+	// CountUndismissedDiscoveredSkills should only count undismissed
+	undismissedCount, err := db.CountUndismissedDiscoveredSkills()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), undismissedCount)
+}
+
+func TestDB_CountUndismissedDiscoveredSkills_AllDismissed(t *testing.T) {
+	db := testDB(t)
+	now := time.Now()
+
+	// Insert only dismissed skills
+	for _, name := range []string{"dismissed-a", "dismissed-b"} {
+		ds := models.DiscoveredSkill{
+			Platform:     "claude",
+			Scope:        "project",
+			Path:         "/test/.claude/skills/" + name,
+			Name:         name,
+			DiscoveredAt: now,
+			DismissedAt:  &now,
+		}
+		ds.ID = ds.GenerateID()
+		require.NoError(t, db.UpsertDiscoveredSkill(&ds))
+	}
+
+	count, err := db.CountUndismissedDiscoveredSkills()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestDB_CountUndismissedDiscoveredSkills_EmptyDB(t *testing.T) {
+	db := testDB(t)
+
+	count, err := db.CountUndismissedDiscoveredSkills()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
+
 func TestDB_CleanupStaleDiscoveries(t *testing.T) {
 	db := testDB(t)
 

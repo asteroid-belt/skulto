@@ -69,6 +69,9 @@ type HomeView struct {
 	scanProgress int
 	scanTotal    int
 	scanRepoName string
+
+	// Discovery badge count
+	discoveryCount int64
 }
 
 // NewHomeView creates a new home view.
@@ -139,6 +142,16 @@ func (hv *HomeView) ClearScanProgress() {
 	hv.scanProgress = 0
 	hv.scanTotal = 0
 	hv.scanRepoName = ""
+}
+
+// SetDiscoveryCount sets the count of undismissed discovered skills.
+func (hv *HomeView) SetDiscoveryCount(count int64) {
+	hv.discoveryCount = count
+}
+
+// GetDiscoveryCount returns the count of undismissed discovered skills.
+func (hv *HomeView) GetDiscoveryCount() int64 {
+	return hv.discoveryCount
 }
 
 // UpdateAnimation advances the animation frame for the header.
@@ -515,8 +528,17 @@ func (hv *HomeView) renderWelcome() string {
 		MarginRight(2).
 		MarginBottom(1)
 
+	// Build manage text with optional discovery badge
+	manageText := "m (manage)"
+	if hv.discoveryCount > 0 {
+		badgeStyle := lipgloss.NewStyle().
+			Foreground(theme.Current.Warning).
+			Bold(true)
+		manageText = fmt.Sprintf("m (manage %s)", badgeStyle.Render(fmt.Sprintf("(%d)", hv.discoveryCount)))
+	}
+
 	return welcomeStyle.Render("Welcome to SKULTO") + "\n" +
-		msgStyle.Render("/ (search) • ↑↓ (nav) • m (manage) • p (pull) • q (quit)") + "\n" +
+		msgStyle.Render(fmt.Sprintf("/ (search) • ↑↓ (nav) • %s • p (pull) • q (quit)", manageText)) + "\n" +
 		secondaryStyle.Render("a (add repo) • s (settings) • n (new skill) • ? (help)")
 }
 
