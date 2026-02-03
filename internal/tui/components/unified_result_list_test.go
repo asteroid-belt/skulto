@@ -193,3 +193,28 @@ func TestUnifiedResultList_ExpandedView(t *testing.T) {
 	assert.Contains(t, view, "first snippet")
 	assert.Contains(t, view, "second snippet")
 }
+
+func TestUnifiedResultList_ShowsLocalBadge(t *testing.T) {
+	list := NewUnifiedResultList()
+	list.SetSize(80, 30)
+
+	// Create items with local and remote skills
+	list.SetItems([]UnifiedResultItem{
+		{
+			Skill:     models.Skill{ID: "1", Title: "Local Skill", IsLocal: true},
+			MatchType: MatchTypeName,
+		},
+		{
+			Skill:     models.Skill{ID: "2", Title: "Remote Skill", IsLocal: false},
+			MatchType: MatchTypeName,
+		},
+	})
+
+	view := list.View()
+
+	// Local skill should show [local] badge
+	assert.Contains(t, view, "[local]", "Local skill should show [local] badge")
+	// Both skills should be visible
+	assert.Contains(t, view, "Local Skill")
+	assert.Contains(t, view, "Remote Skill")
+}

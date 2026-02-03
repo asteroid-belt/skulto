@@ -31,6 +31,7 @@ const (
 	ManageActionNone ManageAction = iota
 	ManageActionBack
 	ManageActionSelectSkill
+	ManageActionSelectDiscovery
 )
 
 // ManageSkillsLoadedMsg is sent when skills data has been loaded.
@@ -107,10 +108,17 @@ func (mv *ManageView) Init() tea.Cmd {
 	mv.loadError = nil
 	mv.scrollOffset = 0
 
-	return func() tea.Msg {
+	loadInstalled := func() tea.Msg {
 		skills, err := mv.installService.GetInstalledSkillsSummary(context.Background())
 		return ManageSkillsLoadedMsg{Skills: skills, Err: err}
 	}
+
+	loadDiscoveries := func() tea.Msg {
+		skills, err := mv.db.ListDiscoveredSkills()
+		return DiscoveriesLoadedMsg{Skills: skills, Err: err}
+	}
+
+	return tea.Batch(loadInstalled, loadDiscoveries)
 }
 
 // HandleManageSkillsLoaded handles the ManageSkillsLoadedMsg.
@@ -206,8 +214,11 @@ func (mv *ManageView) Update(key string) (ManageAction, tea.Cmd) {
 			if len(mv.skills) > 0 && mv.selectedIdx >= 0 && mv.selectedIdx < len(mv.skills) {
 				return ManageActionSelectSkill, nil
 			}
+		} else if mv.section == ManageSectionDiscovered {
+			if len(mv.discoveries) > 0 && mv.discoveredIdx >= 0 && mv.discoveredIdx < len(mv.discoveries) {
+				return ManageActionSelectDiscovery, nil
+			}
 		}
-		// TODO: Handle enter for discovered section in Phase 5C
 		return ManageActionNone, nil
 	}
 
@@ -661,6 +672,14 @@ func (mv *ManageView) renderSkillRow(skill installer.InstalledSkillSummary, skil
 
 	skillName := skillStyle.Render(fmt.Sprintf("%-*s", skillWidth, skill.Slug))
 
+	// Add local badge if this is a local skill
+	if skill.IsLocal {
+		localBadge := lipgloss.NewStyle().
+			Foreground(theme.Current.Warning).
+			Render(" [local]")
+		skillName += localBadge
+	}
+
 	// Locations formatting - wrap to multiple lines if needed
 	locationParts := mv.formatLocationParts(skill.Locations)
 	// Prefix width: indicator(2) + skillName(skillWidth) + gap(2) + marginLeft(2)
@@ -844,7 +863,11 @@ func (mv *ManageView) renderFooter() string {
 		MarginLeft(2).
 		MarginTop(1)
 
-	help := helpStyle.Render("↑↓ navigate • Tab switch sections • Enter edit • Esc back")
+	enterAction := "edit"
+	if mv.section == ManageSectionDiscovered {
+		enterAction = "import"
+	}
+	help := helpStyle.Render(fmt.Sprintf("↑↓ navigate • Tab switch sections • Enter %s • Esc back", enterAction))
 
 	return lipgloss.JoinVertical(lipgloss.Top, count, help)
 }

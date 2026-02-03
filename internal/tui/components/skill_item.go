@@ -76,6 +76,13 @@ func renderSelectedSkillSimple(skill models.Skill) string {
 	return boxStyle.Render(title + "\n" + desc)
 }
 
+// RenderLocalBadge renders the [local] badge for local skills.
+func RenderLocalBadge() string {
+	return lipgloss.NewStyle().
+		Foreground(theme.Current.Warning).
+		Render(" [local]")
+}
+
 // renderSkillItemDetailed renders a skill item with metadata (title, description, author, category)
 func renderSkillItemDetailed(skill models.Skill) string {
 	titleStyle := lipgloss.NewStyle().
@@ -97,8 +104,11 @@ func renderSkillItemDetailed(skill models.Skill) string {
 		MarginRight(2).
 		MarginBottom(1)
 
-	// Build title line with source info
+	// Build title line with source info and local badge
 	titleLine := titleStyle.Render(skill.Title)
+	if skill.IsLocal {
+		titleLine += RenderLocalBadge()
+	}
 	if skill.Source != nil && skill.Source.Owner != "" && skill.Source.Repo != "" {
 		sourceInfo := sourceStyle.Render(fmt.Sprintf(" (%s/%s)", skill.Source.Owner, skill.Source.Repo))
 		titleLine = titleLine + sourceInfo
@@ -132,8 +142,11 @@ func renderSelectedSkillDetailed(skill models.Skill) string {
 		MarginRight(2).
 		MarginBottom(1)
 
-	// Build title line with source info
+	// Build title line with source info and local badge
 	titleLine := titleStyle.Render(skill.Title)
+	if skill.IsLocal {
+		titleLine += RenderLocalBadge()
+	}
 	if skill.Source != nil && skill.Source.Owner != "" && skill.Source.Repo != "" {
 		sourceInfo := sourceStyle.Render(fmt.Sprintf(" (%s/%s)", skill.Source.Owner, skill.Source.Repo))
 		titleLine = titleLine + sourceInfo

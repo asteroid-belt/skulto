@@ -356,3 +356,48 @@ func TestSearchViewTagEnterFromSearchBar(t *testing.T) {
 	_, tagSelected, _ := sv.Update("enter")
 	assert.False(t, tagSelected)
 }
+
+func TestSearchView_ShowsLocalBadge(t *testing.T) {
+	database := setupSearchTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Create a local skill with is_local=true
+	localSkill := &models.Skill{
+		ID:          "local-skill-id",
+		Title:       "My Local Skill",
+		Description: "A locally ingested skill",
+		Slug:        "my-local-skill",
+		IsLocal:     true,
+	}
+	err := database.CreateSkill(localSkill)
+	assert.NoError(t, err)
+
+	// Create a remote skill with is_local=false
+	remoteSkill := &models.Skill{
+		ID:          "remote-skill-id",
+		Title:       "Remote Skill",
+		Description: "A skill from the registry",
+		Slug:        "remote-skill",
+		IsLocal:     false,
+	}
+	err = database.CreateSkill(remoteSkill)
+	assert.NoError(t, err)
+
+	sv := NewSearchView(database, &config.Config{}, nil)
+	sv.SetSize(80, 24)
+	sv.Init(noopTelemetry())
+
+	// Simulate search results using legacy mode (no search service)
+	sv.legacyResults = []models.Skill{*localSkill, *remoteSkill}
+	sv.query = "skill"
+
+	// Render the view
+	view := sv.View()
+
+	// Local skill should show [local] badge
+	assert.Contains(t, view, "[local]", "Local skill should show [local] badge")
+	// The local skill title should be present
+	assert.Contains(t, view, "My Local Skill")
+	// The remote skill should also be present but not show [local]
+	assert.Contains(t, view, "Remote Skill")
+}

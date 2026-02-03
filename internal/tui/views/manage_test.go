@@ -314,3 +314,45 @@ func TestManageView_FooterShowsTabHint(t *testing.T) {
 	// Footer should mention Tab for switching sections
 	assert.Contains(t, output, "Tab")
 }
+
+func TestManageView_ShowsLocalBadgeForInstalledSkills(t *testing.T) {
+	database := setupManageTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	cfg := &config.Config{}
+	tel := manageTestTelemetry()
+	installSvc := installer.NewInstallService(database, cfg, tel)
+	view := NewManageView(database, cfg, installSvc, tel)
+	view.SetSize(100, 24)
+
+	// Simulate installed skills - one local, one remote
+	view.HandleManageSkillsLoaded(ManageSkillsLoadedMsg{
+		Skills: []installer.InstalledSkillSummary{
+			{
+				Slug:    "local-skill",
+				Title:   "Local Skill",
+				IsLocal: true,
+				Locations: map[installer.Platform][]installer.InstallScope{
+					installer.PlatformClaude: {installer.ScopeGlobal},
+				},
+			},
+			{
+				Slug:    "remote-skill",
+				Title:   "Remote Skill",
+				IsLocal: false,
+				Locations: map[installer.Platform][]installer.InstallScope{
+					installer.PlatformClaude: {installer.ScopeGlobal},
+				},
+			},
+		},
+		Err: nil,
+	})
+
+	output := view.View()
+
+	// Local skill should show [local] badge
+	assert.Contains(t, output, "[local]", "Local skill should show [local] badge")
+	// Both skills should be visible
+	assert.Contains(t, output, "local-skill")
+	assert.Contains(t, output, "remote-skill")
+}

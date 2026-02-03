@@ -332,6 +332,7 @@ type InstalledSkillSummary struct {
 	Slug      string                      // Skill slug (e.g., "teach", "superplan")
 	Title     string                      // Skill display name
 	Locations map[Platform][]InstallScope // Platform -> scopes installed
+	IsLocal   bool                        // True for locally ingested skills
 }
 
 // GetInstalledSkillsSummary returns all installed skills with their installation locations.
@@ -352,6 +353,7 @@ func (s *InstallService) GetInstalledSkillsSummary(ctx context.Context) ([]Insta
 	type skillData struct {
 		slug      string
 		title     string
+		isLocal   bool
 		locations map[Platform][]InstallScope
 	}
 	skillMap := make(map[string]*skillData)
@@ -367,6 +369,7 @@ func (s *InstallService) GetInstalledSkillsSummary(ctx context.Context) ([]Insta
 			data = &skillData{
 				slug:      skill.Slug,
 				title:     skill.Title,
+				isLocal:   skill.IsLocal,
 				locations: make(map[Platform][]InstallScope),
 			}
 			skillMap[inst.SkillID] = data
@@ -396,6 +399,7 @@ func (s *InstallService) GetInstalledSkillsSummary(ctx context.Context) ([]Insta
 		result = append(result, InstalledSkillSummary{
 			Slug:      data.slug,
 			Title:     data.title,
+			IsLocal:   data.isLocal,
 			Locations: data.locations,
 		})
 	}

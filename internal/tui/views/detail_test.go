@@ -255,3 +255,75 @@ func TestHandleSkillLoadedIsIdempotent(t *testing.T) {
 		t.Error("handling same message twice should produce same output")
 	}
 }
+
+// TestDetailView_ShowsLocalSkillIndicator verifies that local skills display
+// the "Local Skill" indicator in the detail view
+func TestDetailView_ShowsLocalSkillIndicator(t *testing.T) {
+	database := setupTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Create a local skill
+	localSkill := &models.Skill{
+		ID:          "local-skill-id",
+		Title:       "My Local Skill",
+		Description: "A locally ingested skill",
+		Content:     "# Local Skill Content",
+		Slug:        "my-local-skill",
+		IsLocal:     true,
+		FilePath:    "/path/to/local/skill",
+	}
+	if err := database.CreateSkill(localSkill); err != nil {
+		t.Fatalf("failed to create local skill: %v", err)
+	}
+
+	cfg := &config.Config{}
+	view := NewDetailView(database, cfg, nil)
+	view.Init(telemetry.New(nil))
+	view.SetSize(80, 24)
+
+	// Load the local skill
+	cmd := view.SetSkill("local-skill-id")
+	msg := cmd().(SkillLoadedMsg)
+	view.HandleSkillLoaded(msg)
+
+	output := view.View()
+
+	// Should show "Local Skill" indicator
+	if !strings.Contains(output, "Local Skill") {
+		t.Errorf("Detail view should show 'Local Skill' indicator for local skills\nGot: %s", output)
+	}
+
+	// Should also show the skill title
+	if !strings.Contains(output, "My Local Skill") {
+		t.Errorf("Detail view should show the skill title\nGot: %s", output)
+	}
+}
+
+// TestDetailView_RemoteSkillNoLocalIndicator verifies that remote skills
+// do NOT show the "Local Skill" indicator
+func TestDetailView_RemoteSkillNoLocalIndicator(t *testing.T) {
+	database := setupTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	cfg := &config.Config{}
+	view := NewDetailView(database, cfg, nil)
+	view.Init(telemetry.New(nil))
+	view.SetSize(80, 24)
+
+	// Load the default test skill (remote, not local)
+	cmd := view.SetSkill("test-skill-id")
+	msg := cmd().(SkillLoadedMsg)
+	view.HandleSkillLoaded(msg)
+
+	output := view.View()
+
+	// Should NOT show "Local Skill" indicator for remote skills
+	if strings.Contains(output, "Local Skill") {
+		t.Errorf("Detail view should NOT show 'Local Skill' indicator for remote skills\nGot: %s", output)
+	}
+
+	// Should still show the skill title
+	if !strings.Contains(output, "Test Skill Title") {
+		t.Errorf("Detail view should show the skill title\nGot: %s", output)
+	}
+}

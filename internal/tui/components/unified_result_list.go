@@ -202,12 +202,18 @@ func (ul *UnifiedResultList) View() string {
 			title = titleStyle.Render("  " + titleText)
 		}
 
+		// Add local badge if this is a local skill
+		var localBadge string
+		if item.Skill.IsLocal {
+			localBadge = RenderLocalBadge()
+		}
+
 		// Add source info if available
 		var sourceInfo string
 		if item.Skill.Source != nil && item.Skill.Source.Owner != "" && item.Skill.Source.Repo != "" {
 			sourceInfo = sourceStyle.Render(fmt.Sprintf(" (%s/%s)", item.Skill.Source.Owner, item.Skill.Source.Repo))
 		}
-		lines = append(lines, badge+" "+title+sourceInfo)
+		lines = append(lines, badge+" "+title+localBadge+sourceInfo)
 
 		// Line 2: Description (truncated)
 		desc := truncate(item.Skill.Description, ul.width-8)
