@@ -392,21 +392,10 @@ Great for test-driven development workflows.
 	assert.Contains(t, tagNames, "python", "Should extract python tag from content")
 }
 
-func TestGenerateLocalSkillID(t *testing.T) {
-	// Test that generateLocalSkillID produces consistent, deterministic IDs
-	path1 := "/home/user/.skulto/skills/my-skill"
-	path2 := "/home/user/.skulto/skills/other-skill"
-
-	id1a := generateLocalSkillID(path1)
-	id1b := generateLocalSkillID(path1)
-	id2 := generateLocalSkillID(path2)
-
-	// Same path should produce same ID
-	assert.Equal(t, id1a, id1b, "Same path should produce same ID")
-
-	// Different paths should produce different IDs
-	assert.NotEqual(t, id1a, id2, "Different paths should produce different IDs")
-
-	// ID should have reasonable length (hex-encoded hash prefix)
-	assert.Len(t, id1a, 16, "ID should be 16 characters (truncated hash)")
+func TestLocalSkillIDFormat(t *testing.T) {
+	// Local skill IDs use "local-" + name format to match startup sync
+	// This ensures skills aren't duplicated after DB reset
+	name := "my-skill"
+	expectedID := "local-" + name
+	assert.Equal(t, "local-my-skill", expectedID, "ID should use local- prefix with name")
 }

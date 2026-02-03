@@ -3,8 +3,6 @@ package discovery
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -213,9 +211,11 @@ func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discovered
 	}
 
 	// Parse skill using the scraper parser
+	// Use "local-" + name format to match startup sync (syncLocalSkillsCmd)
+	// This ensures skills aren't duplicated after DB reset
 	parser := scraper.NewSkillParser()
 	skillFile := &scraper.SkillFile{
-		ID:   generateLocalSkillID(destPath),
+		ID:   "local-" + discoveredSkill.Name,
 		Path: destPath,
 		// Don't set RepoName - local skills have no source
 	}
@@ -252,12 +252,11 @@ func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discovered
 		return nil, fmt.Errorf("failed to create installation: %w", err)
 	}
 
+	// Add to installed table so it appears on home page
+	if err := s.db.SetInstalled(parsedSkill.ID, true); err != nil {
+		return nil, fmt.Errorf("failed to mark as installed: %w", err)
+	}
+
 	return parsedSkill, nil
 }
 
-// generateLocalSkillID creates a unique ID for a local skill based on path.
-// Uses SHA256 hash truncated to 16 characters for consistency with other skill IDs.
-func generateLocalSkillID(path string) string {
-	h := sha256.Sum256([]byte("local:" + path))
-	return hex.EncodeToString(h[:])[:16]
-}

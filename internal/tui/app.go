@@ -12,6 +12,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/constants"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/detect"
+	"github.com/asteroid-belt/skulto/internal/discovery"
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
@@ -171,6 +172,12 @@ type (
 	cwdSkillsSyncMsg struct {
 		indexed int
 		err     error
+	}
+
+	// ingestCompleteMsg is sent when a discovered skill has been ingested
+	ingestCompleteMsg struct {
+		name string
+		err  error
 	}
 )
 
@@ -1009,6 +1016,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showManageDialog = true
 				}
 				return m, nil
+
+			case views.ManageActionSelectDiscovery:
+				if disc := m.manageView.GetSelectedDiscovery(); disc != nil {
+					// Start ingest in background
+					return m, m.ingestDiscoveredSkillCmd(disc)
+				}
+				return m, nil
 			}
 
 		case ViewOnboardingIntro:
@@ -1157,6 +1171,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.ManageSkillsLoadedMsg:
 		m.manageView.HandleManageSkillsLoaded(msg)
+
+	case views.DiscoveriesLoadedMsg:
+		m.manageView.HandleDiscoveriesLoaded(msg)
+
+	case ingestCompleteMsg:
+		if msg.err != nil {
+			m.setError(msg.err, "ingest_skill")
+		}
+		// Refresh the manage view and discovery count
+		m.updateDiscoveryCount()
+		return m, m.manageView.Init()
 
 	case manageChangesCompleteMsg:
 		if msg.err != nil {
@@ -1954,8 +1979,8 @@ func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 
 			// Mark as local skill (no source ID to avoid foreign key constraint)
 			skill.IsLocal = true
-			skill.IsInstalled = false // Not installed until user explicitly installs to AI tools
-			skill.SourceID = nil      // Local skills have no source
+			skill.IsInstalled = true // Skills in ~/.skulto/skills are considered installed
+			skill.SourceID = nil     // Local skills have no source
 
 			// Hard delete existing and create fresh to ensure FTS triggers fire correctly
 			if existing != nil {
@@ -1969,6 +1994,13 @@ func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 				continue
 			}
 			debugLog("Successfully created skill in DB")
+
+			// Add to installed table so it appears on home page after DB reset
+			if err := m.db.SetInstalled(skill.ID, true); err != nil {
+				debugLog("Error marking as installed: %v", err)
+			} else {
+				debugLog("Marked as installed")
+			}
 
 			// Record as recently viewed
 			if err := m.db.RecordSkillView(skill.ID); err != nil {
@@ -2311,6 +2343,20 @@ func parsePlatformsFromState(state *models.UserState) []installer.Platform {
 func (m *Model) saveNewSkillCmd() tea.Cmd {
 	return func() tea.Msg {
 		return views.NewSkillSavedMsg{Err: fmt.Errorf("skill saving disabled - use Claude to save skills directly")}
+	}
+}
+
+// ingestDiscoveredSkillCmd returns a command to ingest a discovered skill.
+func (m *Model) ingestDiscoveredSkillCmd(disc *models.DiscoveredSkill) tea.Cmd {
+	return func() tea.Msg {
+		ingestionSvc := discovery.NewIngestionService(m.db, m.cfg)
+		ctx := context.Background()
+
+		result, err := ingestionSvc.IngestSkill(ctx, disc)
+		if err != nil {
+			return ingestCompleteMsg{name: disc.Name, err: err}
+		}
+		return ingestCompleteMsg{name: result.Name, err: nil}
 	}
 }
 
