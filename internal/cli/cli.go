@@ -58,9 +58,11 @@ Telemetry:
 func init() {
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(checkCmd)
+	rootCmd.AddCommand(discoverCmd)
 	rootCmd.AddCommand(favoritesCmd)
 	rootCmd.AddCommand(feedbackCmd)
 	rootCmd.AddCommand(infoCmd)
+	rootCmd.AddCommand(ingestCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(pullCmd)

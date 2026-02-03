@@ -19,6 +19,12 @@ type PlatformConfig struct {
 	SkillsPath string
 }
 
+// DiscoveredSkillWithSource wraps a DiscoveredSkill with its platform name for display.
+type DiscoveredSkillWithSource struct {
+	models.DiscoveredSkill
+	Platform string
+}
+
 // NewScannerService creates a new scanner service.
 func NewScannerService() *ScannerService {
 	return &ScannerService{}
