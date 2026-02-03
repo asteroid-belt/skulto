@@ -125,6 +125,7 @@ func (db *DB) migrate() error {
 		&models.AuxiliaryFile{},
 		&models.SecurityScan{},
 		&models.AgentPreference{},
+		&models.DiscoveredSkill{},
 	)
 }
 

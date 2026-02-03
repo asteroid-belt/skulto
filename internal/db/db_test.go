@@ -1251,3 +1251,20 @@ func TestTransaction_MultipleOperations(t *testing.T) {
 		}
 	}
 }
+
+// --- DiscoveredSkills Table Tests ---
+
+func TestDB_DiscoveredSkillsTableExists(t *testing.T) {
+	db := testDB(t)
+
+	// Check table exists
+	var count int64
+	err := db.Raw("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='discovered_skills'").Scan(&count).Error
+
+	if err != nil {
+		t.Fatalf("Query error: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("discovered_skills table should exist, got count = %d", count)
+	}
+}
