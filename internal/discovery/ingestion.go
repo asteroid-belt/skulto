@@ -3,6 +3,8 @@ package discovery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/scraper"
 )
 
 // IngestionResult contains the result of ingesting a skill.
@@ -18,6 +21,7 @@ type IngestionResult struct {
 	Name     string
 	OrigPath string
 	DestPath string
+	Skill    *models.Skill // The created skill record
 }
 
 // IngestionService handles copying discovered skills to skulto management.
@@ -109,10 +113,21 @@ func (s *IngestionService) IngestSkill(ctx context.Context, skill *models.Discov
 		_ = s.db.DeleteDiscoveredSkill(skill.ID)
 	}
 
+	// Parse skill.md and create database records
+	var parsedSkill *models.Skill
+	if s.db != nil {
+		var err error
+		parsedSkill, err = s.parseAndCreateSkillRecord(destPath, skill)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create skill record: %w", err)
+		}
+	}
+
 	return &IngestionResult{
 		Name:     skill.Name,
 		OrigPath: skill.Path,
 		DestPath: destPath,
+		Skill:    parsedSkill,
 	}, nil
 }
 
@@ -181,4 +196,68 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err
+}
+
+// parseAndCreateSkillRecord parses the skill.md file and creates database records.
+func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discoveredSkill *models.DiscoveredSkill) (*models.Skill, error) {
+	// Read skill.md content (try both lowercase and uppercase)
+	skillMdPath := filepath.Join(destPath, "skill.md")
+	content, err := os.ReadFile(skillMdPath)
+	if err != nil {
+		// Try SKILL.md
+		skillMdPath = filepath.Join(destPath, "SKILL.md")
+		content, err = os.ReadFile(skillMdPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read skill.md: %w", err)
+		}
+	}
+
+	// Parse skill using the scraper parser
+	parser := scraper.NewSkillParser()
+	skillFile := &scraper.SkillFile{
+		ID:   generateLocalSkillID(destPath),
+		Path: destPath,
+		// Don't set RepoName - local skills have no source
+	}
+	parsedSkill, err := parser.Parse(string(content), skillFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse skill: %w", err)
+	}
+
+	// Set local skill flags and clear SourceID (local skills have no source)
+	parsedSkill.IsLocal = true
+	parsedSkill.IsInstalled = true
+	parsedSkill.FilePath = destPath
+	parsedSkill.SourceID = nil // Local skills have no source
+
+	// Extract tags from content
+	tags := scraper.ExtractTagsWithContext(parsedSkill.Title, parsedSkill.Description, string(content))
+
+	// Upsert skill with tags
+	if err := s.db.UpsertSkillWithTags(parsedSkill, tags); err != nil {
+		return nil, fmt.Errorf("failed to save skill: %w", err)
+	}
+
+	// Create SkillInstallation record
+	installation := &models.SkillInstallation{
+		SkillID:     parsedSkill.ID,
+		Platform:    discoveredSkill.Platform,
+		Scope:       discoveredSkill.Scope,
+		BasePath:    destPath,
+		SymlinkPath: discoveredSkill.Path, // Original path (now a symlink)
+	}
+	installation.ID = installation.GenerateID()
+
+	if err := s.db.AddInstallation(installation); err != nil {
+		return nil, fmt.Errorf("failed to create installation: %w", err)
+	}
+
+	return parsedSkill, nil
+}
+
+// generateLocalSkillID creates a unique ID for a local skill based on path.
+// Uses SHA256 hash truncated to 16 characters for consistency with other skill IDs.
+func generateLocalSkillID(path string) string {
+	h := sha256.Sum256([]byte("local:" + path))
+	return hex.EncodeToString(h[:])[:16]
 }
