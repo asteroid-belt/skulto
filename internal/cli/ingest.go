@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/discovery"
+	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/spf13/cobra"
 )
 
@@ -80,20 +83,19 @@ func runIngest(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = database.Close() }()
 
+	// Create ingestion service
+	ingestionSvc := discovery.NewIngestionService(database, cfg)
+
 	if ingestAll {
-		return runBulkIngest(database)
+		return runBulkIngest(database, cfg, ingestionSvc)
 	}
 
-	return runSingleIngest(database, skillName)
+	return runSingleIngest(database, cfg, ingestionSvc, skillName)
 }
 
 // runBulkIngest handles the --all flag case.
-func runBulkIngest(database *db.DB) error {
-	var skills []struct {
-		Name  string
-		Scope string
-		Path  string
-	}
+func runBulkIngest(database *db.DB, cfg *config.Config, ingestionSvc *discovery.IngestionService) error {
+	var skills []models.DiscoveredSkill
 
 	// Get discovered skills filtered by scope if specified
 	if ingestProjectOnly {
@@ -101,37 +103,19 @@ func runBulkIngest(database *db.DB) error {
 		if err != nil {
 			return trackCLIError("ingest", fmt.Errorf("list discovered skills: %w", err))
 		}
-		for _, d := range discovered {
-			skills = append(skills, struct {
-				Name  string
-				Scope string
-				Path  string
-			}{d.Name, d.Scope, d.Path})
-		}
+		skills = discovered
 	} else if ingestGlobalOnly {
 		discovered, err := database.ListDiscoveredSkillsByScope("global")
 		if err != nil {
 			return trackCLIError("ingest", fmt.Errorf("list discovered skills: %w", err))
 		}
-		for _, d := range discovered {
-			skills = append(skills, struct {
-				Name  string
-				Scope string
-				Path  string
-			}{d.Name, d.Scope, d.Path})
-		}
+		skills = discovered
 	} else {
 		discovered, err := database.ListDiscoveredSkills()
 		if err != nil {
 			return trackCLIError("ingest", fmt.Errorf("list discovered skills: %w", err))
 		}
-		for _, d := range discovered {
-			skills = append(skills, struct {
-				Name  string
-				Scope string
-				Path  string
-			}{d.Name, d.Scope, d.Path})
-		}
+		skills = discovered
 	}
 
 	if len(skills) == 0 {
@@ -146,19 +130,65 @@ func runBulkIngest(database *db.DB) error {
 	}
 	fmt.Println()
 
-	// Placeholder: IngestionService will be implemented in Phase 4
-	fmt.Println("Ingestion service not yet implemented.")
-	fmt.Println("The following operations would be performed:")
-	for _, s := range skills {
-		fmt.Printf("  1. Copy %s to .skulto/skills/%s/\n", s.Path, s.Name)
-		fmt.Printf("  2. Create symlink at original location pointing to skulto storage\n")
+	ctx := context.Background()
+	var successCount, skipCount, errorCount int
+
+	for i := range skills {
+		skill := &skills[i]
+
+		// Check for name conflicts
+		hasConflict, err := ingestionSvc.CheckNameConflict(skill.Name, skill.Scope)
+		if err != nil {
+			fmt.Printf("  Error checking conflict for %s: %v\n", skill.Name, err)
+			errorCount++
+			continue
+		}
+
+		if hasConflict {
+			action, newName, err := promptConflictResolution(skill.Name)
+			if err != nil {
+				fmt.Printf("  Error reading input for %s: %v\n", skill.Name, err)
+				errorCount++
+				continue
+			}
+
+			switch action {
+			case "skip":
+				fmt.Printf("  Skipped: %s\n", skill.Name)
+				skipCount++
+				continue
+			case "rename":
+				skill.Name = newName
+			case "replace":
+				// Remove existing and continue with ingestion
+				paths := config.GetPaths(cfg)
+				destPath := paths.Skills
+				if skill.Scope == "project" {
+					cwd, _ := os.Getwd()
+					destPath = cwd + "/.skulto/skills"
+				}
+				_ = os.RemoveAll(destPath + "/" + skill.Name)
+			}
+		}
+
+		// Perform ingestion
+		result, err := ingestionSvc.IngestSkill(ctx, skill)
+		if err != nil {
+			fmt.Printf("  Error ingesting %s: %v\n", skill.Name, err)
+			errorCount++
+			continue
+		}
+
+		fmt.Printf("  Imported: %s -> %s\n", result.Name, result.DestPath)
+		successCount++
 	}
 
+	fmt.Printf("\nImport complete: %d imported, %d skipped, %d errors\n", successCount, skipCount, errorCount)
 	return nil
 }
 
 // runSingleIngest handles ingestion of a single skill by name.
-func runSingleIngest(database *db.DB, skillName string) error {
+func runSingleIngest(database *db.DB, cfg *config.Config, ingestionSvc *discovery.IngestionService, skillName string) error {
 	// Determine scope to search
 	var scope string
 	if ingestProjectOnly {
@@ -167,11 +197,7 @@ func runSingleIngest(database *db.DB, skillName string) error {
 		scope = "global"
 	}
 
-	var skill *struct {
-		Name  string
-		Scope string
-		Path  string
-	}
+	var skill *models.DiscoveredSkill
 
 	// Find the discovered skill
 	if scope != "" {
@@ -179,11 +205,7 @@ func runSingleIngest(database *db.DB, skillName string) error {
 		if err != nil {
 			return trackCLIError("ingest", fmt.Errorf("skill '%s' not found in %s scope", skillName, scope))
 		}
-		skill = &struct {
-			Name  string
-			Scope string
-			Path  string
-		}{discovered.Name, discovered.Scope, discovered.Path}
+		skill = discovered
 	} else {
 		// Try project scope first, then global
 		discovered, err := database.GetDiscoveredSkillByName(skillName, "project")
@@ -193,30 +215,55 @@ func runSingleIngest(database *db.DB, skillName string) error {
 				return trackCLIError("ingest", fmt.Errorf("skill '%s' not found. Run 'skulto discover' to scan for unmanaged skills", skillName))
 			}
 		}
-		skill = &struct {
-			Name  string
-			Scope string
-			Path  string
-		}{discovered.Name, discovered.Scope, discovered.Path}
+		skill = discovered
 	}
 
 	fmt.Printf("Found discovered skill: %s (%s scope)\n", skill.Name, skill.Scope)
 	fmt.Printf("  Path: %s\n\n", skill.Path)
 
-	// TODO: Check for conflicts with existing skulto-managed skills
-	// This would require checking if .skulto/skills/<name> already exists
+	// Check for name conflicts
+	hasConflict, err := ingestionSvc.CheckNameConflict(skill.Name, skill.Scope)
+	if err != nil {
+		return trackCLIError("ingest", fmt.Errorf("check conflict: %w", err))
+	}
 
-	// Placeholder: IngestionService will be implemented in Phase 4
-	fmt.Println("Ingestion service not yet implemented.")
-	fmt.Println("The following operations would be performed:")
-	fmt.Printf("  1. Copy %s to .skulto/skills/%s/\n", skill.Path, skill.Name)
-	fmt.Printf("  2. Create symlink at original location pointing to skulto storage\n")
+	if hasConflict {
+		action, newName, err := promptConflictResolution(skill.Name)
+		if err != nil {
+			return trackCLIError("ingest", fmt.Errorf("read input: %w", err))
+		}
 
+		switch action {
+		case "skip":
+			fmt.Printf("Skipped: %s\n", skill.Name)
+			return nil
+		case "rename":
+			skill.Name = newName
+		case "replace":
+			// Remove existing and continue with ingestion
+			paths := config.GetPaths(cfg)
+			destPath := paths.Skills
+			if skill.Scope == "project" {
+				cwd, _ := os.Getwd()
+				destPath = cwd + "/.skulto/skills"
+			}
+			_ = os.RemoveAll(destPath + "/" + skill.Name)
+		}
+	}
+
+	// Perform ingestion
+	ctx := context.Background()
+	result, err := ingestionSvc.IngestSkill(ctx, skill)
+	if err != nil {
+		return trackCLIError("ingest", fmt.Errorf("ingest skill: %w", err))
+	}
+
+	fmt.Printf("Imported: %s -> %s\n", result.Name, result.DestPath)
+	fmt.Println("Original location now points to skulto-managed skill via symlink.")
 	return nil
 }
 
 // promptConflictResolution prompts the user to resolve a naming conflict.
-// nolint:unused // Stub for Phase 4 IngestionService implementation
 func promptConflictResolution(name string) (action, newName string, err error) {
 	fmt.Printf("Skill '%s' already exists in .skulto/skills/\n", name)
 	fmt.Print("  [r]ename  [s]kip  [R]eplace: ")
