@@ -555,22 +555,28 @@ func TestInstalled(t *testing.T) {
 		t.Fatalf("CreateSkill() error = %v", err)
 	}
 
-	// Add to installed
-	err := db.AddInstalled("fav-test-001")
-	if err != nil {
-		t.Fatalf("AddInstalled() error = %v", err)
+	// Add installation record (source of truth for "installed")
+	install := &models.SkillInstallation{
+		ID:       "test-install-001",
+		SkillID:  "fav-test-001",
+		Platform: "claude",
+		Scope:    "global",
+		BasePath: "/home/test",
+	}
+	if err := db.AddInstallation(install); err != nil {
+		t.Fatalf("AddInstallation() error = %v", err)
 	}
 
-	// Check is installed
-	isInst, err := db.IsInstalled("fav-test-001")
+	// Check has installations (source of truth)
+	hasInst, err := db.HasInstallations("fav-test-001")
 	if err != nil {
-		t.Fatalf("IsInstalled() error = %v", err)
+		t.Fatalf("HasInstallations() error = %v", err)
 	}
-	if !isInst {
-		t.Error("IsInstalled() = false, want true")
+	if !hasInst {
+		t.Error("HasInstallations() = false, want true")
 	}
 
-	// Get installed
+	// Get installed (based on skill_installations)
 	installed, err := db.GetInstalled()
 	if err != nil {
 		t.Fatalf("GetInstalled() error = %v", err)
@@ -586,6 +592,13 @@ func TestInstalled(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("CountInstalled() = %d, want 1", count)
+	}
+
+	// Notes functionality uses the legacy installed table
+	// Add to installed table for notes
+	err = db.AddInstalled("fav-test-001")
+	if err != nil {
+		t.Fatalf("AddInstalled() error = %v", err)
 	}
 
 	// Update notes
@@ -605,15 +618,15 @@ func TestInstalled(t *testing.T) {
 		t.Errorf("Notes = %q, want %q", instWithNotes[0].Notes, "My installed skill!")
 	}
 
-	// Remove from installed
-	err = db.RemoveInstalled("fav-test-001")
+	// Remove installation record
+	err = db.RemoveInstallation("fav-test-001", "claude", "global", "/home/test")
 	if err != nil {
-		t.Fatalf("RemoveInstalled() error = %v", err)
+		t.Fatalf("RemoveInstallation() error = %v", err)
 	}
 
-	isInst, _ = db.IsInstalled("fav-test-001")
-	if isInst {
-		t.Error("IsInstalled() after remove = true, want false")
+	hasInst, _ = db.HasInstallations("fav-test-001")
+	if hasInst {
+		t.Error("HasInstallations() after remove = true, want false")
 	}
 }
 

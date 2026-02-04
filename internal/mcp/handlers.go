@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
@@ -99,6 +100,8 @@ type AddSkillResult struct {
 }
 
 // toSkillResponse converts a models.Skill to SkillResponse.
+// Note: IsInstalled uses the skill record's legacy field.
+// Use toSkillResponseWithDB for accurate installed status from skill_installations.
 func toSkillResponse(skill *models.Skill, includeContent bool) SkillResponse {
 	resp := SkillResponse{
 		ID:          skill.ID,
@@ -109,7 +112,7 @@ func toSkillResponse(skill *models.Skill, includeContent bool) SkillResponse {
 		Author:      skill.Author,
 		Difficulty:  skill.Difficulty,
 		Stars:       skill.Stars,
-		IsInstalled: skill.IsInstalled,
+		IsInstalled: skill.IsInstalled, // Legacy field - may be stale
 	}
 
 	if includeContent {
@@ -128,6 +131,18 @@ func toSkillResponse(skill *models.Skill, includeContent bool) SkillResponse {
 		}
 	}
 
+	return resp
+}
+
+// toSkillResponseWithDB converts a models.Skill to SkillResponse using
+// skill_installations as the source of truth for installed status.
+func toSkillResponseWithDB(skill *models.Skill, includeContent bool, database *db.DB) SkillResponse {
+	resp := toSkillResponse(skill, includeContent)
+	// Override IsInstalled with accurate value from skill_installations
+	if database != nil {
+		hasInstalls, _ := database.HasInstallations(skill.ID)
+		resp.IsInstalled = hasInstalls
+	}
 	return resp
 }
 
@@ -152,7 +167,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	results := make([]SkillResponse, 0, len(skills))
 	for i := range skills {
-		results = append(results, toSkillResponse(&skills[i], false))
+		results = append(results, toSkillResponseWithDB(&skills[i], false, s.db))
 	}
 
 	data, err := json.Marshal(results)
@@ -182,7 +197,7 @@ func (s *Server) handleGetSkill(ctx context.Context, req mcp.CallToolRequest) (*
 	skill.ViewedAt = &now
 	_ = s.db.UpdateSkill(skill)
 
-	resp := toSkillResponse(skill, true)
+	resp := toSkillResponseWithDB(skill, true, s.db)
 
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -214,7 +229,7 @@ func (s *Server) handleListSkills(ctx context.Context, req mcp.CallToolRequest) 
 
 	results := make([]SkillResponse, 0, len(skills))
 	for i := range skills {
-		results = append(results, toSkillResponse(&skills[i], false))
+		results = append(results, toSkillResponseWithDB(&skills[i], false, s.db))
 	}
 
 	data, err := json.Marshal(results)
@@ -301,7 +316,7 @@ func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (
 
 	results := make([]SkillResponse, 0, len(skills))
 	for i := range skills {
-		results = append(results, toSkillResponse(&skills[i], false))
+		results = append(results, toSkillResponseWithDB(&skills[i], false, s.db))
 	}
 
 	data, err := json.Marshal(results)
@@ -564,7 +579,7 @@ func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest
 			})
 			continue
 		}
-		results = append(results, toSkillResponse(skill, false))
+		results = append(results, toSkillResponseWithDB(skill, false, s.db))
 	}
 
 	data, err := json.Marshal(results)

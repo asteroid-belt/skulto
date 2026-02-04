@@ -33,6 +33,7 @@ func New(database *db.DB, conf *config.Config) *Installer {
 
 // Install installs a skill to all configured AI tools by creating symlinks.
 // The skill source directory must exist in the cloned repository.
+// This is a convenience wrapper around InstallTo that uses the user's configured platforms.
 func (i *Installer) Install(ctx context.Context, skill *models.Skill, source *models.Source) error {
 	if skill == nil {
 		return fmt.Errorf("skill cannot be nil")
@@ -57,100 +58,28 @@ func (i *Installer) Install(ctx context.Context, skill *models.Skill, source *mo
 		return ErrNoToolsSelected
 	}
 
-	// Get source skill path in repository using the skill's actual FilePath
-	sourcePath := i.paths.GetSourcePath(source.Owner, source.Repo, skill.FilePath)
-
-	// Verify source path exists
-	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		return fmt.Errorf("skill directory not found: %s", sourcePath)
-	}
-
-	// Create symlinks for each platform
-	var createdSymlinks []string
-	var lastErr error
-
+	// Build install locations from platforms (global scope by default)
+	locations := make([]InstallLocation, 0, len(platforms))
 	for _, platform := range platforms {
-		targetPath, err := platform.GetSkillPath(skill.Slug)
+		loc, err := NewInstallLocation(platform, ScopeGlobal)
 		if err != nil {
-			lastErr = err
 			continue
 		}
-
-		// Ensure target parent directory exists
-		targetDir := filepath.Dir(targetPath)
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			lastErr = err
-			continue
-		}
-
-		// Remove existing symlink or directory
-		if exists(targetPath) {
-			if err := os.RemoveAll(targetPath); err != nil {
-				lastErr = err
-				continue
-			}
-		}
-
-		// Create symlink: targetPath -> sourcePath
-		if err := os.Symlink(sourcePath, targetPath); err != nil {
-			lastErr = err
-			continue
-		}
-
-		createdSymlinks = append(createdSymlinks, targetPath)
+		locations = append(locations, loc)
 	}
 
-	// If no platforms succeeded, return error
-	if len(createdSymlinks) == 0 {
-		if lastErr != nil {
-			return fmt.Errorf("failed to install to any platform: %w", lastErr)
-		}
-		return ErrSymlinkFailed
+	if len(locations) == 0 {
+		return ErrNoToolsSelected
 	}
 
-	// Update database
-	if err := i.db.SetInstalled(skill.ID, true); err != nil {
-		// Rollback: remove created symlinks
-		for _, path := range createdSymlinks {
-			_ = os.Remove(path)
-		}
-		return fmt.Errorf("database update failed: %w", err)
-	}
-
-	return nil
+	// Delegate to InstallTo which creates proper skill_installations records
+	return i.InstallTo(ctx, skill, source, locations)
 }
 
 // Uninstall removes skill symlinks from all platforms.
+// This is a convenience wrapper that delegates to UninstallAll.
 func (i *Installer) Uninstall(ctx context.Context, skill *models.Skill) error {
-	if skill == nil {
-		return fmt.Errorf("skill cannot be nil")
-	}
-
-	if skill.Slug == "" {
-		return ErrInvalidSkill
-	}
-
-	// Remove symlinks for all platforms
-	var errors []error
-	for _, platform := range AllPlatforms() {
-		targetPath, err := platform.GetSkillPath(skill.Slug)
-		if err != nil {
-			continue
-		}
-
-		if exists(targetPath) && isSymlink(targetPath) {
-			if err := os.Remove(targetPath); err != nil {
-				errors = append(errors, fmt.Errorf("%s: %w", platform, err))
-			}
-		}
-	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("symlink removal failed: %v", errors)
-	}
-
-	// Update database
-	return i.db.SetInstalled(skill.ID, false)
+	return i.UninstallAll(ctx, skill)
 }
 
 // ReInstall reinstalls a skill by uninstalling and reinstalling.
@@ -162,7 +91,9 @@ func (i *Installer) ReInstall(ctx context.Context, skill *models.Skill, source *
 }
 
 // IsInstalled checks if a skill is installed.
+// Uses skill_installations as the single source of truth.
 func (i *Installer) IsInstalled(skillID string) (bool, error) {
+	// First check if skill exists
 	skill, err := i.db.GetSkill(skillID)
 	if err != nil {
 		return false, err
@@ -170,7 +101,8 @@ func (i *Installer) IsInstalled(skillID string) (bool, error) {
 	if skill == nil {
 		return false, ErrSkillNotFound
 	}
-	return skill.IsInstalled, nil
+	// Use skill_installations table as the source of truth
+	return i.db.HasInstallations(skillID)
 }
 
 // InstallTo installs a skill to specific locations by creating symlinks.

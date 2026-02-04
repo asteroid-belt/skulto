@@ -186,7 +186,8 @@ func runFavoritesList(cmd *cobra.Command, args []string) error {
 		}
 
 		installedIndicator := ""
-		if skill.IsInstalled {
+		// Use skill_installations as source of truth for installed status
+		if hasInstalls, _ := database.HasInstallations(skill.ID); hasInstalls {
 			installedIndicator = " [installed]"
 		}
 

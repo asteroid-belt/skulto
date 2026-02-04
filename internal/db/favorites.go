@@ -50,13 +50,24 @@ func (db *DB) IsInstalled(skillID string) (bool, error) {
 }
 
 // GetInstalled returns all installed skills.
+// Uses skill_installations as the source of truth - a skill is "installed"
+// if it has at least one installation record (symlink on disk).
 func (db *DB) GetInstalled() ([]models.Skill, error) {
 	var skills []models.Skill
 	err := db.Preload("Tags").
-		Joins("JOIN installed f ON skills.id = f.skill_id").
-		Order("f.added_at DESC").
+		Joins("JOIN skill_installations si ON skills.id = si.skill_id").
+		Group("skills.id").
+		Order("MAX(si.installed_at) DESC").
 		Find(&skills).Error
 	return skills, err
+}
+
+// HasInstallations checks if a skill has any installation records.
+// This is the source of truth for whether a skill is "installed".
+func (db *DB) HasInstallations(skillID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.SkillInstallation{}).Where("skill_id = ?", skillID).Count(&count).Error
+	return count > 0, err
 }
 
 // GetInstalledWithNotes returns installed skills with their notes.
@@ -76,8 +87,11 @@ func (db *DB) UpdateInstalledNotes(skillID, notes string) error {
 }
 
 // CountInstalled returns the number of installed skills.
+// Uses skill_installations as the source of truth.
 func (db *DB) CountInstalled() (int64, error) {
 	var count int64
-	err := db.Model(&models.Installed{}).Count(&count).Error
+	err := db.Model(&models.SkillInstallation{}).
+		Select("COUNT(DISTINCT skill_id)").
+		Scan(&count).Error
 	return count, err
 }

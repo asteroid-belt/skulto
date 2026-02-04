@@ -65,7 +65,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		var installedCount, notInstalledCount int
 		if err == nil {
 			for _, skill := range skills {
-				if skill.IsInstalled {
+				// Use skill_installations as source of truth
+				hasInstalls, _ := database.HasInstallations(skill.ID)
+				if hasInstalls {
 					installedCount++
 				} else {
 					notInstalledCount++

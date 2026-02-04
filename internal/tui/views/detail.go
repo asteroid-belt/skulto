@@ -58,9 +58,10 @@ type DetailView struct {
 	// Favorite state (cached)
 	isFavorite bool
 
-	// Installation state
-	installing bool
-	installErr error
+	// Installation state - hasInstallations is the source of truth
+	hasInstallations bool
+	installing       bool
+	installErr       error
 
 	// Scanning state
 	scanning bool
@@ -154,6 +155,9 @@ func (dv *DetailView) HandleSkillLoaded(msg SkillLoadedMsg) {
 	}
 
 	dv.skill = msg.Skill
+
+	// Check if this skill has any installations (source of truth for "installed")
+	dv.hasInstallations, _ = dv.db.HasInstallations(msg.Skill.ID)
 
 	// Check if this skill is a favorite
 	if dv.favorites != nil {
@@ -293,7 +297,7 @@ func (dv *DetailView) Update(key string) (back bool, cmd tea.Cmd) {
 		// Toggle install - set installing state and return command to perform installation
 		// Works for both local and remote skills
 		if dv.skill != nil && !dv.installing {
-			dv.skill.IsInstalled = !dv.skill.IsInstalled
+			dv.hasInstallations = !dv.hasInstallations
 			dv.installing = true
 			dv.installErr = nil
 			return false, nil // Command will be handled by app.go
@@ -363,6 +367,17 @@ func (dv *DetailView) SetInstallError(err error) {
 // IsInstalling returns whether an installation is in progress.
 func (dv *DetailView) IsInstalling() bool {
 	return dv.installing
+}
+
+// WantsToInstall returns true if the user wants to install (vs uninstall).
+// This returns the target state after the toggle was pressed.
+func (dv *DetailView) WantsToInstall() bool {
+	return dv.hasInstallations
+}
+
+// SetHasInstallations updates the installation status after install/uninstall completes.
+func (dv *DetailView) SetHasInstallations(has bool) {
+	dv.hasInstallations = has
 }
 
 // SetScanning sets the scanning state.
@@ -498,7 +513,7 @@ func (dv *DetailView) renderDescription() string {
 // renderInstallIndicator renders the install/uninstall status indicator.
 func (dv *DetailView) renderInstallIndicator() string {
 	installText := "☐ Install to AI tools (i)"
-	if dv.skill.IsInstalled {
+	if dv.hasInstallations {
 		installText = "☑ Installed (i to uninstall)"
 	}
 	return lipgloss.NewStyle().

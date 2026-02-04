@@ -5,12 +5,16 @@ import (
 	"sort"
 
 	"github.com/asteroid-belt/skulto/internal/config"
-	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// OnboardingSkillsDB defines the database operations needed by OnboardingSkillsView.
+type OnboardingSkillsDB interface {
+	HasInstallations(skillID string) (bool, error)
+}
 
 // PrimarySkillsFetchedMsg is sent when primary skills have been fetched from the repo.
 type PrimarySkillsFetchedMsg struct {
@@ -28,7 +32,7 @@ type SkillItem struct {
 // OnboardingSkillsView displays skills from the primary repo in a checklist.
 type OnboardingSkillsView struct {
 	cfg *config.Config
-	db  *db.DB
+	db  OnboardingSkillsDB
 
 	// Skills lists - separated by installation status
 	newSkills       []SkillItem
@@ -50,7 +54,7 @@ type OnboardingSkillsView struct {
 }
 
 // NewOnboardingSkillsView creates a new onboarding skills view.
-func NewOnboardingSkillsView(conf *config.Config, database *db.DB) *OnboardingSkillsView {
+func NewOnboardingSkillsView(conf *config.Config, database OnboardingSkillsDB) *OnboardingSkillsView {
 	return &OnboardingSkillsView{
 		cfg:          conf,
 		db:           database,
@@ -97,12 +101,14 @@ func (v *OnboardingSkillsView) HandleSkillsFetched(skills []models.Skill, err er
 	v.installedSkills = nil
 
 	for _, skill := range skills {
+		// Use skill_installations as source of truth for installed status
+		hasInstalls, _ := v.db.HasInstallations(skill.ID)
 		item := SkillItem{
 			Skill:            skill,
-			AlreadyInstalled: skill.IsInstalled,
+			AlreadyInstalled: hasInstalls,
 		}
 
-		if skill.IsInstalled {
+		if hasInstalls {
 			// Already installed skills are unchecked by default
 			item.Selected = false
 			v.installedSkills = append(v.installedSkills, item)

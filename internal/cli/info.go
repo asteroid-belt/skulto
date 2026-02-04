@@ -71,7 +71,9 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nSource: %s/%s\n", skill.Source.Owner, skill.Source.Repo)
 	}
 
-	fmt.Printf("\nInstalled: %v\n", skill.IsInstalled)
+	// Use skill_installations as source of truth for installed status
+	hasInstallations, _ := database.HasInstallations(skill.ID)
+	fmt.Printf("\nInstalled: %v\n", hasInstallations)
 
 	return nil
 }

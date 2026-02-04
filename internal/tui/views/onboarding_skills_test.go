@@ -4,17 +4,34 @@ import (
 	"testing"
 
 	"github.com/asteroid-belt/skulto/internal/config"
-	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 
+// mockOnboardingDB implements OnboardingSkillsDB for testing.
+type mockOnboardingDB struct {
+	installations map[string]bool // skillID -> hasInstallations
+}
+
+func newMockOnboardingDB() *mockOnboardingDB {
+	return &mockOnboardingDB{
+		installations: make(map[string]bool),
+	}
+}
+
+func (m *mockOnboardingDB) HasInstallations(skillID string) (bool, error) {
+	return m.installations[skillID], nil
+}
+
+func (m *mockOnboardingDB) setInstalled(skillID string, installed bool) {
+	m.installations[skillID] = installed
+}
+
 func TestOnboardingSkillsViewInit(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	assert.True(t, v.loading)
@@ -25,10 +42,9 @@ func TestOnboardingSkillsViewInit(t *testing.T) {
 
 func TestOnboardingSkillsViewHandlesFetch(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -51,16 +67,16 @@ func TestOnboardingSkillsViewHandlesFetch(t *testing.T) {
 
 func TestOnboardingSkillsViewClassifiesExisting(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	// Mark skill "2" as having installations
+	mockDB.setInstalled("2", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
-	// Skills with IsInstalled flag set (simulates what the caller would do)
 	skills := []models.Skill{
-		{ID: "1", Slug: "new-skill", Title: "New Skill", IsInstalled: false},
-		{ID: "2", Slug: "existing-skill", Title: "Existing Skill", IsInstalled: true},
+		{ID: "1", Slug: "new-skill", Title: "New Skill"},
+		{ID: "2", Slug: "existing-skill", Title: "Existing Skill"},
 	}
 
 	v.HandleSkillsFetched(skills, nil)
@@ -78,10 +94,9 @@ func TestOnboardingSkillsViewClassifiesExisting(t *testing.T) {
 
 func TestOnboardingSkillsViewNavigation(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -105,10 +120,9 @@ func TestOnboardingSkillsViewNavigation(t *testing.T) {
 
 func TestOnboardingSkillsViewToggle(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -130,10 +144,9 @@ func TestOnboardingSkillsViewToggle(t *testing.T) {
 
 func TestOnboardingSkillsViewSelectAll(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -155,10 +168,9 @@ func TestOnboardingSkillsViewSelectAll(t *testing.T) {
 
 func TestOnboardingSkillsViewSkip(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.loading = false
 
@@ -170,10 +182,9 @@ func TestOnboardingSkillsViewSkip(t *testing.T) {
 
 func TestOnboardingSkillsViewContinue(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.loading = false
 
@@ -185,10 +196,9 @@ func TestOnboardingSkillsViewContinue(t *testing.T) {
 
 func TestOnboardingSkillsViewGetSelected(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -207,16 +217,17 @@ func TestOnboardingSkillsViewGetSelected(t *testing.T) {
 
 func TestOnboardingSkillsViewGetReplaceSkills(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("2", true)
+	mockDB.setInstalled("3", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
-		{ID: "1", Slug: "new-skill", Title: "New Skill", IsInstalled: false},
-		{ID: "2", Slug: "installed-a", Title: "Installed A", IsInstalled: true},
-		{ID: "3", Slug: "installed-b", Title: "Installed B", IsInstalled: true},
+		{ID: "1", Slug: "new-skill", Title: "New Skill"},
+		{ID: "2", Slug: "installed-a", Title: "Installed A"},
+		{ID: "3", Slug: "installed-b", Title: "Installed B"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -232,10 +243,9 @@ func TestOnboardingSkillsViewGetReplaceSkills(t *testing.T) {
 
 func TestOnboardingSkillsViewHandlesError(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	testErr := assert.AnError
@@ -248,15 +258,15 @@ func TestOnboardingSkillsViewHandlesError(t *testing.T) {
 
 func TestOnboardingSkillsViewNavigationCrossSection(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("2", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
-		{ID: "1", Slug: "new-skill", Title: "New", IsInstalled: false},
-		{ID: "2", Slug: "installed", Title: "Installed", IsInstalled: true},
+		{ID: "1", Slug: "new-skill", Title: "New"},
+		{ID: "2", Slug: "installed", Title: "Installed"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -277,10 +287,9 @@ func TestOnboardingSkillsViewNavigationCrossSection(t *testing.T) {
 
 func TestOnboardingSkillsViewRenderOutput(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.SetSize(100, 50)
 	v.Init()
 
@@ -301,10 +310,9 @@ func TestOnboardingSkillsViewRenderOutput(t *testing.T) {
 
 func TestOnboardingSkillsViewGetKeyboardCommands(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	commands := v.GetKeyboardCommands()
 
 	assert.Equal(t, "Skills Onboarding", commands.ViewName)
@@ -313,10 +321,9 @@ func TestOnboardingSkillsViewGetKeyboardCommands(t *testing.T) {
 
 func TestOnboardingSkillsViewRenderError(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.SetSize(100, 50)
 	v.Init()
 
@@ -330,10 +337,9 @@ func TestOnboardingSkillsViewRenderError(t *testing.T) {
 
 func TestOnboardingSkillsViewErrorStateContinue(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.HandleSkillsFetched(nil, assert.AnError)
 
@@ -345,10 +351,9 @@ func TestOnboardingSkillsViewErrorStateContinue(t *testing.T) {
 
 func TestOnboardingSkillsViewErrorStateSkip(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.HandleSkillsFetched(nil, assert.AnError)
 
@@ -360,10 +365,9 @@ func TestOnboardingSkillsViewErrorStateSkip(t *testing.T) {
 
 func TestOnboardingSkillsViewRenderEmpty(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.SetSize(100, 50)
 	v.Init()
 
@@ -376,10 +380,9 @@ func TestOnboardingSkillsViewRenderEmpty(t *testing.T) {
 
 func TestOnboardingSkillsViewEmptyStateContinue(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.HandleSkillsFetched([]models.Skill{}, nil)
 
@@ -391,10 +394,9 @@ func TestOnboardingSkillsViewEmptyStateContinue(t *testing.T) {
 
 func TestOnboardingSkillsViewEmptyStateSkip(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 	v.HandleSkillsFetched([]models.Skill{}, nil)
 
@@ -406,10 +408,9 @@ func TestOnboardingSkillsViewEmptyStateSkip(t *testing.T) {
 
 func TestOnboardingSkillsViewVimNavigation(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -429,10 +430,9 @@ func TestOnboardingSkillsViewVimNavigation(t *testing.T) {
 
 func TestOnboardingSkillsViewSpaceToggle(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
@@ -454,10 +454,9 @@ func TestOnboardingSkillsViewSpaceToggle(t *testing.T) {
 
 func TestOnboardingSkillsViewLoadingIgnoresKeys(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	// While loading, all keys should be ignored
@@ -472,16 +471,16 @@ func TestOnboardingSkillsViewLoadingIgnoresKeys(t *testing.T) {
 
 func TestOnboardingSkillsViewRenderInstalledSection(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("2", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.SetSize(100, 50)
 	v.Init()
 
 	skills := []models.Skill{
-		{ID: "1", Slug: "new-skill", Title: "New Skill", IsInstalled: false},
-		{ID: "2", Slug: "installed", Title: "Installed Skill", IsInstalled: true},
+		{ID: "1", Slug: "new-skill", Title: "New Skill"},
+		{ID: "2", Slug: "installed", Title: "Installed Skill"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -493,16 +492,17 @@ func TestOnboardingSkillsViewRenderInstalledSection(t *testing.T) {
 
 func TestOnboardingSkillsViewOnlyInstalledSkills(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("1", true)
+	mockDB.setInstalled("2", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	// Only installed skills, no new ones
 	skills := []models.Skill{
-		{ID: "1", Slug: "installed-a", Title: "Installed A", IsInstalled: true},
-		{ID: "2", Slug: "installed-b", Title: "Installed B", IsInstalled: true},
+		{ID: "1", Slug: "installed-a", Title: "Installed A"},
+		{ID: "2", Slug: "installed-b", Title: "Installed B"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -514,14 +514,14 @@ func TestOnboardingSkillsViewOnlyInstalledSkills(t *testing.T) {
 
 func TestOnboardingSkillsViewNavigationBounds(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("1", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
-		{ID: "1", Slug: "installed-a", Title: "Installed A", IsInstalled: true},
+		{ID: "1", Slug: "installed-a", Title: "Installed A"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -536,14 +536,14 @@ func TestOnboardingSkillsViewNavigationBounds(t *testing.T) {
 
 func TestOnboardingSkillsViewToggleInstalledSection(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
+	mockDB.setInstalled("1", true)
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.Init()
 
 	skills := []models.Skill{
-		{ID: "1", Slug: "installed", Title: "Installed", IsInstalled: true},
+		{ID: "1", Slug: "installed", Title: "Installed"},
 	}
 	v.HandleSkillsFetched(skills, nil)
 
@@ -562,10 +562,9 @@ func TestOnboardingSkillsViewToggleInstalledSection(t *testing.T) {
 
 func TestOnboardingSkillsViewSkillWithoutTitle(t *testing.T) {
 	cfg := &config.Config{BaseDir: t.TempDir()}
-	database, _ := db.New(db.DefaultConfig(":memory:"))
-	defer func() { _ = database.Close() }()
+	mockDB := newMockOnboardingDB()
 
-	v := NewOnboardingSkillsView(cfg, database)
+	v := NewOnboardingSkillsView(cfg, mockDB)
 	v.SetSize(100, 50)
 	v.Init()
 

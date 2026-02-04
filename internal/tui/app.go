@@ -633,10 +633,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingInstallSource = nil
 				// Reset the installing state in detail view
 				m.detailView.SetInstallingState(false)
-				// Revert the optimistic UI update
-				if skill := m.detailView.Skill(); skill != nil {
-					skill.IsInstalled = !skill.IsInstalled
-				}
+				// Revert the optimistic UI update - use SetHasInstallations instead of skill.IsInstalled
+				m.detailView.SetHasInstallations(!m.detailView.WantsToInstall())
 				return m, nil
 			}
 
@@ -792,7 +790,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			skill := m.detailView.Skill()
 			if skill != nil && m.detailView.IsInstalling() {
 				// User pressed 'i' - perform async install/uninstall
-				if skill.IsInstalled {
+				if m.detailView.WantsToInstall() {
 					// Installing - always show location dialog for detail view installs
 					m.showLocationDialog = true
 					m.pendingInstallSkill = skill
@@ -1140,11 +1138,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Installation/uninstallation completed successfully
 			m.detailView.SetInstallingState(false)
 		} else {
-			// Installation/uninstallation failed
-			if m.detailView.Skill() != nil {
-				// Revert the optimistic UI update
-				m.detailView.Skill().IsInstalled = !m.detailView.Skill().IsInstalled
-			}
+			// Installation/uninstallation failed - revert the optimistic UI update
+			m.detailView.SetHasInstallations(!m.detailView.WantsToInstall())
 			m.detailView.SetInstallError(msg.Err)
 		}
 
@@ -1979,8 +1974,8 @@ func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 
 			// Mark as local skill (no source ID to avoid foreign key constraint)
 			skill.IsLocal = true
-			skill.IsInstalled = true // Skills in ~/.skulto/skills are considered installed
-			skill.SourceID = nil     // Local skills have no source
+			skill.IsInstalled = false // Not installed until symlinked to AI tools
+			skill.SourceID = nil      // Local skills have no source
 
 			// Hard delete existing and create fresh to ensure FTS triggers fire correctly
 			if existing != nil {
@@ -1994,13 +1989,6 @@ func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 				continue
 			}
 			debugLog("Successfully created skill in DB")
-
-			// Add to installed table so it appears on home page after DB reset
-			if err := m.db.SetInstalled(skill.ID, true); err != nil {
-				debugLog("Error marking as installed: %v", err)
-			} else {
-				debugLog("Marked as installed")
-			}
 
 			// Record as recently viewed
 			if err := m.db.RecordSkillView(skill.ID); err != nil {
@@ -2195,8 +2183,10 @@ func (m *Model) installCmd(skill *models.Skill) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 
-		if skill.IsInstalled {
-			// Installing
+		// Use skill_installations as source of truth for installed status
+		hasInstalls, _ := m.db.HasInstallations(skill.ID)
+		if !hasInstalls {
+			// Installing (skill has no installations, user wants to install)
 			err = m.installer.Install(context.Background(), skill, skill.Source)
 			if err == nil {
 				m.telemetry.TrackSkillInstalled(skill.Title, skill.Category, skill.IsLocal, 1)

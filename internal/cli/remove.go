@@ -138,7 +138,9 @@ func executeRemoval(ctx context.Context, cfg *config.Config, database *db.DB, so
 
 		var uninstallErrors []error
 		for _, skill := range skills {
-			if skill.IsInstalled {
+			// Use skill_installations as source of truth for installed status
+			hasInstalls, _ := database.HasInstallations(skill.ID)
+			if hasInstalls {
 				if err := inst.UninstallAll(ctx, &skill); err != nil {
 					uninstallErrors = append(uninstallErrors, fmt.Errorf("%s: %w", skill.Slug, err))
 				} else {
@@ -271,7 +273,9 @@ func selectRepositoryInteractive(database *db.DB) (*models.Source, error) {
 
 		var installedCount, notInstalledCount int
 		for _, skill := range skills {
-			if skill.IsInstalled {
+			// Use skill_installations as source of truth
+			hasInstalls, _ := database.HasInstallations(skill.ID)
+			if hasInstalls {
 				installedCount++
 			} else {
 				notInstalledCount++

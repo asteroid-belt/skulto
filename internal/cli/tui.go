@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/discovery"
+	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/log"
 	"github.com/asteroid-belt/skulto/internal/search"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
@@ -116,6 +119,9 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		log.Println("\nTelemetry: OFF")
 	}
 
+	// Scan for unmanaged skills before showing notification
+	scanDiscoveredSkills(database, cfg)
+
 	// Show startup notification for unnotified discovered skills
 	showStartupNotification(database, os.Stdout)
 
@@ -138,4 +144,55 @@ func printBanner() {
 `
 	fmt.Print(banner)
 	fmt.Printf("   Version: %s\n", version.Short())
+}
+
+// scanDiscoveredSkills scans platform directories for unmanaged skills.
+// This runs synchronously before the TUI launches to populate discovered_skills.
+func scanDiscoveredSkills(database *db.DB, cfg *config.Config) {
+	if database == nil || cfg == nil {
+		return
+	}
+
+	scanner := discovery.NewScannerService()
+	service := installer.NewInstallService(database, cfg, telemetryClient)
+
+	// Detect available platforms
+	ctx := context.Background()
+	platforms, err := service.DetectPlatforms(ctx)
+	if err != nil {
+		return
+	}
+
+	for _, platform := range platforms {
+		if !platform.Detected {
+			continue
+		}
+
+		info := installer.PlatformFromString(platform.ID).Info()
+
+		// Scan global directories
+		if info.GlobalDir != "" {
+			globalPath := expandPath(info.GlobalDir)
+			discovered, err := scanner.ScanDirectory(globalPath, platform.ID, string(installer.ScopeGlobal))
+			if err == nil {
+				for _, d := range discovered {
+					_ = database.UpsertDiscoveredSkill(&d)
+				}
+			}
+		}
+
+		// Scan project directories
+		if info.SkillsPath != "" {
+			cwd, err := os.Getwd()
+			if err == nil {
+				projectPath := filepath.Join(cwd, info.SkillsPath)
+				discovered, err := scanner.ScanDirectory(projectPath, platform.ID, string(installer.ScopeProject))
+				if err == nil {
+					for _, d := range discovered {
+						_ = database.UpsertDiscoveredSkill(&d)
+					}
+				}
+			}
+		}
+	}
 }
