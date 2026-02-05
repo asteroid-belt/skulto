@@ -126,19 +126,19 @@ const MaxTagsPerSkill = 5
 // TagAliases maps common abbreviations/variants to canonical tag names.
 var TagAliases = map[string]string{
 	// Languages
-	"js":           "javascript",
-	"ts":           "typescript",
-	"py":           "python",
-	"golang":       "go",
-	"c#":           "csharp",
-	"c++":          "cpp",
+	"js":     "javascript",
+	"ts":     "typescript",
+	"py":     "python",
+	"golang": "go",
+	"c#":     "csharp",
+	"c++":    "cpp",
 	// Tools
-	"k8s":          "kubernetes",
-	"postgres":     "postgresql",
-	"mongo":        "mongodb",
-	"node":         "nodejs",
-	"node.js":      "nodejs",
-	"es":           "elasticsearch",
+	"k8s":      "kubernetes",
+	"postgres": "postgresql",
+	"mongo":    "mongodb",
+	"node":     "nodejs",
+	"node.js":  "nodejs",
+	"es":       "elasticsearch",
 	// Frameworks
 	"next":         "nextjs",
 	"next.js":      "nextjs",
@@ -147,50 +147,50 @@ var TagAliases = map[string]string{
 	"react-native": "react",
 	"rn":           "react",
 	// AI
-	"gpt":          "openai",
-	"chatgpt":      "openai",
-	"gpt-4":        "openai",
-	"anthropic":    "claude",
-	"llama":        "ollama",
+	"gpt":       "openai",
+	"chatgpt":   "openai",
+	"gpt-4":     "openai",
+	"anthropic": "claude",
+	"llama":     "ollama",
 }
 
 // ImpliedTags maps tags to other tags they imply (framework → language, etc.).
 var ImpliedTags = map[string][]string{
 	// JavaScript frameworks
-	"react":     {"javascript", "frontend"},
-	"nextjs":    {"javascript", "react", "frontend"},
-	"vue":       {"javascript", "frontend"},
-	"angular":   {"typescript", "frontend"},
-	"svelte":    {"javascript", "frontend"},
-	"express":   {"javascript", "nodejs", "backend"},
-	"nestjs":    {"typescript", "nodejs", "backend"},
+	"react":   {"javascript", "frontend"},
+	"nextjs":  {"javascript", "react", "frontend"},
+	"vue":     {"javascript", "frontend"},
+	"angular": {"typescript", "frontend"},
+	"svelte":  {"javascript", "frontend"},
+	"express": {"javascript", "nodejs", "backend"},
+	"nestjs":  {"typescript", "nodejs", "backend"},
 	// Python frameworks
-	"django":    {"python", "backend"},
-	"fastapi":   {"python", "backend"},
-	"flask":     {"python", "backend"},
-	"langchain": {"python", "ai", "llm"},
+	"django":     {"python", "backend"},
+	"fastapi":    {"python", "backend"},
+	"flask":      {"python", "backend"},
+	"langchain":  {"python", "ai", "llm"},
 	"llamaindex": {"python", "ai", "llm"},
-	"pydantic":  {"python"},
+	"pydantic":   {"python"},
 	// Other frameworks
-	"rails":     {"ruby", "backend"},
-	"laravel":   {"php", "backend"},
-	"spring":    {"java", "backend"},
+	"rails":   {"ruby", "backend"},
+	"laravel": {"php", "backend"},
+	"spring":  {"java", "backend"},
 	// Tools → domains
-	"terraform": {"devops", "cloud"},
+	"terraform":  {"devops", "cloud"},
 	"kubernetes": {"devops", "cloud"},
-	"docker":    {"devops"},
-	"aws":       {"cloud"},
-	"gcp":       {"cloud"},
-	"azure":     {"cloud"},
+	"docker":     {"devops"},
+	"aws":        {"cloud"},
+	"gcp":        {"cloud"},
+	"azure":      {"cloud"},
 	// AI tools
-	"claude":    {"ai", "llm"},
-	"openai":    {"ai", "llm"},
-	"ollama":    {"ai", "llm"},
-	"gemini":    {"ai", "llm"},
+	"claude": {"ai", "llm"},
+	"openai": {"ai", "llm"},
+	"ollama": {"ai", "llm"},
+	"gemini": {"ai", "llm"},
 	// Concepts
-	"rag":       {"ai", "llm"},
-	"agents":    {"ai", "llm"},
-	"mcp":       {"ai", "agents"},
+	"rag":    {"ai", "llm"},
+	"agents": {"ai", "llm"},
+	"mcp":    {"ai", "agents"},
 }
 
 // MinOccurrences specifies minimum mentions required for generic tags.
@@ -208,8 +208,8 @@ var MinOccurrences = map[string]int{
 	"automation": 2,
 	"workflows":  2,
 	// Generic concepts
-	"security":   2,
-	"testing":    2,
+	"security":    2,
+	"testing":     2,
 	"performance": 2,
 }
 

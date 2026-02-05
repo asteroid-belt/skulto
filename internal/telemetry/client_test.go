@@ -64,6 +64,21 @@ func TestNoopClient_DoesNotPanic(t *testing.T) {
 
 	// Session events
 	client.TrackSessionSummary(60000, 5, 3, 2, 1, 1, 0)
+
+	// Shared events (all interfaces)
+	client.TrackSkillViewed("test-slug", "workflow", false)
+	client.TrackSkillViewed("local-skill", "workflow", true)
+	client.TrackSkillsListed(10, "mcp")
+	client.TrackSkillsListed(5, "search")
+	client.TrackStatsViewed()
+	client.TrackRecentSkillsViewed(5)
+	client.TrackInstalledSkillsChecked(3)
+
+	// MCP events
+	client.TrackMCPToolCalled("skulto_search", 100, true)
+	client.TrackMCPToolCalled("skulto_get_skill", 50, false)
+	client.TrackMCPToolCalled("skulto_install", 200, true)
+
 	client.Close()
 }
 

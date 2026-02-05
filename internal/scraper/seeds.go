@@ -32,20 +32,20 @@ var PrimarySkillsRepo = SeedRepository{
 // CuratedSeeds are high-quality verified repositories from major companies and trusted community members.
 var CuratedSeeds = []SeedRepository{
 	// Major Companies - Verified Organizations
-	{Owner: "vercel-labs", Repo: "agent-skills", Priority: 9, Type: "curated"},       // React/Vercel best practices, 17.6K stars
-	{Owner: "supabase", Repo: "agent-skills", Priority: 9, Type: "curated"},           // Postgres optimization
-	{Owner: "expo", Repo: "skills", Priority: 9, Type: "curated"},                     // Official Expo team, React Native
-	{Owner: "trailofbits", Repo: "skills", Priority: 9, Type: "curated"},              // Security auditing, 24 skills
-	{Owner: "remotion-dev", Repo: "skills", Priority: 9, Type: "curated"},             // Video rendering
-	{Owner: "better-auth", Repo: "skills", Priority: 8, Type: "curated"},              // Authentication patterns
-	{Owner: "neondatabase", Repo: "agent-skills", Priority: 8, Type: "curated"},       // Serverless Postgres
-	{Owner: "cloudflare", Repo: "skills", Priority: 8, Type: "curated"},               // Workers/Edge
-	{Owner: "getsentry", Repo: "skills", Priority: 8, Type: "curated"},                // Error tracking
+	{Owner: "vercel-labs", Repo: "agent-skills", Priority: 9, Type: "curated"},         // React/Vercel best practices, 17.6K stars
+	{Owner: "supabase", Repo: "agent-skills", Priority: 9, Type: "curated"},            // Postgres optimization
+	{Owner: "expo", Repo: "skills", Priority: 9, Type: "curated"},                      // Official Expo team, React Native
+	{Owner: "trailofbits", Repo: "skills", Priority: 9, Type: "curated"},               // Security auditing, 24 skills
+	{Owner: "remotion-dev", Repo: "skills", Priority: 9, Type: "curated"},              // Video rendering
+	{Owner: "better-auth", Repo: "skills", Priority: 8, Type: "curated"},               // Authentication patterns
+	{Owner: "neondatabase", Repo: "agent-skills", Priority: 8, Type: "curated"},        // Serverless Postgres
+	{Owner: "cloudflare", Repo: "skills", Priority: 8, Type: "curated"},                // Workers/Edge
+	{Owner: "getsentry", Repo: "skills", Priority: 8, Type: "curated"},                 // Error tracking
 	{Owner: "tinybirdco", Repo: "tinybird-agent-skills", Priority: 8, Type: "curated"}, // Real-time analytics
 
 	// High-Quality Community
-	{Owner: "obra", Repo: "superpowers", Priority: 9, Type: "curated", SkillPath: "skills"}, // Jesse Vincent's TDD/debugging methodology
-	{Owner: "alirezarezvani", Repo: "claude-skills", Priority: 8, Type: "curated"},          // 48 domain expert skills
+	{Owner: "obra", Repo: "superpowers", Priority: 9, Type: "curated", SkillPath: "skills"},               // Jesse Vincent's TDD/debugging methodology
+	{Owner: "alirezarezvani", Repo: "claude-skills", Priority: 8, Type: "curated"},                        // 48 domain expert skills
 	{Owner: "muratcankoylan", Repo: "Agent-Skills-for-Context-Engineering", Priority: 8, Type: "curated"}, // Context engineering
 
 	// Specialized Skills

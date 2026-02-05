@@ -259,4 +259,3 @@ func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discovered
 
 	return parsedSkill, nil
 }
-
