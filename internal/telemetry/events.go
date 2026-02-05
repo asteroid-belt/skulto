@@ -55,6 +55,20 @@ const (
 	EventSessionSummary = "session_summary"
 )
 
+// Event names - Shared (all interfaces should track these)
+const (
+	EventSkillViewed            = "skill_viewed"             // Unified: replaces skill_info_viewed and skill_previewed
+	EventSkillsListed           = "skills_listed"            // List/browse skills
+	EventStatsViewed            = "stats_viewed"             // View database stats
+	EventRecentSkillsViewed     = "recent_skills_viewed"     // View recent skills
+	EventInstalledSkillsChecked = "installed_skills_checked" // Check installed skills
+)
+
+// Event names - MCP specific
+const (
+	EventMCPToolCalled = "mcp_tool_called" // Track each MCP tool invocation
+)
+
 // Version is set at compile time via ldflags.
 var Version string
 
@@ -408,3 +422,63 @@ func (c *noopClient) TrackSourceSelected(sourceIndex, skillCount int)           
 func (c *noopClient) TrackListRefreshed(trigger string, skillCount int)                     {}
 func (c *noopClient) TrackSessionSummary(durationMs int64, viewsVisited, searchesPerformed, skillsInstalled, skillsUninstalled, reposAdded, reposRemoved int) {
 }
+
+// --- Shared Tracking Methods (all interfaces) ---
+
+// TrackSkillViewed tracks when a skill's details are viewed.
+// Replaces TrackSkillInfoViewed (CLI) and TrackSkillPreviewed (TUI).
+func (c *posthogClient) TrackSkillViewed(slug, category string, isLocal bool) {
+	props := baseProperties()
+	props["skill_slug"] = slug
+	props["skill_category"] = category
+	props["is_local"] = isLocal
+	c.Track(EventSkillViewed, props)
+}
+
+// TrackSkillsListed tracks when skills are listed/browsed.
+func (c *posthogClient) TrackSkillsListed(count int, source string) {
+	props := baseProperties()
+	props["result_count"] = count
+	props["source"] = source // "search", "browse", "tag", "mcp"
+	c.Track(EventSkillsListed, props)
+}
+
+// TrackStatsViewed tracks when database stats are viewed.
+func (c *posthogClient) TrackStatsViewed() {
+	props := baseProperties()
+	c.Track(EventStatsViewed, props)
+}
+
+// TrackRecentSkillsViewed tracks when recent skills are viewed.
+func (c *posthogClient) TrackRecentSkillsViewed(count int) {
+	props := baseProperties()
+	props["result_count"] = count
+	c.Track(EventRecentSkillsViewed, props)
+}
+
+// TrackInstalledSkillsChecked tracks when installed skills are checked.
+func (c *posthogClient) TrackInstalledSkillsChecked(count int) {
+	props := baseProperties()
+	props["installed_count"] = count
+	c.Track(EventInstalledSkillsChecked, props)
+}
+
+// --- MCP Tracking Methods ---
+
+// TrackMCPToolCalled tracks MCP tool invocations.
+func (c *posthogClient) TrackMCPToolCalled(toolName string, durationMs int64, success bool) {
+	props := baseProperties()
+	props["tool_name"] = toolName
+	props["duration_ms"] = durationMs
+	props["success"] = success
+	c.Track(EventMCPToolCalled, props)
+}
+
+// --- noopClient implementations for Shared and MCP events ---
+
+func (c *noopClient) TrackSkillViewed(slug, category string, isLocal bool)               {}
+func (c *noopClient) TrackSkillsListed(count int, source string)                         {}
+func (c *noopClient) TrackStatsViewed()                                                  {}
+func (c *noopClient) TrackRecentSkillsViewed(count int)                                  {}
+func (c *noopClient) TrackInstalledSkillsChecked(count int)                              {}
+func (c *noopClient) TrackMCPToolCalled(toolName string, durationMs int64, success bool) {}

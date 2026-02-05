@@ -68,6 +68,16 @@ type Client interface {
 
 	// Session events
 	TrackSessionSummary(durationMs int64, viewsVisited, searchesPerformed, skillsInstalled, skillsUninstalled, reposAdded, reposRemoved int)
+
+	// Shared events (all interfaces)
+	TrackSkillViewed(slug, category string, isLocal bool)
+	TrackSkillsListed(count int, source string)
+	TrackStatsViewed()
+	TrackRecentSkillsViewed(count int)
+	TrackInstalledSkillsChecked(count int)
+
+	// MCP events
+	TrackMCPToolCalled(toolName string, durationMs int64, success bool)
 }
 
 // posthogClient wraps the PostHog SDK.
