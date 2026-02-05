@@ -70,6 +70,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		return trackCLIError("check", fmt.Errorf("get installed skills: %w", err))
 	}
 
+	// Track telemetry
+	telemetryClient.TrackInstalledSkillsChecked(len(skills))
+
 	// Print table
 	printCheckTable(skills)
 

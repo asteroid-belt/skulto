@@ -47,7 +47,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	// Track the info view
-	telemetryClient.TrackSkillInfoViewed(skill.Category, skill.IsLocal)
+	telemetryClient.TrackSkillViewed(skill.Slug, skill.Category, skill.IsLocal)
 
 	// Display skill information
 	fmt.Printf("Skill: %s\n", skill.Title)
