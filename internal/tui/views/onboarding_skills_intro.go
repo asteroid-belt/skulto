@@ -6,73 +6,72 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// OnboardingIntroView displays the onboarding introduction.
-type OnboardingIntroView struct {
+// OnboardingSkillsIntroView displays the "What are Agent Skills?" onboarding screen.
+type OnboardingSkillsIntroView struct {
 	cfg    *config.Config
 	width  int
 	height int
 }
 
-// NewOnboardingIntroView creates a new onboarding intro view.
-func NewOnboardingIntroView(conf *config.Config) *OnboardingIntroView {
-	return &OnboardingIntroView{
+// NewOnboardingSkillsIntroView creates a new onboarding skills intro view.
+func NewOnboardingSkillsIntroView(conf *config.Config) *OnboardingSkillsIntroView {
+	return &OnboardingSkillsIntroView{
 		cfg: conf,
 	}
 }
 
 // Init initializes the view.
-func (v *OnboardingIntroView) Init() {
+func (v *OnboardingSkillsIntroView) Init() {
 	// No state to reset
 }
 
 // SetSize sets the width and height of the view.
-func (v *OnboardingIntroView) SetSize(width, height int) {
+func (v *OnboardingSkillsIntroView) SetSize(width, height int) {
 	v.width = width
 	v.height = height
 }
 
 // Update handles key input. Returns (should continue, was skipped).
-func (v *OnboardingIntroView) Update(key string) (bool, bool) {
+func (v *OnboardingSkillsIntroView) Update(key string) (bool, bool) {
 	switch key {
 	case "enter":
-		// Continue to next phase
 		return true, false
 	case "esc":
-		// Skip onboarding
 		return true, true
 	}
 	return false, false
 }
 
-// View renders the onboarding intro view.
-func (v *OnboardingIntroView) View() string {
+// View renders the "What are Agent Skills?" onboarding view.
+func (v *OnboardingSkillsIntroView) View() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Current.Primary).
 		MarginBottom(1)
 
-	title := titleStyle.Render("Welcome to Skulto!")
+	title := titleStyle.Render("What are Agent Skills?")
 
 	subtitleStyle := lipgloss.NewStyle().
 		Foreground(theme.Current.TextMuted).
 		MarginBottom(2)
 
-	subtitle := subtitleStyle.Render("Cross-platform AI skills management")
+	subtitle := subtitleStyle.Render("A simple, open format for extending AI agent capabilities")
 
 	descStyle := lipgloss.NewStyle().
 		Foreground(theme.Current.Text)
 
-	features := descStyle.Render(
-		"Skulto helps you manage AI coding assistant skills\n" +
-			"across 30+ platforms. With Skulto you can:\n" +
+	description := descStyle.Render(
+		"Agent Skills are folders of instructions, scripts, and\n" +
+			"resources that AI coding agents can discover and use to\n" +
+			"work more accurately and efficiently. A skill is a folder\n" +
+			"containing a SKILL.md file with instructions that tell an\n" +
+			"agent how to perform a specific task.\n" +
 			"\n" +
-			"  • Install skills to Claude Code, Cursor, Windsurf,\n" +
-			"    Copilot, Codex, and 25+ more\n" +
-			"  • Start with hundreds of curated skills\n" +
-			"  • Search numerous skills by adding your own skill repos\n" +
-			"  • Scan skills for prompt injection and security threats\n" +
-			"  • Sync your skill library across all your AI dev tools\n" +
-			"  • Manage skills via TUI, CLI, or MCP server",
+			"Skills let you package domain expertise, repeatable\n" +
+			"workflows, and new capabilities into portable, reusable\n" +
+			"packages that work across 30+ agent products.\n" +
+			"\n" +
+			"Learn more at agentskills.io",
 	)
 
 	instructionStyle := lipgloss.NewStyle().
@@ -88,11 +87,10 @@ func (v *OnboardingIntroView) View() string {
 		lipgloss.Left,
 		title,
 		subtitle,
-		features,
+		description,
 		instructions,
 	)
 
-	// Create bordered dialog with responsive width
 	maxWidth := v.width * 80 / 100
 	if maxWidth < 50 {
 		maxWidth = 50
@@ -106,7 +104,6 @@ func (v *OnboardingIntroView) View() string {
 
 	renderedDialog := dialog.Render(content)
 
-	// Center the dialog both vertically and horizontally
 	dialogWidth := lipgloss.Width(renderedDialog)
 	paddingLeft := (v.width - dialogWidth) / 2
 	if paddingLeft < 0 {
@@ -124,7 +121,7 @@ func (v *OnboardingIntroView) View() string {
 }
 
 // GetKeyboardCommands returns the keyboard commands for this view.
-func (ov *OnboardingIntroView) GetKeyboardCommands() ViewCommands {
+func (v *OnboardingSkillsIntroView) GetKeyboardCommands() ViewCommands {
 	return ViewCommands{
 		ViewName: "Onboarding",
 		Commands: []Command{

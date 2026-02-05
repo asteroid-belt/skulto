@@ -37,6 +37,7 @@ const (
 	ViewSkillDetail
 	ViewTag
 	ViewOnboardingIntro
+	ViewOnboardingSkillsIntro
 	ViewOnboardingSetup
 	ViewOnboardingTools
 	ViewOnboardingSkills // Primary skills selection
@@ -72,8 +73,9 @@ type Model struct {
 	resetView            *views.ResetView
 	detailView           *views.DetailView
 	tagView              *views.TagView
-	onboardingIntroView  *views.OnboardingIntroView
-	onboardingSetupView  *views.OnboardingSetupView
+	onboardingIntroView       *views.OnboardingIntroView
+	onboardingSkillsIntroView *views.OnboardingSkillsIntroView
+	onboardingSetupView       *views.OnboardingSetupView
 	onboardingToolsView  *views.OnboardingToolsView
 	onboardingSkillsView *views.OnboardingSkillsView
 	addSourceView        *views.AddSourceView
@@ -232,13 +234,14 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 		resetView:            views.NewResetView(database, conf),
 		detailView:           views.NewDetailView(database, conf, favStore),
 		tagView:              views.NewTagView(database, conf),
-		onboardingIntroView:  views.NewOnboardingIntroView(conf),
-		onboardingSetupView:  views.NewOnboardingSetupView(conf),
-		onboardingToolsView:  views.NewOnboardingToolsView(conf),
-		onboardingSkillsView: views.NewOnboardingSkillsView(conf, database),
-		addSourceView:        views.NewAddSourceView(database, conf),
-		helpView:             views.NewHelpView(database, conf),
-		manageView:           views.NewManageView(database, conf, instService, nil),
+		onboardingIntroView:       views.NewOnboardingIntroView(conf),
+		onboardingSkillsIntroView: views.NewOnboardingSkillsIntroView(conf),
+		onboardingSetupView:       views.NewOnboardingSetupView(conf),
+		onboardingToolsView:       views.NewOnboardingToolsView(conf),
+		onboardingSkillsView:      views.NewOnboardingSkillsView(conf, database),
+		addSourceView:             views.NewAddSourceView(database, conf),
+		helpView:                  views.NewHelpView(database, conf),
+		manageView:                views.NewManageView(database, conf, instService, nil),
 		ticker:               time.NewTicker(500 * time.Millisecond),
 		animTick:             0,
 		installer:            inst,
@@ -319,13 +322,14 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 		resetView:            views.NewResetView(database, conf),
 		detailView:           detailView,
 		tagView:              views.NewTagView(database, conf),
-		onboardingIntroView:  views.NewOnboardingIntroView(conf),
-		onboardingSetupView:  views.NewOnboardingSetupView(conf),
-		onboardingToolsView:  views.NewOnboardingToolsView(conf),
-		onboardingSkillsView: views.NewOnboardingSkillsView(conf, database),
-		addSourceView:        views.NewAddSourceView(database, conf),
-		helpView:             views.NewHelpView(database, conf),
-		settingsView:         views.NewSettingsView(database, conf),
+		onboardingIntroView:       views.NewOnboardingIntroView(conf),
+		onboardingSkillsIntroView: views.NewOnboardingSkillsIntroView(conf),
+		onboardingSetupView:       views.NewOnboardingSetupView(conf),
+		onboardingToolsView:       views.NewOnboardingToolsView(conf),
+		onboardingSkillsView:      views.NewOnboardingSkillsView(conf, database),
+		addSourceView:             views.NewAddSourceView(database, conf),
+		helpView:                  views.NewHelpView(database, conf),
+		settingsView:              views.NewSettingsView(database, conf),
 		manageView:           views.NewManageView(database, conf, instService, tc),
 		sessionStart:         time.Now(),
 		ticker:               time.NewTicker(500 * time.Millisecond),
@@ -357,6 +361,8 @@ func (v ViewType) String() string {
 		return "tag"
 	case ViewOnboardingIntro:
 		return "onboarding_intro"
+	case ViewOnboardingSkillsIntro:
+		return "onboarding_skills_intro"
 	case ViewOnboardingSetup:
 		return "onboarding_setup"
 	case ViewOnboardingTools:
@@ -387,6 +393,7 @@ func (m *Model) Init() tea.Cmd {
 	m.searchView.Init(m.telemetry)
 	m.detailView.Init(m.telemetry)
 	m.onboardingIntroView.Init()
+	m.onboardingSkillsIntroView.Init()
 	m.onboardingSetupView.Init()
 	m.onboardingToolsView.Init()
 	m.addSourceView.Init()
@@ -509,6 +516,8 @@ func (m *Model) getCurrentViewCommands() views.ViewCommands {
 		return m.resetView.GetKeyboardCommands()
 	case ViewOnboardingIntro:
 		return m.onboardingIntroView.GetKeyboardCommands()
+	case ViewOnboardingSkillsIntro:
+		return m.onboardingSkillsIntroView.GetKeyboardCommands()
 	case ViewOnboardingSetup:
 		return m.onboardingSetupView.GetKeyboardCommands()
 	case ViewOnboardingTools:
@@ -1032,6 +1041,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.currentView = ViewHome
 					return m, m.completeOnboardingWithSkip(true, 1)
 				} else {
+					// Continue to "What are Agent Skills?" phase
+					m.trackViewNavigation(ViewOnboardingSkillsIntro)
+					m.currentView = ViewOnboardingSkillsIntro
+					m.onboardingSkillsIntroView.Init()
+				}
+			}
+
+		case ViewOnboardingSkillsIntro:
+			back, skipped := m.onboardingSkillsIntroView.Update(key)
+			if back {
+				if skipped {
+					m.telemetry.TrackOnboardingSkipped("skills_intro")
+					m.trackViewNavigation(ViewHome)
+					m.currentView = ViewHome
+					return m, m.completeOnboardingWithSkip(true, 2)
+				} else {
 					// Continue to setup phase
 					m.trackViewNavigation(ViewOnboardingSetup)
 					m.currentView = ViewOnboardingSetup
@@ -1046,7 +1071,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.telemetry.TrackOnboardingSkipped("setup")
 					m.trackViewNavigation(ViewHome)
 					m.currentView = ViewHome
-					return m, m.completeOnboardingWithSkip(true, 2)
+					return m, m.completeOnboardingWithSkip(true, 3)
 				} else {
 					// Continue to tools phase
 					m.trackViewNavigation(ViewOnboardingTools)
@@ -1248,6 +1273,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tagView.SetSize(m.width, contentHeight)
 		// Onboarding views use full height
 		m.onboardingIntroView.SetSize(m.width, m.height)
+		m.onboardingSkillsIntroView.SetSize(m.width, m.height)
 		m.onboardingSetupView.SetSize(m.width, m.height)
 		m.onboardingToolsView.SetSize(m.width, m.height)
 		// AddSourceView uses content height
@@ -1398,6 +1424,8 @@ func (m *Model) View() string {
 		contentView = m.manageView.View()
 	case ViewOnboardingIntro:
 		contentView = m.onboardingIntroView.View()
+	case ViewOnboardingSkillsIntro:
+		contentView = m.onboardingSkillsIntroView.View()
 	case ViewOnboardingSetup:
 		contentView = m.onboardingSetupView.View()
 	case ViewOnboardingTools:
@@ -1742,7 +1770,7 @@ func (m *Model) trackSessionExit() {
 
 // completeOnboarding marks onboarding as complete.
 func (m *Model) completeOnboarding() tea.Cmd {
-	return m.completeOnboardingWithSkip(false, 3)
+	return m.completeOnboardingWithSkip(false, 4)
 }
 
 func (m *Model) completeOnboardingWithSkip(skipped bool, stepsViewed int) tea.Cmd {

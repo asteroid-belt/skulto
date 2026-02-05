@@ -24,19 +24,20 @@ func TestCharacterization_ViewType_Constants(t *testing.T) {
 	assert.Equal(t, ViewType(3), ViewSkillDetail)
 	assert.Equal(t, ViewType(4), ViewTag)
 	assert.Equal(t, ViewType(5), ViewOnboardingIntro)
-	assert.Equal(t, ViewType(6), ViewOnboardingSetup)
-	assert.Equal(t, ViewType(7), ViewOnboardingTools)
-	assert.Equal(t, ViewType(8), ViewOnboardingSkills)
-	assert.Equal(t, ViewType(9), ViewAddSource)
-	assert.Equal(t, ViewType(10), ViewHelp)
-	assert.Equal(t, ViewType(11), ViewSettings)
+	assert.Equal(t, ViewType(6), ViewOnboardingSkillsIntro)
+	assert.Equal(t, ViewType(7), ViewOnboardingSetup)
+	assert.Equal(t, ViewType(8), ViewOnboardingTools)
+	assert.Equal(t, ViewType(9), ViewOnboardingSkills)
+	assert.Equal(t, ViewType(10), ViewAddSource)
+	assert.Equal(t, ViewType(11), ViewHelp)
+	assert.Equal(t, ViewType(12), ViewSettings)
 }
 
 // TestCharacterization_ViewType_TotalCount captures the total number of views.
 func TestCharacterization_ViewType_TotalCount(t *testing.T) {
-	// Current behavior: there are 12 view types (0-11)
+	// Current behavior: there are 13 view types (0-12)
 	// If this test fails, a new view type was added or removed
-	assert.Equal(t, ViewType(11), ViewSettings)
+	assert.Equal(t, ViewType(12), ViewSettings)
 }
 
 // TestCharacterization_Model_ZeroValue captures the zero value of Model.
@@ -184,6 +185,7 @@ func TestCharacterization_ViewTypeSequence(t *testing.T) {
 		ViewSkillDetail,
 		ViewTag,
 		ViewOnboardingIntro,
+		ViewOnboardingSkillsIntro,
 		ViewOnboardingSetup,
 		ViewOnboardingTools,
 		ViewOnboardingSkills,
