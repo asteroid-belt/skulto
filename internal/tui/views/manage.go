@@ -210,16 +210,18 @@ func (mv *ManageView) Update(key string) (ManageAction, tea.Cmd) {
 		return ManageActionNone, nil
 
 	case "enter":
-		if mv.section == ManageSectionInstalled {
+		switch mv.section {
+		case ManageSectionInstalled:
 			if len(mv.skills) > 0 && mv.selectedIdx >= 0 && mv.selectedIdx < len(mv.skills) {
 				return ManageActionSelectSkill, nil
 			}
-		} else if mv.section == ManageSectionDiscovered {
+		case ManageSectionDiscovered:
 			if len(mv.discoveries) > 0 && mv.discoveredIdx >= 0 && mv.discoveredIdx < len(mv.discoveries) {
 				return ManageActionSelectDiscovery, nil
 			}
+		default:
+			return ManageActionNone, nil
 		}
-		return ManageActionNone, nil
 	}
 
 	return ManageActionNone, nil
