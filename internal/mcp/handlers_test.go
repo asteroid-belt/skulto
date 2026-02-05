@@ -49,7 +49,7 @@ func TestHandleSearch(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -109,7 +109,7 @@ func TestHandleGetSkill(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -165,7 +165,7 @@ func TestHandleListSkills(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -215,7 +215,7 @@ func TestHandleBrowseTags(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 
 	// Seed some tags
 	tags := []models.Tag{
@@ -271,7 +271,7 @@ func TestHandleGetStats(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -298,7 +298,7 @@ func TestHandleGetRecent(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -333,7 +333,7 @@ func TestHandleFavorite(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -399,7 +399,7 @@ func TestHandleGetFavorites(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -436,7 +436,7 @@ func TestHandleGetFavorites(t *testing.T) {
 	t.Run("get favorites returns empty array when no favorites", func(t *testing.T) {
 		// Create a new server with empty favorites
 		emptyFavStore := setupTestFavorites(t)
-		emptyServer := NewServer(database, cfg, emptyFavStore)
+		emptyServer := NewServer(database, cfg, emptyFavStore, nil)
 
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{}
@@ -494,7 +494,7 @@ func TestHandleAdd(t *testing.T) {
 		BaseDir: t.TempDir(),
 	}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 
 	ctx := context.Background()
 
@@ -564,7 +564,7 @@ func TestHandleAdd(t *testing.T) {
 	t.Run("add with valid url inserts source into database", func(t *testing.T) {
 		// Use a fresh DB to avoid duplicate from prior test
 		freshDB := setupTestDB(t)
-		freshServer := NewServer(freshDB, cfg, favStore)
+		freshServer := NewServer(freshDB, cfg, favStore, nil)
 
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{
@@ -596,7 +596,7 @@ func TestHandleInstall(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -644,7 +644,7 @@ func TestHandleUninstall(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()

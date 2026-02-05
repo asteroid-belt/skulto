@@ -14,6 +14,14 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// trackToolCall is a helper to track MCP tool invocations.
+func (s *Server) trackToolCall(toolName string, start time.Time, success bool) {
+	if s.telemetry != nil {
+		durationMs := time.Since(start).Milliseconds()
+		s.telemetry.TrackMCPToolCalled(toolName, durationMs, success)
+	}
+}
+
 // SkillResponse represents a skill in MCP tool responses.
 type SkillResponse struct {
 	ID          string          `json:"id"`
@@ -147,8 +155,11 @@ func toSkillResponseWithDB(skill *models.Skill, includeContent bool, database *d
 }
 
 func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	query, ok := req.Params.Arguments["query"].(string)
 	if !ok || query == "" {
+		s.trackToolCall("skulto_search", start, false)
 		return mcp.NewToolResultError("query parameter is required"), nil
 	}
 
@@ -162,6 +173,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	skills, err := s.db.SearchSkills(query, limit)
 	if err != nil {
+		s.trackToolCall("skulto_search", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("search failed: %v", err)), nil
 	}
 
@@ -172,24 +184,36 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_search", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	// Track search telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackSearchPerformed(query, len(skills), "mcp")
+	}
+
+	s.trackToolCall("skulto_search", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleGetSkill handles the skulto_get_skill tool.
 func (s *Server) handleGetSkill(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
+		s.trackToolCall("skulto_get_skill", start, false)
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
 	skill, err := s.db.GetSkillBySlug(slug)
 	if err != nil {
+		s.trackToolCall("skulto_get_skill", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get skill: %v", err)), nil
 	}
 	if skill == nil {
+		s.trackToolCall("skulto_get_skill", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("skill not found: %s", slug)), nil
 	}
 
@@ -201,14 +225,23 @@ func (s *Server) handleGetSkill(ctx context.Context, req mcp.CallToolRequest) (*
 
 	data, err := json.Marshal(resp)
 	if err != nil {
+		s.trackToolCall("skulto_get_skill", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal skill: %v", err)), nil
 	}
 
+	// Track skill viewed telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackSkillViewed(skill.Slug, skill.Category, skill.IsLocal)
+	}
+
+	s.trackToolCall("skulto_get_skill", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleListSkills handles the skulto_list_skills tool.
 func (s *Server) handleListSkills(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	limit := 20
 	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
 		limit = int(l)
@@ -224,6 +257,7 @@ func (s *Server) handleListSkills(ctx context.Context, req mcp.CallToolRequest) 
 
 	skills, err := s.db.ListSkills(limit, offset)
 	if err != nil {
+		s.trackToolCall("skulto_list_skills", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list skills: %v", err)), nil
 	}
 
@@ -234,14 +268,23 @@ func (s *Server) handleListSkills(ctx context.Context, req mcp.CallToolRequest) 
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_list_skills", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	// Track skills listed telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackSkillsListed(len(skills), "mcp")
+	}
+
+	s.trackToolCall("skulto_list_skills", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleBrowseTags handles the skulto_browse_tags tool.
 func (s *Server) handleBrowseTags(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	category := ""
 	if c, ok := req.Params.Arguments["category"].(string); ok {
 		category = c
@@ -249,6 +292,7 @@ func (s *Server) handleBrowseTags(ctx context.Context, req mcp.CallToolRequest) 
 
 	tags, err := s.db.ListTags(category)
 	if err != nil {
+		s.trackToolCall("skulto_browse_tags", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list tags: %v", err)), nil
 	}
 
@@ -266,16 +310,21 @@ func (s *Server) handleBrowseTags(ctx context.Context, req mcp.CallToolRequest) 
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_browse_tags", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	s.trackToolCall("skulto_browse_tags", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleGetStats handles the skulto_get_stats tool.
 func (s *Server) handleGetStats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	stats, err := s.db.GetStats()
 	if err != nil {
+		s.trackToolCall("skulto_get_stats", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get stats: %v", err)), nil
 	}
 
@@ -293,14 +342,23 @@ func (s *Server) handleGetStats(ctx context.Context, req mcp.CallToolRequest) (*
 
 	data, err := json.Marshal(resp)
 	if err != nil {
+		s.trackToolCall("skulto_get_stats", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal stats: %v", err)), nil
 	}
 
+	// Track stats viewed telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackStatsViewed()
+	}
+
+	s.trackToolCall("skulto_get_stats", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleGetRecent handles the skulto_get_recent tool.
 func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	limit := 10
 	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
 		limit = int(l)
@@ -311,6 +369,7 @@ func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (
 
 	skills, err := s.db.GetRecentSkills(limit)
 	if err != nil {
+		s.trackToolCall("skulto_get_recent", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get recent skills: %v", err)), nil
 	}
 
@@ -321,17 +380,27 @@ func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_get_recent", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	// Track recent skills viewed telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackRecentSkillsViewed(len(skills))
+	}
+
+	s.trackToolCall("skulto_get_recent", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleInstall handles the skulto_install tool.
 // Uses InstallService for unified installation across all platforms.
 func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
+		s.trackToolCall("skulto_install", start, false)
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
@@ -374,6 +443,8 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 				DetectedPlatforms: found,
 			}
 			data, _ := json.Marshal(result)
+			// Track as success since this is expected behavior requiring user input
+			s.trackToolCall("skulto_install", start, true)
 			return mcp.NewToolResultText(string(data)), nil
 		}
 	}
@@ -394,9 +465,10 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 		Confirm:   true,
 	}
 
-	// Use InstallService for unified behavior
+	// Use InstallService for unified behavior (telemetry tracked via InstallService)
 	result, err := s.installService.Install(ctx, slug, opts)
 	if err != nil {
+		s.trackToolCall("skulto_install", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to install: %v", err)), nil
 	}
 
@@ -413,14 +485,18 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	data, _ := json.Marshal(installResult)
+	s.trackToolCall("skulto_install", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleUninstall handles the skulto_uninstall tool.
 // Uses InstallService for unified uninstallation across all platforms.
 func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
+		s.trackToolCall("skulto_uninstall", start, false)
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
@@ -440,10 +516,12 @@ func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (
 	// Get current install locations
 	locations, err := s.installService.GetInstallLocations(ctx, slug)
 	if err != nil {
+		s.trackToolCall("skulto_uninstall", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get install locations: %v", err)), nil
 	}
 
 	if len(locations) == 0 {
+		s.trackToolCall("skulto_uninstall", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("skill '%s' is not installed anywhere", slug)), nil
 	}
 
@@ -472,11 +550,13 @@ func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (
 	}
 
 	if len(toUninstall) == 0 {
+		s.trackToolCall("skulto_uninstall", start, false)
 		return mcp.NewToolResultError("no matching installation locations found"), nil
 	}
 
-	// Perform uninstallation
+	// Perform uninstallation (telemetry tracked via InstallService)
 	if err := s.installService.Uninstall(ctx, slug, toUninstall); err != nil {
+		s.trackToolCall("skulto_uninstall", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to uninstall: %v", err)), nil
 	}
 
@@ -486,36 +566,45 @@ func (s *Server) handleUninstall(ctx context.Context, req mcp.CallToolRequest) (
 	}
 
 	data, _ := json.Marshal(result)
+	s.trackToolCall("skulto_uninstall", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleFavorite handles the skulto_favorite tool.
 func (s *Server) handleFavorite(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	slug, ok := req.Params.Arguments["slug"].(string)
 	if !ok || slug == "" {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError("slug parameter is required"), nil
 	}
 
 	action, ok := req.Params.Arguments["action"].(string)
 	if !ok || action == "" {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError("action parameter is required"), nil
 	}
 
 	if action != "add" && action != "remove" {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError("action must be 'add' or 'remove'"), nil
 	}
 
 	// Verify skill exists in database
 	skill, err := s.db.GetSkillBySlug(slug)
 	if err != nil {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get skill: %v", err)), nil
 	}
 	if skill == nil {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("skill not found: %s", slug)), nil
 	}
 
 	// Check if favorites store is available
 	if s.favorites == nil {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError("favorites store not initialized"), nil
 	}
 
@@ -531,7 +620,17 @@ func (s *Server) handleFavorite(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	if opErr != nil {
+		s.trackToolCall("skulto_favorite", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to %s favorite: %v", action, opErr)), nil
+	}
+
+	// Track favorite telemetry
+	if s.telemetry != nil {
+		if action == "add" {
+			s.telemetry.TrackFavoriteAdded(slug)
+		} else {
+			s.telemetry.TrackFavoriteRemoved(slug)
+		}
 	}
 
 	result := InstallResult{
@@ -540,11 +639,14 @@ func (s *Server) handleFavorite(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	data, _ := json.Marshal(result)
+	s.trackToolCall("skulto_favorite", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleGetFavorites handles the skulto_get_favorites tool.
 func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	limit := 50
 	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
 		limit = int(l)
@@ -555,6 +657,7 @@ func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest
 
 	// Check if favorites store is available
 	if s.favorites == nil {
+		s.trackToolCall("skulto_get_favorites", start, false)
 		return mcp.NewToolResultError("favorites store not initialized"), nil
 	}
 
@@ -584,17 +687,27 @@ func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_get_favorites", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	// Track favorites listed telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackFavoritesListed(len(results))
+	}
+
+	s.trackToolCall("skulto_get_favorites", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleCheck handles the skulto_check tool.
 func (s *Server) handleCheck(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	// Get all installed skills with their locations
 	summaries, err := s.installService.GetInstalledSkillsSummary(ctx)
 	if err != nil {
+		s.trackToolCall("skulto_check", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get installed skills: %v", err)), nil
 	}
 
@@ -622,36 +735,50 @@ func (s *Server) handleCheck(ctx context.Context, req mcp.CallToolRequest) (*mcp
 
 	data, err := json.Marshal(results)
 	if err != nil {
+		s.trackToolCall("skulto_check", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal results: %v", err)), nil
 	}
 
+	// Track installed skills checked telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackInstalledSkillsChecked(len(summaries))
+	}
+
+	s.trackToolCall("skulto_check", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // handleAdd handles the skulto_add tool.
 func (s *Server) handleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+
 	url, ok := req.Params.Arguments["url"].(string)
 	if !ok || url == "" {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError("url parameter is required"), nil
 	}
 
 	// Parse and validate the repository URL
 	source, err := scraper.ParseRepositoryURL(url)
 	if err != nil {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("invalid repository URL: %v", err)), nil
 	}
 
 	// Check if source already exists
 	existing, err := s.db.GetSource(source.ID)
 	if err != nil {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to check existing source: %v", err)), nil
 	}
 	if existing != nil {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("repository %s already exists", source.ID)), nil
 	}
 
 	// Add source to database
 	if err := s.db.UpsertSource(source); err != nil {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to add source: %v", err)), nil
 	}
 
@@ -669,6 +796,7 @@ func (s *Server) handleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 
 	result, err := sc.ScrapeRepository(syncCtx, source.Owner, source.Repo)
 	if err != nil {
+		s.trackToolCall("skulto_add", start, false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to sync %s: %v", source.ID, err)), nil
 	}
 
@@ -685,6 +813,11 @@ func (s *Server) handleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		}
 	}
 
+	// Track repo added telemetry
+	if s.telemetry != nil {
+		s.telemetry.TrackRepoAdded(source.ID, result.SkillsNew)
+	}
+
 	addResult := AddResult{
 		Success: true,
 		Message: fmt.Sprintf("Repository '%s/%s' added with %d skills", source.Owner, source.Repo, result.SkillsNew),
@@ -698,5 +831,6 @@ func (s *Server) handleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 
 	data, _ := json.Marshal(addResult)
+	s.trackToolCall("skulto_add", start, true)
 	return mcp.NewToolResultText(string(data)), nil
 }

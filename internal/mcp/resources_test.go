@@ -77,7 +77,7 @@ func TestHandleSkillContentResource(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()
@@ -120,7 +120,7 @@ func TestHandleSkillMetadataResource(t *testing.T) {
 	database := setupTestDB(t)
 	cfg := &config.Config{}
 	favStore := setupTestFavorites(t)
-	server := NewServer(database, cfg, favStore)
+	server := NewServer(database, cfg, favStore, nil)
 	seedTestSkills(t, server)
 
 	ctx := context.Background()

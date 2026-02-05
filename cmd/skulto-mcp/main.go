@@ -22,6 +22,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/mcp"
+	"github.com/asteroid-belt/skulto/internal/telemetry"
 	"github.com/asteroid-belt/skulto/pkg/version"
 )
 
@@ -73,8 +74,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load favorites: %v\n", err)
 	}
 
+	// Initialize telemetry
+	tc := telemetry.New(database)
+	defer tc.Close()
+
 	// Create and run MCP server
-	server := mcp.NewServer(database, cfg, favStore)
+	server := mcp.NewServer(database, cfg, favStore, tc)
 	if err := server.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)

@@ -13,6 +13,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/telemetry"
 	"github.com/asteroid-belt/skulto/pkg/version"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -26,16 +27,18 @@ type Server struct {
 	installService *installer.InstallService // Unified install service
 	favorites      *favorites.Store          // Favorites store (persists across DB resets)
 	server         *server.MCPServer
+	telemetry      telemetry.Client
 }
 
 // NewServer creates a new MCP server instance.
-func NewServer(database *db.DB, cfg *config.Config, favStore *favorites.Store) *Server {
+func NewServer(database *db.DB, cfg *config.Config, favStore *favorites.Store, tc telemetry.Client) *Server {
 	s := &Server{
 		db:             database,
 		cfg:            cfg,
-		installer:      installer.New(database, cfg),                    // Same installer used by TUI
-		installService: installer.NewInstallService(database, cfg, nil), // Unified service
+		installer:      installer.New(database, cfg),                   // Same installer used by TUI
+		installService: installer.NewInstallService(database, cfg, tc), // Unified service with telemetry
 		favorites:      favStore,
+		telemetry:      tc,
 	}
 
 	// Create MCP server with capabilities
