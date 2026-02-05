@@ -169,8 +169,8 @@ func (dv *DetailView) HandleSkillLoaded(msg SkillLoadedMsg) {
 		log.Printf("failed to record skill view: %v", err)
 	}
 
-	// Track skill preview
-	dv.telemetry.TrackSkillPreviewed(dv.skill.Title, dv.skill.Category, 0)
+	// Track skill viewed
+	dv.telemetry.TrackSkillViewed(dv.skill.Slug, dv.skill.Category, dv.skill.IsLocal)
 
 	dv.updateRenderedContent()
 }
