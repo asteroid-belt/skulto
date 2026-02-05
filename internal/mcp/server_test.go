@@ -45,7 +45,6 @@ func (m *mockTelemetryClient) TrackRepoAdded(sourceID string, skillCount int) {
 func (m *mockTelemetryClient) TrackRepoRemoved(sourceID string, skillCount int)             {}
 func (m *mockTelemetryClient) TrackRepoSynced(sourceID string, added, removed, updated int) {}
 func (m *mockTelemetryClient) TrackRepoListed(sourceCount, totalSkillCount int)             {}
-func (m *mockTelemetryClient) TrackSkillInfoViewed(category string, isLocal bool)           {}
 func (m *mockTelemetryClient) TrackConfigChanged(settingName string, isDefault bool)        {}
 func (m *mockTelemetryClient) TrackCLIError(commandName, errorType string)                  {}
 func (m *mockTelemetryClient) TrackCLIHelpViewed(commandName string, cliArgs []string)      {}
@@ -72,7 +71,6 @@ func (m *mockTelemetryClient) TrackSearchPerformed(query string, resultCount int
 }
 func (m *mockTelemetryClient) TrackFilterApplied(filterType string, filterCount int)                {}
 func (m *mockTelemetryClient) TrackSortChanged(sortField, sortDirection string)                     {}
-func (m *mockTelemetryClient) TrackSkillPreviewed(skillName, category string, platformCount int)    {}
 func (m *mockTelemetryClient) TrackSkillCopied(skillName string)                                    {}
 func (m *mockTelemetryClient) TrackOnboardingCompleted(stepsViewed int, skipped bool)               {}
 func (m *mockTelemetryClient) TrackOnboardingSkipped(stepName string)                               {}
@@ -89,6 +87,10 @@ func (m *mockTelemetryClient) TrackAppStarted(mode string, hasSources bool, sour
 func (m *mockTelemetryClient) TrackAppExited(mode string, sessionDurationMs int64, commandsRun int) {}
 func (m *mockTelemetryClient) TrackSessionSummary(durationMs int64, viewsVisited, searchesPerformed, skillsInstalled, skillsUninstalled, reposAdded, reposRemoved int) {
 }
+
+// CLI-specific events
+func (m *mockTelemetryClient) TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool) {}
+func (m *mockTelemetryClient) TrackSkillIngested(skillName, scope string)                      {}
 
 // Shared events
 func (m *mockTelemetryClient) TrackSkillViewed(slug, category string, isLocal bool) {

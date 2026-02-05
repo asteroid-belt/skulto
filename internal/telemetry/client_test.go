@@ -36,8 +36,9 @@ func TestNoopClient_DoesNotPanic(t *testing.T) {
 	client.TrackRepoRemoved("owner/repo", 10)
 	client.TrackRepoSynced("owner/repo", 5, 2, 3)
 	client.TrackRepoListed(2, 25)
-	client.TrackSkillInfoViewed("workflow", false)
 	client.TrackConfigChanged("theme", false)
+	client.TrackSkillsDiscovered(5, true, true)
+	client.TrackSkillIngested("my-skill", "project")
 	client.TrackCLIError("add", "network_error")
 	client.TrackCLIHelpViewed("root", []string{"--help"})
 
@@ -48,7 +49,6 @@ func TestNoopClient_DoesNotPanic(t *testing.T) {
 	client.TrackSearchPerformed("test query", 5, "fts")
 	client.TrackFilterApplied("tag", 3)
 	client.TrackSortChanged("name", "asc")
-	client.TrackSkillPreviewed("My Skill", "workflow", 2)
 	client.TrackSkillCopied("My Skill")
 	client.TrackOnboardingCompleted(3, false)
 	client.TrackOnboardingSkipped("setup")

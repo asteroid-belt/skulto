@@ -31,13 +31,14 @@ type Client interface {
 	TrackRepoRemoved(sourceID string, skillCount int)
 	TrackRepoSynced(sourceID string, added, removed, updated int)
 	TrackRepoListed(sourceCount, totalSkillCount int)
-	TrackSkillInfoViewed(category string, isLocal bool)
 	TrackConfigChanged(settingName string, isDefault bool)
 	TrackCLIError(commandName, errorType string)
 	TrackCLIHelpViewed(commandName string, cliArgs []string)
 	TrackFavoriteAdded(slug string)
 	TrackFavoriteRemoved(slug string)
 	TrackFavoritesListed(count int)
+	TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool)
+	TrackSkillIngested(skillName, scope string)
 
 	// TUI events
 	TrackViewNavigated(viewName, previousView string)
@@ -48,7 +49,6 @@ type Client interface {
 	TrackSearchPerformed(query string, resultCount int, searchType string)
 	TrackFilterApplied(filterType string, filterCount int)
 	TrackSortChanged(sortField, sortDirection string)
-	TrackSkillPreviewed(skillName, category string, platformCount int)
 	TrackSkillCopied(skillName string)
 	TrackOnboardingCompleted(stepsViewed int, skipped bool)
 	TrackOnboardingSkipped(stepName string)

@@ -139,6 +139,9 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Track telemetry
+	telemetryClient.TrackSkillsDiscovered(len(allDiscovered), scanGlobal, scanProject)
+
 	// Display results
 	if len(allDiscovered) == 0 {
 		fmt.Println("No unmanaged skills discovered.")

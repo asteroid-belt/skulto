@@ -180,6 +180,7 @@ func runBulkIngest(database *db.DB, cfg *config.Config, ingestionSvc *discovery.
 		}
 
 		fmt.Printf("  Imported: %s -> %s\n", result.Name, result.DestPath)
+		telemetryClient.TrackSkillIngested(skill.Name, skill.Scope)
 		successCount++
 	}
 
@@ -258,6 +259,7 @@ func runSingleIngest(database *db.DB, cfg *config.Config, ingestionSvc *discover
 		return trackCLIError("ingest", fmt.Errorf("ingest skill: %w", err))
 	}
 
+	telemetryClient.TrackSkillIngested(skill.Name, skill.Scope)
 	fmt.Printf("Imported: %s -> %s\n", result.Name, result.DestPath)
 	fmt.Println("Original location now points to skulto-managed skill via symlink.")
 	return nil

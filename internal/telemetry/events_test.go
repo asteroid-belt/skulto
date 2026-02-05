@@ -15,7 +15,6 @@ func TestEventConstants(t *testing.T) {
 	assert.Equal(t, "repo_removed", EventRepoRemoved)
 	assert.Equal(t, "repo_synced", EventRepoSynced)
 	assert.Equal(t, "repo_listed", EventRepoListed)
-	assert.Equal(t, "skill_info_viewed", EventSkillInfoViewed)
 	assert.Equal(t, "config_changed", EventConfigChanged)
 	assert.Equal(t, "cli_error_occurred", EventCLIErrorOccurred)
 	assert.Equal(t, "cli_help_viewed", EventCLIHelpViewed)
@@ -27,7 +26,6 @@ func TestEventConstants(t *testing.T) {
 	assert.Equal(t, "search_performed", EventSearchPerformed)
 	assert.Equal(t, "filter_applied", EventFilterApplied)
 	assert.Equal(t, "sort_changed", EventSortChanged)
-	assert.Equal(t, "skill_previewed", EventSkillPreviewed)
 	assert.Equal(t, "skill_copied", EventSkillCopied)
 	assert.Equal(t, "onboarding_completed", EventOnboardingCompleted)
 	assert.Equal(t, "onboarding_skipped", EventOnboardingSkipped)
@@ -43,6 +41,10 @@ func TestEventConstants(t *testing.T) {
 
 	// Session events
 	assert.Equal(t, "session_summary", EventSessionSummary)
+
+	// CLI-specific events
+	assert.Equal(t, "skills_discovered", EventSkillsDiscovered)
+	assert.Equal(t, "skill_ingested", EventSkillIngested)
 
 	// Shared events (all interfaces)
 	assert.Equal(t, "skill_viewed", EventSkillViewed)
@@ -98,10 +100,6 @@ func TestClient_Interface_NewMethods(t *testing.T) {
 
 // TestSharedEventConstants verifies the shared event constant values are correct.
 func TestSharedEventConstants(t *testing.T) {
-	// Verify these events are distinct from legacy events they replace
-	assert.NotEqual(t, EventSkillViewed, EventSkillInfoViewed, "skill_viewed should be different from skill_info_viewed")
-	assert.NotEqual(t, EventSkillViewed, EventSkillPreviewed, "skill_viewed should be different from skill_previewed")
-
 	// Verify MCP event is unique
 	assert.Equal(t, "mcp_tool_called", EventMCPToolCalled)
 }

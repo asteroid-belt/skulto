@@ -49,8 +49,9 @@ type Client interface {
     TrackRepoRemoved(sourceID string, skillCount int)
     TrackRepoSynced(sourceID string, added, removed, updated int)
     TrackRepoListed(sourceCount, totalSkillCount int)
-    TrackSkillInfoViewed(category string, isLocal bool)
     TrackConfigChanged(settingName string, isDefault bool)
+    TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool)
+    TrackSkillIngested(skillName, scope string)
     TrackCLIError(commandName, errorType string)
     TrackCLIHelpViewed(commandName string, cliArgs []string)
     TrackFavoriteAdded(slug string)
@@ -66,7 +67,6 @@ type Client interface {
     TrackSearchPerformed(query string, resultCount int, searchType string)
     TrackFilterApplied(filterType string, filterCount int)
     TrackSortChanged(sortField, sortDirection string)
-    TrackSkillPreviewed(skillName, category string, platformCount int)
     TrackSkillCopied(skillName string)
     TrackOnboardingCompleted(stepsViewed int, skipped bool)
     TrackOnboardingSkipped(stepName string)
@@ -110,8 +110,9 @@ type Client interface {
 | `repo_removed` | Repository removed | `source_id`, `skill_count` |
 | `repo_synced` | Repository synced | `source_id`, `skills_added`, `skills_removed`, `skills_updated` |
 | `repo_listed` | List command run | `source_count`, `total_skill_count` |
-| `skill_info_viewed` | Skill info viewed | `skill_category`, `is_local` |
 | `config_changed` | Config changed | `setting_name`, `is_default` |
+| `skills_discovered` | Unmanaged skills discovered | `discovered_count`, `scope_global`, `scope_project` |
+| `skill_ingested` | Discovered skill imported | `skill_name`, `scope` |
 | `cli_error_occurred` | CLI error | `command_name`, `error_type` |
 | `cli_help_viewed` | Help viewed | `command_name`, `cli_args` |
 | `favorite_added` | Favorite added | `skill_slug` |
@@ -130,7 +131,6 @@ type Client interface {
 | `search_performed` | Search executed | `query`, `query_length`, `result_count`, `search_type` |
 | `filter_applied` | Filter applied | `filter_type`, `filter_count` |
 | `sort_changed` | Sort changed | `sort_field`, `sort_direction` |
-| `skill_previewed` | Skill preview | `skill_name`, `skill_category`, `platform_count` |
 | `skill_copied` | Skill copied | `skill_name` |
 | `onboarding_completed` | Onboarding done | `steps_viewed`, `skipped` |
 | `onboarding_skipped` | Onboarding skipped | `step_name` |

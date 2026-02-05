@@ -16,7 +16,6 @@ const (
 	EventRepoRemoved        = "repo_removed"
 	EventRepoSynced         = "repo_synced"
 	EventRepoListed         = "repo_listed"
-	EventSkillInfoViewed    = "skill_info_viewed"
 	EventConfigChanged      = "config_changed"
 	EventCLIErrorOccurred   = "cli_error_occurred"
 	EventCLIHelpViewed      = "cli_help_viewed"
@@ -35,7 +34,6 @@ const (
 	EventSearchPerformed        = "search_performed"
 	EventFilterApplied          = "filter_applied"
 	EventSortChanged            = "sort_changed"
-	EventSkillPreviewed         = "skill_previewed"
 	EventSkillCopied            = "skill_copied"
 	EventOnboardingCompleted    = "onboarding_completed"
 	EventOnboardingSkipped      = "onboarding_skipped"
@@ -62,6 +60,12 @@ const (
 	EventStatsViewed            = "stats_viewed"             // View database stats
 	EventRecentSkillsViewed     = "recent_skills_viewed"     // View recent skills
 	EventInstalledSkillsChecked = "installed_skills_checked" // Check installed skills
+)
+
+// Event names - CLI specific
+const (
+	EventSkillsDiscovered = "skills_discovered" // Discover unmanaged skills
+	EventSkillIngested    = "skill_ingested"    // Import a discovered skill
 )
 
 // Event names - MCP specific
@@ -144,14 +148,6 @@ func (c *posthogClient) TrackRepoListed(sourceCount, totalSkillCount int) {
 	props["source_count"] = sourceCount
 	props["total_skill_count"] = totalSkillCount
 	c.Track(EventRepoListed, props)
-}
-
-// TrackSkillInfoViewed tracks skill info viewing.
-func (c *posthogClient) TrackSkillInfoViewed(category string, isLocal bool) {
-	props := baseProperties()
-	props["skill_category"] = category
-	props["is_local"] = isLocal
-	c.Track(EventSkillInfoViewed, props)
 }
 
 // TrackConfigChanged tracks config changes.
@@ -268,15 +264,6 @@ func (c *posthogClient) TrackSortChanged(sortField, sortDirection string) {
 	c.Track(EventSortChanged, props)
 }
 
-// TrackSkillPreviewed tracks skill preview.
-func (c *posthogClient) TrackSkillPreviewed(skillName, category string, platformCount int) {
-	props := baseProperties()
-	props["skill_name"] = skillName
-	props["skill_category"] = category
-	props["platform_count"] = platformCount
-	c.Track(EventSkillPreviewed, props)
-}
-
 // TrackSkillCopied tracks clipboard copy.
 func (c *posthogClient) TrackSkillCopied(skillName string) {
 	props := baseProperties()
@@ -391,7 +378,6 @@ func (c *noopClient) TrackRepoAdded(sourceID string, skillCount int)            
 func (c *noopClient) TrackRepoRemoved(sourceID string, skillCount int)                            {}
 func (c *noopClient) TrackRepoSynced(sourceID string, added, removed, updated int)                {}
 func (c *noopClient) TrackRepoListed(sourceCount, totalSkillCount int)                            {}
-func (c *noopClient) TrackSkillInfoViewed(category string, isLocal bool)                          {}
 func (c *noopClient) TrackConfigChanged(settingName string, isDefault bool)                       {}
 func (c *noopClient) TrackCLIError(commandName, errorType string)                                 {}
 func (c *noopClient) TrackCLIHelpViewed(commandName string, cliArgs []string)                     {}
@@ -407,7 +393,6 @@ func (c *noopClient) TrackNewSkillCreatedFailure(errorMessage string)           
 func (c *noopClient) TrackSearchPerformed(query string, resultCount int, searchType string) {}
 func (c *noopClient) TrackFilterApplied(filterType string, filterCount int)                 {}
 func (c *noopClient) TrackSortChanged(sortField, sortDirection string)                      {}
-func (c *noopClient) TrackSkillPreviewed(skillName, category string, platformCount int)     {}
 func (c *noopClient) TrackSkillCopied(skillName string)                                     {}
 func (c *noopClient) TrackOnboardingCompleted(stepsViewed int, skipped bool)                {}
 func (c *noopClient) TrackOnboardingSkipped(stepName string)                                {}
@@ -421,6 +406,23 @@ func (c *noopClient) TrackErrorDisplayed(errorType, contextView string)         
 func (c *noopClient) TrackSourceSelected(sourceIndex, skillCount int)                       {}
 func (c *noopClient) TrackListRefreshed(trigger string, skillCount int)                     {}
 func (c *noopClient) TrackSessionSummary(durationMs int64, viewsVisited, searchesPerformed, skillsInstalled, skillsUninstalled, reposAdded, reposRemoved int) {
+}
+
+// TrackSkillsDiscovered tracks when unmanaged skills are discovered.
+func (c *posthogClient) TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool) {
+	props := baseProperties()
+	props["discovered_count"] = count
+	props["scope_global"] = scopeGlobal
+	props["scope_project"] = scopeProject
+	c.Track(EventSkillsDiscovered, props)
+}
+
+// TrackSkillIngested tracks when a discovered skill is imported into skulto management.
+func (c *posthogClient) TrackSkillIngested(skillName, scope string) {
+	props := baseProperties()
+	props["skill_name"] = skillName
+	props["scope"] = scope
+	c.Track(EventSkillIngested, props)
 }
 
 // --- Shared Tracking Methods (all interfaces) ---
@@ -473,6 +475,9 @@ func (c *posthogClient) TrackMCPToolCalled(toolName string, durationMs int64, su
 	props["success"] = success
 	c.Track(EventMCPToolCalled, props)
 }
+
+func (c *noopClient) TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool) {}
+func (c *noopClient) TrackSkillIngested(skillName, scope string)                      {}
 
 // --- noopClient implementations for Shared and MCP events ---
 
