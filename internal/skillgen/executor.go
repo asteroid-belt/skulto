@@ -11,20 +11,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/asteroid-belt/skulto/internal/log"
 )
 
-// debugLog writes debug output to a log file for troubleshooting.
-// Set SKULTO_DEBUG=1 to enable debug logging.
+// debugLog wraps log.DebugLog with the "skillgen" component.
 func debugLog(format string, args ...interface{}) {
-	if os.Getenv("SKULTO_DEBUG") != "1" {
-		return
-	}
-	f, err := os.OpenFile("/tmp/skulto-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer func() { _ = f.Close() }()
-	_, _ = fmt.Fprintf(f, "[skillgen] "+format+"\n", args...)
+	log.DebugLog("skillgen", format, args...)
 }
 
 // AITool represents the supported AI CLI tools.

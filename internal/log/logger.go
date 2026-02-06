@@ -124,3 +124,20 @@ func Close() error {
 	}
 	return nil
 }
+
+// DebugLog writes debug output to /tmp/skulto-debug.log when SKULTO_DEBUG=1 is set.
+// Use for development-time debugging only. The component parameter identifies the
+// source of the log message (e.g., "sync", "cwd-sync", "skillgen").
+func DebugLog(component, format string, args ...interface{}) {
+	if os.Getenv("SKULTO_DEBUG") != "1" {
+		return
+	}
+	f, err := os.OpenFile("/tmp/skulto-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	msg := fmt.Sprintf(format, args...)
+	_, _ = fmt.Fprintf(f, "[%s] [%s] %s\n", timestamp, component, msg)
+}

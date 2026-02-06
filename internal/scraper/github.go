@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -264,7 +265,7 @@ func (c *GitHubClient) GetFileContent(ctx context.Context, owner, repo, path, re
 
 	// Check rate limit headers
 	if resp.Rate.Remaining < 100 {
-		fmt.Printf("⚠️  GitHub rate limit low: %d remaining\n", resp.Rate.Remaining)
+		log.Printf("github: rate limit low: %d remaining", resp.Rate.Remaining)
 	}
 
 	content, err := fileContent.GetContent()

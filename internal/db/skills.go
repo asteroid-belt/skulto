@@ -11,6 +11,22 @@ import (
 	"github.com/asteroid-belt/skulto/internal/models"
 )
 
+// BM25 ranking weights for FTS5 search columns.
+// Order matches skills_fts virtual table: title, description, content, author, tags_text
+const (
+	bm25TitleWeight   = 10.0 // Title matches are most important
+	bm25DescWeight    = 5.0  // Description matches are high value
+	bm25ContentWeight = 1.0  // Full content matches are baseline
+	bm25AuthorWeight  = 2.0  // Author matches are moderate value
+	bm25TagsWeight    = 3.0  // Tag matches are valuable for discovery
+)
+
+// bm25Weights returns the BM25 weight string for SQL queries.
+func bm25Weights() string {
+	return fmt.Sprintf("%.1f, %.1f, %.1f, %.1f, %.1f",
+		bm25TitleWeight, bm25DescWeight, bm25ContentWeight, bm25AuthorWeight, bm25TagsWeight)
+}
+
 // SearchResult wraps a skill with its search rank.
 type SearchResult struct {
 	models.Skill
@@ -254,15 +270,16 @@ func (db *DB) Search(query string, limit int) ([]SearchResult, error) {
 	ftsQuery := prepareFTSQuery(query)
 
 	var results []SearchResult
-	err := db.Raw(`
-		SELECT s.*, bm25(skills_fts, 10.0, 5.0, 1.0, 2.0, 3.0) as rank
+	sql := fmt.Sprintf(`
+		SELECT s.*, bm25(skills_fts, %s) as rank
 		FROM skills s
 		JOIN skills_fts fts ON s.rowid = fts.rowid
 		WHERE skills_fts MATCH ?
 		  AND s.deleted_at IS NULL
 		ORDER BY rank
 		LIMIT ?
-	`, ftsQuery, limit).Scan(&results).Error
+	`, bm25Weights())
+	err := db.Raw(sql, ftsQuery, limit).Scan(&results).Error
 
 	if err != nil {
 		return nil, fmt.Errorf("fts search: %w", err)
@@ -327,15 +344,16 @@ func (db *DB) SearchByCategory(query, category string, limit int) ([]SearchResul
 	ftsQuery := prepareFTSQuery(query)
 
 	var results []SearchResult
-	err := db.Raw(`
-		SELECT s.*, bm25(skills_fts, 10.0, 5.0, 1.0, 2.0, 3.0) as rank
+	sql := fmt.Sprintf(`
+		SELECT s.*, bm25(skills_fts, %s) as rank
 		FROM skills s
 		JOIN skills_fts fts ON s.rowid = fts.rowid
 		WHERE skills_fts MATCH ? AND s.category = ?
 		  AND s.deleted_at IS NULL
 		ORDER BY rank
 		LIMIT ?
-	`, ftsQuery, category, limit).Scan(&results).Error
+	`, bm25Weights())
+	err := db.Raw(sql, ftsQuery, category, limit).Scan(&results).Error
 
 	return results, err
 }
@@ -352,8 +370,8 @@ func (db *DB) SearchByTag(query, tagSlug string, limit int) ([]SearchResult, err
 	ftsQuery := prepareFTSQuery(query)
 
 	var results []SearchResult
-	err := db.Raw(`
-		SELECT s.*, bm25(skills_fts, 10.0, 5.0, 1.0, 2.0, 3.0) as rank
+	sql := fmt.Sprintf(`
+		SELECT s.*, bm25(skills_fts, %s) as rank
 		FROM skills s
 		JOIN skills_fts fts ON s.rowid = fts.rowid
 		JOIN skill_tags st ON s.id = st.skill_id
@@ -361,7 +379,8 @@ func (db *DB) SearchByTag(query, tagSlug string, limit int) ([]SearchResult, err
 		  AND s.deleted_at IS NULL
 		ORDER BY rank
 		LIMIT ?
-	`, ftsQuery, tagSlug, limit).Scan(&results).Error
+	`, bm25Weights())
+	err := db.Raw(sql, ftsQuery, tagSlug, limit).Scan(&results).Error
 
 	return results, err
 }

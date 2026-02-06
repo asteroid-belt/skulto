@@ -14,6 +14,31 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// Pagination constants for MCP tool handlers.
+const (
+	defaultSearchLimit    = 20
+	maxSearchLimit        = 100
+	defaultListLimit      = 20
+	maxListLimit          = 100
+	defaultRecentLimit    = 10
+	maxRecentLimit        = 50
+	defaultFavoritesLimit = 50
+	maxFavoritesLimit     = 100
+)
+
+// parseLimit extracts and validates a limit parameter from MCP tool arguments.
+// Returns defaultVal if not present, caps at maxVal if exceeded.
+func parseLimit(arguments map[string]interface{}, defaultVal, maxVal int) int {
+	if l, ok := arguments["limit"].(float64); ok && l > 0 {
+		limit := int(l)
+		if limit > maxVal {
+			return maxVal
+		}
+		return limit
+	}
+	return defaultVal
+}
+
 // trackToolCall is a helper to track MCP tool invocations.
 func (s *Server) trackToolCall(toolName string, start time.Time, success bool) {
 	if s.telemetry != nil {
@@ -163,13 +188,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError("query parameter is required"), nil
 	}
 
-	limit := 20
-	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
-		limit = int(l)
-		if limit > 100 {
-			limit = 100
-		}
-	}
+	limit := parseLimit(req.Params.Arguments, defaultSearchLimit, maxSearchLimit)
 
 	skills, err := s.db.SearchSkills(query, limit)
 	if err != nil {
@@ -242,13 +261,7 @@ func (s *Server) handleGetSkill(ctx context.Context, req mcp.CallToolRequest) (*
 func (s *Server) handleListSkills(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	start := time.Now()
 
-	limit := 20
-	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
-		limit = int(l)
-		if limit > 100 {
-			limit = 100
-		}
-	}
+	limit := parseLimit(req.Params.Arguments, defaultListLimit, maxListLimit)
 
 	offset := 0
 	if o, ok := req.Params.Arguments["offset"].(float64); ok && o >= 0 {
@@ -359,13 +372,7 @@ func (s *Server) handleGetStats(ctx context.Context, req mcp.CallToolRequest) (*
 func (s *Server) handleGetRecent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	start := time.Now()
 
-	limit := 10
-	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
-		limit = int(l)
-		if limit > 50 {
-			limit = 50
-		}
-	}
+	limit := parseLimit(req.Params.Arguments, defaultRecentLimit, maxRecentLimit)
 
 	skills, err := s.db.GetRecentSkills(limit)
 	if err != nil {
@@ -647,13 +654,7 @@ func (s *Server) handleFavorite(ctx context.Context, req mcp.CallToolRequest) (*
 func (s *Server) handleGetFavorites(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	start := time.Now()
 
-	limit := 50
-	if l, ok := req.Params.Arguments["limit"].(float64); ok && l > 0 {
-		limit = int(l)
-		if limit > 100 {
-			limit = 100
-		}
-	}
+	limit := parseLimit(req.Params.Arguments, defaultFavoritesLimit, maxFavoritesLimit)
 
 	// Check if favorites store is available
 	if s.favorites == nil {

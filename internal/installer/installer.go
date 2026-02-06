@@ -105,30 +105,9 @@ func (i *Installer) IsInstalled(skillID string) (bool, error) {
 	return i.db.HasInstallations(skillID)
 }
 
-// InstallTo installs a skill to specific locations by creating symlinks.
-// This is the new location-aware installation method.
-func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *models.Source, locations []InstallLocation) error {
-	if skill == nil {
-		return fmt.Errorf("skill cannot be nil")
-	}
-	if skill.Slug == "" {
-		return ErrInvalidSkill
-	}
-	if source == nil {
-		return fmt.Errorf("source cannot be nil for symlink-based installation")
-	}
-	if len(locations) == 0 {
-		return fmt.Errorf("no installation locations specified")
-	}
-
-	// Get source skill path in repository using the skill's actual FilePath
-	sourcePath := i.paths.GetSourcePath(source.Owner, source.Repo, skill.FilePath)
-
-	// Verify source path exists
-	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		return fmt.Errorf("skill directory not found: %s", sourcePath)
-	}
-
+// installToLocationsInternal is the shared implementation for installing skills via symlinks.
+// Both InstallTo and InstallLocalSkillTo delegate to this method after resolving the source path.
+func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath string, locations []InstallLocation) error {
 	// Create symlinks for each location
 	var createdInstalls []models.SkillInstallation
 	var lastErr error
@@ -212,6 +191,33 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 	return nil
 }
 
+// InstallTo installs a skill to specific locations by creating symlinks.
+// This is the new location-aware installation method.
+func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *models.Source, locations []InstallLocation) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+	if skill.Slug == "" {
+		return ErrInvalidSkill
+	}
+	if source == nil {
+		return fmt.Errorf("source cannot be nil for symlink-based installation")
+	}
+	if len(locations) == 0 {
+		return fmt.Errorf("no installation locations specified")
+	}
+
+	// Get source skill path in repository using the skill's actual FilePath
+	sourcePath := i.paths.GetSourcePath(source.Owner, source.Repo, skill.FilePath)
+
+	// Verify source path exists
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return fmt.Errorf("skill directory not found: %s", sourcePath)
+	}
+
+	return i.installToLocationsInternal(skill, sourcePath, locations)
+}
+
 // InstallLocalSkillTo installs a local skill (from ~/.skulto/skills) to specific locations.
 // Unlike InstallTo, this doesn't require a Source object since local skills are self-contained.
 func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill, sourcePath string, locations []InstallLocation) error {
@@ -233,87 +239,7 @@ func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill
 		return fmt.Errorf("skill directory not found: %s", sourcePath)
 	}
 
-	// Create symlinks for each location
-	var createdInstalls []models.SkillInstallation
-	var lastErr error
-
-	// Track directories created by MkdirAll for cleanup on total failure
-	createdDirs := make(map[string]bool)
-
-	for _, loc := range locations {
-		targetPath := loc.GetSkillPath(skill.Slug)
-		if targetPath == "" {
-			continue
-		}
-
-		// Ensure target parent directory exists
-		targetDir := filepath.Dir(targetPath)
-		dirExisted := exists(targetDir)
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			log.Printf("skulto: mkdir failed for %s: %v", targetDir, err)
-			lastErr = err
-			continue
-		}
-		if !dirExisted {
-			createdDirs[targetDir] = true
-		}
-
-		// Remove existing symlink or directory
-		if exists(targetPath) {
-			if err := os.RemoveAll(targetPath); err != nil {
-				lastErr = err
-				continue
-			}
-		}
-
-		// Create symlink: targetPath -> sourcePath
-		if err := os.Symlink(sourcePath, targetPath); err != nil {
-			log.Printf("skulto: symlink failed %s → %s: %v", sourcePath, targetPath, err)
-			lastErr = err
-			continue
-		}
-
-		// Record installation
-		install := models.SkillInstallation{
-			SkillID:     skill.ID,
-			Platform:    string(loc.Platform),
-			Scope:       string(loc.Scope),
-			BasePath:    loc.BasePath,
-			SymlinkPath: targetPath,
-		}
-		if err := i.db.AddInstallation(&install); err != nil {
-			// Rollback symlink
-			log.Printf("skulto: AddInstallation failed for %s, rolling back symlink: %v", targetPath, err)
-			_ = os.Remove(targetPath)
-			lastErr = err
-			continue
-		}
-
-		createdInstalls = append(createdInstalls, install)
-	}
-
-	// If no locations succeeded, clean up empty directories and return error
-	if len(createdInstalls) == 0 {
-		for dir := range createdDirs {
-			_ = os.Remove(dir) // only removes if empty
-		}
-		if lastErr != nil {
-			return fmt.Errorf("failed to install to any location: %w", lastErr)
-		}
-		return ErrSymlinkFailed
-	}
-
-	// Update legacy IsInstalled flag for backward compatibility
-	if err := i.db.SetInstalled(skill.ID, true); err != nil {
-		// Rollback: remove created symlinks and installations
-		for _, inst := range createdInstalls {
-			_ = os.Remove(inst.SymlinkPath)
-			_ = i.db.RemoveInstallation(inst.SkillID, inst.Platform, inst.Scope, inst.BasePath)
-		}
-		return fmt.Errorf("database update failed: %w", err)
-	}
-
-	return nil
+	return i.installToLocationsInternal(skill, sourcePath, locations)
 }
 
 // UninstallFrom removes a skill from specific locations.

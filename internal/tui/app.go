@@ -15,6 +15,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/discovery"
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/log"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/asteroid-belt/skulto/internal/search"
@@ -1926,17 +1927,9 @@ func (m *Model) installBatchSkillsCmd(skills []models.Skill, locations []install
 // that exist on disk but are not in the database. This ensures local skills are always searchable.
 func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 	return func() tea.Msg {
-		// Debug log file
+		// Debug log wrapper using centralized logger
 		debugLog := func(format string, args ...interface{}) {
-			if os.Getenv("SKULTO_DEBUG") != "1" {
-				return
-			}
-			f, err := os.OpenFile("/tmp/skulto-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				return
-			}
-			defer func() { _ = f.Close() }()
-			_, _ = fmt.Fprintf(f, "[sync] "+format+"\n", args...)
+			log.DebugLog("sync", format, args...)
 		}
 
 		debugLog("Starting local skills sync")
@@ -2038,14 +2031,9 @@ func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 // Supports both flat (name/skill.md) and nested (category/name/skill.md) structures.
 func (m *Model) syncCwdSkillsCmd() tea.Cmd {
 	return func() tea.Msg {
-		// Always log to file for debugging - users can check /tmp/skulto-cwd-sync.log
+		// Debug log wrapper using centralized logger
 		debugLog := func(format string, args ...any) {
-			f, _ := os.OpenFile("/tmp/skulto-cwd-sync.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if f != nil {
-				defer func() { _ = f.Close() }()
-				timestamp := time.Now().Format("2006-01-02 15:04:05")
-				_, _ = fmt.Fprintf(f, "[%s] [cwd-sync] "+format+"\n", append([]any{timestamp}, args...)...)
-			}
+			log.DebugLog("cwd-sync", format, args...)
 		}
 
 		cwd, _ := os.Getwd()
