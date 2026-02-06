@@ -1,9 +1,9 @@
 package models
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"time"
+
+	"github.com/asteroid-belt/skulto/internal/hash"
 )
 
 // SkillInstallation tracks where a skill is installed.
@@ -26,12 +26,5 @@ func (SkillInstallation) TableName() string {
 // GenerateID creates a unique ID for this installation based on key components.
 func (si *SkillInstallation) GenerateID() string {
 	data := si.SkillID + ":" + si.Platform + ":" + si.Scope + ":" + si.BasePath
-	return hashString(data)
-}
-
-// hashString creates a SHA256 hash of the input (first 16 chars).
-func hashString(s string) string {
-	h := sha256.New()
-	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	return hash.TruncatedSHA256(data)
 }

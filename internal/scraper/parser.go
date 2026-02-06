@@ -3,12 +3,11 @@ package scraper
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/asteroid-belt/skulto/internal/hash"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/yuin/goldmark"
 	meta "github.com/yuin/goldmark-meta"
@@ -122,8 +121,7 @@ func (p *SkillParser) Parse(content string, source *SkillFile) (*models.Skill, e
 	skill.Slug = generateSlug(skill.Title)
 
 	// Generate content hash for embedding cache
-	contentHash := sha256.Sum256([]byte(content))
-	skill.EmbeddingID = hex.EncodeToString(contentHash[:])[:16]
+	skill.EmbeddingID = hash.TruncatedSHA256(content)
 
 	return skill, nil
 }
@@ -224,7 +222,5 @@ func generateSlug(title string) string {
 // generateSkillID creates a unique ID for a skill based on repo name and path.
 // Uses SHA256 hash truncated to 16 characters.
 func generateSkillID(repoName, path string) string {
-	h := sha256.New()
-	h.Write([]byte(repoName + ":" + path))
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	return hash.TruncatedSHA256(repoName + ":" + path)
 }

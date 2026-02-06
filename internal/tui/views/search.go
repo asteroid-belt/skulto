@@ -21,6 +21,14 @@ import (
 // This prevents overwhelming the UI with results from overly broad queries.
 const MinSearchChars = 3
 
+// Search view layout constants.
+const (
+	searchHeaderLines = 2 // Title + blank line
+	searchBarLines    = 3 // Label + box + blank
+	searchFooterLines = 1 // Footer line
+	searchResultLines = 4 // Approximate lines per result item
+)
+
 // FocusArea indicates which part of the search view has keyboard focus.
 type FocusArea int
 
@@ -113,22 +121,9 @@ func (sv *SearchView) loadAllTags() {
 	tags, err := sv.db.ListTags("")
 	if err == nil {
 		// Filter out "mine" tag which is always zero count
-		sv.allTags = filterOutMineTagSearch(tags)
+		sv.allTags = FilterOutMineTag(tags, 0)
 		sv.tagGrid.SetTags(sv.allTags)
 	}
-}
-
-// filterOutMineTagSearch removes the "mine" tag from a list of tags.
-// The "mine" tag is a special category that always shows zero count in the UI.
-func filterOutMineTagSearch(tags []models.Tag) []models.Tag {
-	result := make([]models.Tag, 0, len(tags))
-	for _, tag := range tags {
-		if tag.ID == "mine" || tag.Slug == "mine" {
-			continue
-		}
-		result = append(result, tag)
-	}
-	return result
 }
 
 // Update handles user input and search logic.
@@ -522,16 +517,9 @@ func (sv *SearchView) updateResultList() {
 func (sv *SearchView) adjustScroll() {
 	// Fixed sections:
 	// - Search header: 2 lines
-	// - Search bar: 3 lines
-	// - Footer: 1 line
-	// Each result takes ~4 lines
-	searchHeaderLines := 2
-	searchBarLines := 3
-	footerLine := 1
-	resultLines := 4
-
-	availableHeight := max(resultLines, sv.height-searchHeaderLines-searchBarLines-footerLine)
-	visibleResults := max(1, availableHeight/resultLines)
+	// Fixed sections: header, search bar, footer. Each result takes ~4 lines.
+	availableHeight := max(searchResultLines, sv.height-searchHeaderLines-searchBarLines-searchFooterLines)
+	visibleResults := max(1, availableHeight/searchResultLines)
 
 	// Scroll down if selected is below viewport
 	if sv.selectedIdx >= sv.scrollOffset+visibleResults {
@@ -580,14 +568,10 @@ func (sv *SearchView) View() string {
 	// Build layout: fixed header + search bar + scrollable results + fixed footer
 	var layoutParts []string
 
-	// Add fixed search header (2 lines for title + blank)
+	// Add fixed search header and search bar
 	layoutParts = append(layoutParts, "")
-	searchHeaderLines := 1
-
-	// Add search bar (3 lines: label + box + blank)
 	layoutParts = append(layoutParts, sv.searchBar.View())
 	layoutParts = append(layoutParts, "")
-	searchBarLines := 3
 
 	// Handle different states
 	if sv.loading {
@@ -597,7 +581,7 @@ func (sv *SearchView) View() string {
 
 	// Show tags when query is below threshold
 	if len(sv.query) < MinSearchChars {
-		return sv.renderTagBrowsingView(layoutParts, searchHeaderLines, searchBarLines)
+		return sv.renderTagBrowsingView(layoutParts)
 	}
 
 	// Check if we have any results
@@ -668,9 +652,9 @@ func (sv *SearchView) renderResultsOnly() string {
 	// Unified result list mode
 	if sv.results != nil {
 		// Set size for proper viewport calculation
-		headerLines := 4 // padding + search bar + padding
-		footerLines := 1
-		availableHeight := sv.height - headerLines - footerLines
+		// Header = 1 blank + searchBarLines (3) = 4
+		fixedHeight := 1 + searchBarLines + searchFooterLines
+		availableHeight := sv.height - fixedHeight
 		sv.resultList.SetSize(sv.width, availableHeight)
 		return sv.resultList.View()
 	}
@@ -686,13 +670,8 @@ func (sv *SearchView) renderLegacyResults() string {
 	}
 
 	// Calculate maximum visible results based on viewport height
-	searchHeaderLines := 2
-	searchBarLines := 3
-	footerLine := 1
-	resultLines := 4 // Approximate lines per result item
-
-	availableHeight := max(resultLines, sv.height-searchHeaderLines-searchBarLines-footerLine)
-	maxVisible := min(len(sv.legacyResults), max(1, availableHeight/resultLines))
+	availableHeight := max(searchResultLines, sv.height-searchHeaderLines-searchBarLines-searchFooterLines)
+	maxVisible := min(len(sv.legacyResults), max(1, availableHeight/searchResultLines))
 
 	// Use scroll offset maintained by adjustScroll()
 	startIdx := sv.scrollOffset
@@ -772,7 +751,7 @@ func (sv *SearchView) renderEmptyState(msg string) string {
 }
 
 // renderTagBrowsingView renders the tag browsing mode.
-func (sv *SearchView) renderTagBrowsingView(layoutParts []string, _, _ int) string {
+func (sv *SearchView) renderTagBrowsingView(layoutParts []string) string {
 	// Title for tag section
 	titleStyle := lipgloss.NewStyle().
 		Foreground(theme.Current.Accent).

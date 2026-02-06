@@ -155,8 +155,6 @@ func NewAnthropicProvider(apiKey, model string) (Provider, error) {
 	return NewAnthropicProviderImpl(apiKey, model)
 }
 
-// placeholder implementations - will be replaced in Phase 1B/1C
-
 // NewOpenAIProvider creates an OpenAI provider.
 func NewOpenAIProvider(apiKey, model string) (Provider, error) {
 	return newOpenAIProvider(apiKey, model)

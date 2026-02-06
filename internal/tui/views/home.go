@@ -28,6 +28,20 @@ const (
 	HomeActionSelectSkill
 )
 
+// Home view layout constants.
+const (
+	homeWelcomeLines  = 5  // Welcome section with margins
+	homeTagsLines     = 4  // Tags section with title and margin
+	homeFooterLines   = 1  // Footer
+	homePaddingLines  = 2  // Extra padding
+	homeLinesPerItem  = 2  // Each skill item takes ~2 lines
+	homeTitleLines    = 2  // Title + margin
+	homeMaxItems      = 10 // Maximum visible items
+	homeMinItems      = 2  // Minimum visible items
+	homeLoadedMaxCap  = 5  // Cap for loaded skills column
+	homeApproxHeader  = 10 // Approximate header height for scroll calculations
+)
+
 // HomeView displays the dashboard with welcome message, recent skills, top tags, and installed skills.
 type HomeView struct {
 	db        *db.DB
@@ -172,7 +186,7 @@ func (hv *HomeView) Init(tc telemetry.Client) {
 	// Load top tags (excluding "mine" tag which is always zero)
 	tags, err := hv.db.GetTopTags(11) // Fetch one extra in case "mine" is included
 	if err == nil {
-		hv.topTags = filterOutMineTag(tags, 10)
+		hv.topTags = FilterOutMineTag(tags, 10)
 	}
 
 	// Load installed skills
@@ -280,31 +294,29 @@ func (hv *HomeView) Update(key string) HomeAction {
 	}
 }
 
+// calculateMaxVisibleItems returns the max visible items for a given header height.
+func (hv *HomeView) calculateMaxVisibleItems(headerLineCount int) int {
+	fixedHeight := headerLineCount + homeWelcomeLines + homeTagsLines + homeFooterLines + homePaddingLines
+	availableForSkills := hv.height - fixedHeight
+	maxVisibleItems := (availableForSkills - homeTitleLines) / homeLinesPerItem
+	if maxVisibleItems < homeMinItems {
+		maxVisibleItems = homeMinItems
+	}
+	if maxVisibleItems > homeMaxItems {
+		maxVisibleItems = homeMaxItems
+	}
+	return maxVisibleItems
+}
+
 // adjustScrollForSelection adjusts scroll offset to keep the selected item visible.
 func (hv *HomeView) adjustScrollForSelection() {
-	// Calculate max visible items (same logic as View)
-	headerLines := 10 // Approximate header height
-	welcomeLines := 4
-	tagsLines := 4
-	footerLines := 1
-	paddingLines := 2
-	fixedHeight := headerLines + welcomeLines + tagsLines + footerLines + paddingLines
-	availableForSkills := hv.height - fixedHeight
-	linesPerItem := 2
-	titleLines := 2
-	maxVisibleItems := (availableForSkills - titleLines) / linesPerItem
-	if maxVisibleItems < 2 {
-		maxVisibleItems = 2
-	}
-	if maxVisibleItems > 10 {
-		maxVisibleItems = 10
-	}
+	maxVisibleItems := hv.calculateMaxVisibleItems(homeApproxHeader)
 
 	switch hv.selectedColumn {
 	case 0: // Loaded skills — always cap at 5 visible items
 		loadedMax := maxVisibleItems
-		if loadedMax > 5 {
-			loadedMax = 5
+		if loadedMax > homeLoadedMaxCap {
+			loadedMax = homeLoadedMaxCap
 		}
 		// Scroll down if selected item is below visible area
 		if hv.selectedIdx >= hv.loadedScrollOffset+loadedMax {
@@ -386,28 +398,8 @@ func (hv *HomeView) View() string {
 	headerView := hv.renderHeader()
 	headerLineCount := strings.Count(headerView, "\n") + 1
 
-	// Fixed element heights
-	welcomeLines := 5 // Welcome section with margins (now 3 lines of text + margins)
-	tagsLines := 4    // Tags section with title and margin
-	footerLines := 1  // Footer
-	paddingLines := 2 // Extra padding
-
-	// Calculate available height for skill columns
-	fixedHeight := headerLineCount + welcomeLines + tagsLines + footerLines + paddingLines
-	availableForSkills := hv.height - fixedHeight
-
-	// Each skill item takes ~2 lines (name + description), plus 1 for title
-	linesPerItem := 2
-	titleLines := 2 // Title + margin
-
-	// Calculate max visible items (minimum 2, to always show something)
-	maxVisibleItems := (availableForSkills - titleLines) / linesPerItem
-	if maxVisibleItems < 2 {
-		maxVisibleItems = 2
-	}
-	if maxVisibleItems > 10 {
-		maxVisibleItems = 10 // Cap at reasonable max
-	}
+	// Calculate max visible items using shared helper
+	maxVisibleItems := hv.calculateMaxVisibleItems(headerLineCount)
 
 	// Build main content with dynamic item limits
 	content := []string{
@@ -425,7 +417,7 @@ func (hv *HomeView) View() string {
 	mainLines := strings.Split(mainContent, "\n")
 
 	// Calculate space available for main content
-	availableMainHeight := hv.height - footerLines - headerLineCount - 1
+	availableMainHeight := hv.height - homeFooterLines - headerLineCount - 1
 	if availableMainHeight < 0 {
 		availableMainHeight = 0
 	}
@@ -601,10 +593,10 @@ func (hv *HomeView) renderRecentSkillsWithLimit(columnActive bool, maxItems int)
 }
 
 // renderLoadedSkillsWithLimit renders installed skills with scrolling support.
-// Always shows at most 5 items to keep the layout consistent with recently viewed.
+// Always shows at most homeLoadedMaxCap items to keep the layout consistent with recently viewed.
 func (hv *HomeView) renderLoadedSkillsWithLimit(columnActive bool, maxItems int) string {
-	if maxItems > 5 {
-		maxItems = 5
+	if maxItems > homeLoadedMaxCap {
+		maxItems = homeLoadedMaxCap
 	}
 	// Make the title brighter if this column is active
 	titleColor := theme.Current.TextMuted
@@ -897,78 +889,51 @@ func (hv *HomeView) renderFooterWithHeight(height int) string {
 	return footerStyle.Render(footer)
 }
 
+// progressBarWidth is the width of progress bars in characters.
+const progressBarWidth = 15
+
+// renderProgressBar renders a progress bar with the given configuration.
+func (hv *HomeView) renderProgressBar(current, total int, icon string, iconColor, barColor lipgloss.AdaptiveColor, suffix string) string {
+	percent := float64(current) / float64(total)
+	filled := int(float64(progressBarWidth) * percent)
+	empty := progressBarWidth - filled
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+
+	iconStyle := lipgloss.NewStyle().Foreground(iconColor).Bold(true)
+	barStyle := lipgloss.NewStyle().Foreground(barColor)
+	countStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
+
+	return iconStyle.Render(icon+" ") +
+		barStyle.Render("["+bar+"]") +
+		countStyle.Render(fmt.Sprintf(" %d/%d ", current, total)) +
+		iconStyle.Render(suffix)
+}
+
 // renderPullProgress renders the pull progress bar.
 func (hv *HomeView) renderPullProgress() string {
 	if hv.pullTotal == 0 {
-		// Initial state - show "Starting..."
 		pullStyle := lipgloss.NewStyle().
 			Foreground(theme.Current.Success).
 			Bold(true)
 		return pullStyle.Render("⚡ Starting pull...")
 	}
 
-	// Calculate progress percentage
-	percent := float64(hv.pullProgress) / float64(hv.pullTotal)
-
-	// Build progress bar
-	barWidth := 15
-	filled := int(float64(barWidth) * percent)
-	empty := barWidth - filled
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-
-	// Format: ⚡ [████████░░░░] 8/12 repo-name
-	progressStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.Success).
-		Bold(true)
-
-	barStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.Accent)
-
-	countStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.TextMuted)
-
-	// Use full repo name since it's now centered with more space
-	repoName := hv.pullRepoName
-
-	result := progressStyle.Render("⚡ ") +
-		barStyle.Render("["+bar+"]") +
-		countStyle.Render(fmt.Sprintf(" %d/%d ", hv.pullProgress, hv.pullTotal)) +
-		progressStyle.Render(repoName)
-
-	return result
+	return hv.renderProgressBar(
+		hv.pullProgress, hv.pullTotal,
+		"⚡", theme.Current.Success, theme.Current.Accent,
+		hv.pullRepoName,
+	)
 }
 
 // renderScanProgress renders the security scan progress bar.
 func (hv *HomeView) renderScanProgress() string {
 	if hv.scanTotal == 0 {
-		// Initial state
 		scanStyle := lipgloss.NewStyle().
 			Foreground(theme.Current.Error).
 			Bold(true)
 		return scanStyle.Render("🔒 Starting security scan...")
 	}
-
-	// Calculate progress percentage
-	percent := float64(hv.scanProgress) / float64(hv.scanTotal)
-
-	// Build progress bar
-	barWidth := 15
-	filled := int(float64(barWidth) * percent)
-	empty := barWidth - filled
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-
-	// Format: 🔒 [████████░░░░] 8/12 Scanning repo-name
-	scanStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.Error).
-		Bold(true)
-
-	barStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.Warning)
-
-	countStyle := lipgloss.NewStyle().
-		Foreground(theme.Current.TextMuted)
 
 	// Truncate repo name if too long
 	repoName := hv.scanRepoName
@@ -976,12 +941,11 @@ func (hv *HomeView) renderScanProgress() string {
 		repoName = repoName[:22] + "..."
 	}
 
-	result := scanStyle.Render("🔒 ") +
-		barStyle.Render("["+bar+"]") +
-		countStyle.Render(fmt.Sprintf(" %d/%d ", hv.scanProgress, hv.scanTotal)) +
-		scanStyle.Render("Scanning "+repoName)
-
-	return result
+	return hv.renderProgressBar(
+		hv.scanProgress, hv.scanTotal,
+		"🔒", theme.Current.Error, theme.Current.Warning,
+		"Scanning "+repoName,
+	)
 }
 
 // HandleMouse handles mouse events for scrolling.
@@ -1025,17 +989,3 @@ func (hv *HomeView) GetKeyboardCommands() ViewCommands {
 	}
 }
 
-// filterOutMineTag removes the "mine" tag from a slice and limits to maxTags.
-func filterOutMineTag(tags []models.Tag, maxTags int) []models.Tag {
-	result := make([]models.Tag, 0, len(tags))
-	for _, tag := range tags {
-		if tag.ID == "mine" || tag.Slug == "mine" {
-			continue
-		}
-		result = append(result, tag)
-		if len(result) >= maxTags {
-			break
-		}
-	}
-	return result
-}
