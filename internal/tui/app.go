@@ -66,22 +66,22 @@ type Model struct {
 	installService  *installer.InstallService
 
 	// Views
-	currentView          ViewType
-	previousView         ViewType
-	helpReturnView       ViewType // Where to return when closing help (preserves previousView chain)
-	homeView             *views.HomeView
-	searchView           *views.SearchView
-	resetView            *views.ResetView
-	detailView           *views.DetailView
-	tagView              *views.TagView
+	currentView               ViewType
+	previousView              ViewType
+	helpReturnView            ViewType // Where to return when closing help (preserves previousView chain)
+	homeView                  *views.HomeView
+	searchView                *views.SearchView
+	resetView                 *views.ResetView
+	detailView                *views.DetailView
+	tagView                   *views.TagView
 	onboardingIntroView       *views.OnboardingIntroView
 	onboardingSkillsIntroView *views.OnboardingSkillsIntroView
 	onboardingSetupView       *views.OnboardingSetupView
-	onboardingToolsView  *views.OnboardingToolsView
-	onboardingSkillsView *views.OnboardingSkillsView
-	addSourceView        *views.AddSourceView
-	helpView             *views.HelpView
-	settingsView         *views.SettingsView
+	onboardingToolsView       *views.OnboardingToolsView
+	onboardingSkillsView      *views.OnboardingSkillsView
+	addSourceView             *views.AddSourceView
+	helpView                  *views.HelpView
+	settingsView              *views.SettingsView
 
 	// State
 	width    int
@@ -223,18 +223,18 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 	_ = favStore.Load() // Ignore error, will use empty store
 
 	return &Model{
-		db:                   database,
-		cfg:                  conf,
-		keymap:               keymap,
-		searchSvc:            searchSvc,
-		favorites:            favStore,
-		currentView:          startingView,
-		previousView:         startingView,
-		homeView:             homeView,
-		searchView:           views.NewSearchView(database, conf, searchSvc),
-		resetView:            views.NewResetView(database, conf),
-		detailView:           views.NewDetailView(database, conf, favStore),
-		tagView:              views.NewTagView(database, conf),
+		db:                        database,
+		cfg:                       conf,
+		keymap:                    keymap,
+		searchSvc:                 searchSvc,
+		favorites:                 favStore,
+		currentView:               startingView,
+		previousView:              startingView,
+		homeView:                  homeView,
+		searchView:                views.NewSearchView(database, conf, searchSvc),
+		resetView:                 views.NewResetView(database, conf),
+		detailView:                views.NewDetailView(database, conf, favStore),
+		tagView:                   views.NewTagView(database, conf),
 		onboardingIntroView:       views.NewOnboardingIntroView(conf),
 		onboardingSkillsIntroView: views.NewOnboardingSkillsIntroView(conf),
 		onboardingSetupView:       views.NewOnboardingSetupView(conf),
@@ -243,12 +243,12 @@ func NewModel(database *db.DB, conf *config.Config) *Model {
 		addSourceView:             views.NewAddSourceView(database, conf),
 		helpView:                  views.NewHelpView(database, conf),
 		manageView:                views.NewManageView(database, conf, instService, nil),
-		ticker:               time.NewTicker(500 * time.Millisecond),
-		animTick:             0,
-		installer:            inst,
-		installService:       instService,
-		newSkillDialog:       components.NewNewSkillDialog(),
-		quitConfirmDialog:    newQuitDialog(),
+		ticker:                    time.NewTicker(500 * time.Millisecond),
+		animTick:                  0,
+		installer:                 inst,
+		installService:            instService,
+		newSkillDialog:            components.NewNewSkillDialog(),
+		quitConfirmDialog:         newQuitDialog(),
 	}
 }
 
@@ -304,25 +304,25 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 	tc.TrackAppStarted("tui", sourceCount > 0, sourceCount)
 
 	return &Model{
-		db:                   database,
-		cfg:                  conf,
-		keymap:               keymap,
-		telemetry:            tc,
-		installer:            inst,
-		installService:       instService,
-		searchSvc:            searchSvc,
-		favorites:            favStore,
-		bgIndexer:            indexer,
-		indexProgressCh:      make(chan search.IndexProgress, 10),
-		pullProgressCh:       make(chan pullProgressMsg, 20),
-		scanProgressCh:       make(chan scanProgressMsg, 50),
-		currentView:          startingView,
-		previousView:         startingView,
-		homeView:             homeView,
-		searchView:           searchView,
-		resetView:            views.NewResetView(database, conf),
-		detailView:           detailView,
-		tagView:              views.NewTagView(database, conf),
+		db:                        database,
+		cfg:                       conf,
+		keymap:                    keymap,
+		telemetry:                 tc,
+		installer:                 inst,
+		installService:            instService,
+		searchSvc:                 searchSvc,
+		favorites:                 favStore,
+		bgIndexer:                 indexer,
+		indexProgressCh:           make(chan search.IndexProgress, 10),
+		pullProgressCh:            make(chan pullProgressMsg, 20),
+		scanProgressCh:            make(chan scanProgressMsg, 50),
+		currentView:               startingView,
+		previousView:              startingView,
+		homeView:                  homeView,
+		searchView:                searchView,
+		resetView:                 views.NewResetView(database, conf),
+		detailView:                detailView,
+		tagView:                   views.NewTagView(database, conf),
 		onboardingIntroView:       views.NewOnboardingIntroView(conf),
 		onboardingSkillsIntroView: views.NewOnboardingSkillsIntroView(conf),
 		onboardingSetupView:       views.NewOnboardingSetupView(conf),
@@ -331,12 +331,12 @@ func NewModelWithIndexer(database *db.DB, conf *config.Config, indexer *search.B
 		addSourceView:             views.NewAddSourceView(database, conf),
 		helpView:                  views.NewHelpView(database, conf),
 		settingsView:              views.NewSettingsView(database, conf),
-		manageView:           views.NewManageView(database, conf, instService, tc),
-		sessionStart:         time.Now(),
-		ticker:               time.NewTicker(500 * time.Millisecond),
-		animTick:             0,
-		newSkillDialog:       components.NewNewSkillDialog(),
-		quitConfirmDialog:    newQuitDialog(),
+		manageView:                views.NewManageView(database, conf, instService, tc),
+		sessionStart:              time.Now(),
+		ticker:                    time.NewTicker(500 * time.Millisecond),
+		animTick:                  0,
+		newSkillDialog:            components.NewNewSkillDialog(),
+		quitConfirmDialog:         newQuitDialog(),
 	}
 }
 

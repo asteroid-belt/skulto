@@ -30,16 +30,16 @@ const (
 
 // Home view layout constants.
 const (
-	homeWelcomeLines  = 5  // Welcome section with margins
-	homeTagsLines     = 4  // Tags section with title and margin
-	homeFooterLines   = 1  // Footer
-	homePaddingLines  = 2  // Extra padding
-	homeLinesPerItem  = 2  // Each skill item takes ~2 lines
-	homeTitleLines    = 2  // Title + margin
-	homeMaxItems      = 10 // Maximum visible items
-	homeMinItems      = 2  // Minimum visible items
-	homeLoadedMaxCap  = 5  // Cap for loaded skills column
-	homeApproxHeader  = 10 // Approximate header height for scroll calculations
+	homeWelcomeLines = 5  // Welcome section with margins
+	homeTagsLines    = 4  // Tags section with title and margin
+	homeFooterLines  = 1  // Footer
+	homePaddingLines = 2  // Extra padding
+	homeLinesPerItem = 2  // Each skill item takes ~2 lines
+	homeTitleLines   = 2  // Title + margin
+	homeMaxItems     = 10 // Maximum visible items
+	homeMinItems     = 2  // Minimum visible items
+	homeLoadedMaxCap = 5  // Cap for loaded skills column
+	homeApproxHeader = 10 // Approximate header height for scroll calculations
 )
 
 // HomeView displays the dashboard with welcome message, recent skills, top tags, and installed skills.
@@ -988,4 +988,3 @@ func (hv *HomeView) GetKeyboardCommands() ViewCommands {
 		},
 	}
 }
-
