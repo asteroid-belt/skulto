@@ -462,6 +462,15 @@ export SKULTO_TELEMETRY_TRACKING_ENABLED=false
 
 No personal data, no IP addresses are collected. See more in [events](./internal/telemetry/events.go).
 
+## Documentation
+
+- [Overview](docs/overview.md) - Project identity and key features
+- [Architecture](docs/architecture.md) - System design, components, and data flow
+- [Getting Started](docs/getting-started.md) - Prerequisites, installation, and first run
+- [Development](docs/development.md) - Contributing workflow, testing, and CI/CD
+- [Architecture Decision Records](docs/adr/README.md) - Key technical decisions and rationale
+- [Glossary](docs/glossary.md) - Domain terminology
+
 ## Contributing
 
 Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.

@@ -55,6 +55,7 @@ skulto/
 │   └── vector/              # Vector store abstraction for semantic search
 ├── pkg/version/             # Version info (set via ldflags at build time)
 ├── scripts/                 # Build and release scripts (ship-it.sh, release.sh)
+├── docs/                    # Project documentation (overview, architecture, ADRs, glossary)
 ├── context/                 # Deep-dive technical documentation (see below)
 ├── plans/                   # Implementation plans (agent-detection, mcp-plan)
 ├── assets/                  # Demo GIFs for README
@@ -282,7 +283,20 @@ perf(search): cache FTS query preparation
 - Document exported functions
 - Keep functions focused and small
 
-## Deep-Dive Documentation
+## Documentation
+
+### Project Documentation (`docs/`)
+
+| File | Topic |
+|------|-------|
+| [docs/overview.md](docs/overview.md) | Project identity, purpose, key features, status |
+| [docs/architecture.md](docs/architecture.md) | System design, components, data flow, external dependencies |
+| [docs/getting-started.md](docs/getting-started.md) | Prerequisites, installation, configuration, first run |
+| [docs/development.md](docs/development.md) | Repository structure, workflow, testing, CI/CD, distribution |
+| [docs/adr/README.md](docs/adr/README.md) | Architecture Decision Records index |
+| [docs/glossary.md](docs/glossary.md) | Domain terminology and acronyms |
+
+### Deep-Dive Documentation (`context/`)
 
 The `context/` directory contains detailed technical documentation:
 
@@ -300,6 +314,8 @@ The `context/` directory contains detailed technical documentation:
 - Update `README.md` when features, setup steps, or CLI commands change
 - Document new CLI commands with examples
 - Update this `AGENTS.md` when adding new packages or significant architecture changes
+- Project-level docs (overview, architecture, getting started, development) go in `docs/`
+- Architecture Decision Records go in `docs/adr/`
 - Plan documents go in `plans/`
 - Deep-dive technical docs go in `context/`
 
