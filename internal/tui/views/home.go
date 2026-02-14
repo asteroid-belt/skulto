@@ -87,6 +87,9 @@ type HomeView struct {
 
 	// Discovery badge count
 	discoveryCount int64
+
+	// Transient status message (shown in footer center)
+	statusMessage string
 }
 
 // NewHomeView creates a new home view.
@@ -167,6 +170,16 @@ func (hv *HomeView) SetDiscoveryCount(count int64) {
 // GetDiscoveryCount returns the count of undismissed discovered skills.
 func (hv *HomeView) GetDiscoveryCount() int64 {
 	return hv.discoveryCount
+}
+
+// SetStatusMessage sets a transient status message to display in the footer.
+func (hv *HomeView) SetStatusMessage(msg string) {
+	hv.statusMessage = msg
+}
+
+// ClearStatusMessage clears the transient status message.
+func (hv *HomeView) ClearStatusMessage() {
+	hv.statusMessage = ""
 }
 
 // UpdateAnimation advances the animation frame for the header.
@@ -843,8 +856,16 @@ func (hv *HomeView) renderFooterWithHeight(height int) string {
 	left := leftStyle.Render(fmt.Sprintf("[ %d skills • %d tags ]",
 		hv.skillCount, hv.tagCount))
 
-	// Center: pull status, scan status, or indexing indicator
+	// Center: status message, pull status, scan status, or indexing indicator
 	center := ""
+
+	// Show transient status message (lowest priority - overridden by active operations)
+	if hv.statusMessage != "" {
+		statusStyle := lipgloss.NewStyle().
+			Foreground(theme.Current.Success).
+			Bold(true)
+		center = statusStyle.Render(hv.statusMessage)
+	}
 
 	// Override with pull progress bar if pulling
 	if hv.pulling {

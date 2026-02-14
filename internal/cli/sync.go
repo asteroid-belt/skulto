@@ -106,7 +106,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader)
+	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader, cwd)
 
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
@@ -249,6 +249,7 @@ func syncInstallSkills(
 	service *installer.InstallService,
 	opts *installer.InstallOptions,
 	reader *bufio.Reader,
+	cwd string,
 ) (installed, skipped, errored int) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
@@ -261,7 +262,7 @@ func syncInstallSkills(
 
 	for _, skill := range skills {
 		locations, _ := service.GetInstallLocations(ctx, skill.Slug)
-		allInstalled := syncIsInstalledAtAll(locations, opts.Platforms, opts.Scopes)
+		allInstalled := syncIsInstalledAtAll(locations, opts.Platforms, opts.Scopes, cwd)
 
 		if allInstalled {
 			fmt.Printf("  %s %s (already installed)\n", skipStyle.Render("o"), skill.Slug)
@@ -269,7 +270,11 @@ func syncInstallSkills(
 			continue
 		}
 
-		if len(locations) > 0 && !skipAll {
+		// Filter locations to only those relevant to the current context
+		// so the "already installed at some locations" prompt is accurate
+		relevantLocations := syncFilterRelevantLocations(locations, cwd)
+
+		if len(relevantLocations) > 0 && !skipAll {
 			fmt.Printf("\n  '%s' is already installed at some locations.\n", skill.Slug)
 			fmt.Print("  Also install to your selected locations? [y/N/s(kip all)] ")
 
@@ -353,17 +358,27 @@ func selectSyncPlatformsAndScope(ctx context.Context, service *installer.Install
 	}, nil
 }
 
-// syncIsInstalledAtAll checks if a skill is installed at all selected platform+scope combinations.
+// syncIsInstalledAtAll checks if a skill is installed at all selected platform+scope combinations
+// for the current working directory. Project-scoped installations only match if their BasePath
+// equals cwd; global-scoped installations match if their BasePath equals the user's home directory.
 func syncIsInstalledAtAll(
 	existing []installer.InstallLocation,
 	platforms []string,
 	scopes []installer.InstallScope,
+	cwd string,
 ) bool {
+	home, _ := os.UserHomeDir()
+
 	for _, p := range platforms {
 		for _, s := range scopes {
+			expectedBase := home
+			if s == installer.ScopeProject {
+				expectedBase = cwd
+			}
+
 			found := false
 			for _, loc := range existing {
-				if string(loc.Platform) == p && loc.Scope == s {
+				if string(loc.Platform) == p && loc.Scope == s && loc.BasePath == expectedBase {
 					found = true
 					break
 				}
@@ -374,4 +389,22 @@ func syncIsInstalledAtAll(
 		}
 	}
 	return true
+}
+
+// syncFilterRelevantLocations filters install locations to only those matching
+// the current working directory (for project scope) or home directory (for global scope).
+func syncFilterRelevantLocations(locations []installer.InstallLocation, cwd string) []installer.InstallLocation {
+	home, _ := os.UserHomeDir()
+
+	var relevant []installer.InstallLocation
+	for _, loc := range locations {
+		expectedBase := home
+		if loc.Scope == installer.ScopeProject {
+			expectedBase = cwd
+		}
+		if loc.BasePath == expectedBase {
+			relevant = append(relevant, loc)
+		}
+	}
+	return relevant
 }

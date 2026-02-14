@@ -1,4 +1,4 @@
-.PHONY: all build test test-integration test-race test-race-integration test-coverage lint clean install dev run help deps fmt scrape ship-it release release-all
+.PHONY: all build fresh test test-integration test-race test-race-integration test-coverage lint clean install dev run help deps fmt scrape ship-it release release-all
 
 # Variables
 BINARY_NAME=skulto
@@ -38,6 +38,18 @@ build-mcp:
 
 ## build-all: Build all binaries (skulto and skulto-mcp)
 build-all: build build-mcp
+
+## fresh: Clean build cache and rebuild both binaries from scratch
+fresh:
+	@echo "Cleaning build cache..."
+	@rm -rf $(BUILD_DIR)
+	$(GO) clean -cache
+	@echo "Rebuilding $(BINARY_NAME) from scratch..."
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "Rebuilding skulto-mcp from scratch..."
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/skulto-mcp $(CMD_MCP_DIR)
+	@echo "✅ Fresh build complete: $(BUILD_DIR)/$(BINARY_NAME) + $(BUILD_DIR)/skulto-mcp"
 
 ## release: Build all artifacts for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
 release:

@@ -189,6 +189,9 @@ type (
 		count int
 		err   error
 	}
+
+	// statusClearMsg clears the transient status message in the home view footer
+	statusClearMsg struct{}
 )
 
 // NewModel creates a new TUI model.
@@ -1211,8 +1214,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case manifestSavedMsg:
 		if msg.err != nil {
 			m.setError(msg.err, "manifest_save")
+			m.homeView.SetStatusMessage("✗ Save failed")
+		} else {
+			m.homeView.SetStatusMessage(fmt.Sprintf("✓ Saved %d skill(s) to skulto.json", msg.count))
 		}
-		// Manifest saved successfully - no additional UI update needed
+		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return statusClearMsg{}
+		}))
+
+	case statusClearMsg:
+		m.homeView.ClearStatusMessage()
 
 	case ingestCompleteMsg:
 		if msg.err != nil {
