@@ -98,6 +98,28 @@ func New() *ManifestFile {
 	}
 }
 
+// SkillEntry represents a skill eligible for inclusion in a manifest.
+type SkillEntry struct {
+	Slug       string
+	SourceName string // "owner/repo" format
+	LocalOnly  bool   // true if no source repository
+}
+
+// BuildFromSkills creates a manifest from skill entries, skipping local-only skills.
+// Returns the manifest and the count of skipped local-only skills.
+func BuildFromSkills(entries []SkillEntry) (*ManifestFile, int) {
+	mf := New()
+	skippedLocal := 0
+	for _, e := range entries {
+		if e.LocalOnly {
+			skippedLocal++
+			continue
+		}
+		mf.Skills[e.Slug] = e.SourceName
+	}
+	return mf, skippedLocal
+}
+
 // SkillCount returns the number of skills in the manifest.
 func (mf *ManifestFile) SkillCount() int {
 	return len(mf.Skills)

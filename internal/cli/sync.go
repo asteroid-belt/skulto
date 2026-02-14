@@ -78,57 +78,136 @@ func runSync(cmd *cobra.Command, args []string) error {
 	fmt.Printf("%s (%d skills)\n", headerStyle.Render("SYNCING from skulto.json"), mf.SkillCount())
 	fmt.Println(strings.Repeat("\u2500", 50))
 
-	// Step 1: Group skills by source
+	reader := bufio.NewReader(os.Stdin)
+
+	skippedSources, err := syncEnsureSources(ctx, mf, database, cfg, reader)
+	if err != nil {
+		return trackCLIError("sync", err)
+	}
+
+	skillsToInstall, skippedSkills := syncResolveSkills(mf, database, skippedSources)
+
+	if len(skillsToInstall) == 0 {
+		fmt.Println("\nNo skills to install.")
+		if skippedSkills > 0 {
+			fmt.Printf("(%d skill(s) skipped)\n", skippedSkills)
+		}
+		return nil
+	}
+
+	fmt.Printf("\n%d skill(s) to install. Select where to install them:\n\n", len(skillsToInstall))
+
+	opts, err := selectSyncPlatformsAndScope(ctx, service)
+	if err != nil {
+		return trackCLIError("sync", err)
+	}
+	if opts == nil {
+		fmt.Println("Cancelled.")
+		return nil
+	}
+
+	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader)
+
+	fmt.Println()
+	fmt.Println(strings.Repeat("\u2500", 50))
+	fmt.Printf("Done! Installed: %d, Skipped: %d", installed, skipped)
+	if errored > 0 {
+		fmt.Printf(", Errors: %d", errored)
+	}
+	if skippedSkills > 0 {
+		fmt.Printf(", Not found: %d", skippedSkills)
+	}
+	fmt.Println()
+
+	telemetryClient.TrackManifestSynced(mf.SkillCount(), installed, skipped)
+
+	return nil
+}
+
+// syncEnsureSources checks that all sources referenced in the manifest exist in the database.
+// For missing sources, it prompts the user to add them. Returns a set of skipped source names.
+func syncEnsureSources(
+	ctx context.Context,
+	mf *manifest.ManifestFile,
+	database *db.DB,
+	cfg *config.Config,
+	reader *bufio.Reader,
+) (map[string]bool, error) {
 	sourceSkills := make(map[string][]string)
 	for slug, source := range mf.Skills {
 		sourceSkills[source] = append(sourceSkills[source], slug)
 	}
 
-	// Step 2: Ensure all sources exist
 	skippedSources := make(map[string]bool)
-	reader := bufio.NewReader(os.Stdin)
 
 	for sourceName := range sourceSkills {
 		source, err := database.GetSource(sourceName)
 		if err != nil || source == nil {
-			fmt.Printf("\nSource '%s' not found in your database.\n", sourceName)
-			fmt.Print("Add it? [y/N] ")
-
-			answer, _ := reader.ReadString('\n')
-			answer = strings.TrimSpace(strings.ToLower(answer))
-
-			if answer == "y" || answer == "yes" {
-				fmt.Printf("Adding %s...\n", sourceName)
-
-				parts := strings.SplitN(sourceName, "/", 2)
-				if len(parts) != 2 {
-					fmt.Printf("  Invalid source format: %s (expected owner/repo)\n", sourceName)
-					skippedSources[sourceName] = true
-					continue
-				}
-
-				scraperCfg := scraper.ScraperConfig{
-					Token:        cfg.GitHub.Token,
-					DataDir:      cfg.BaseDir,
-					RepoCacheTTL: cfg.GitHub.RepoCacheTTL,
-					UseGitClone:  cfg.GitHub.UseGitClone,
-				}
-				sc := scraper.NewScraperWithConfig(scraperCfg, database)
-
-				if _, err := sc.ScrapeRepository(ctx, parts[0], parts[1]); err != nil {
-					fmt.Printf("  Failed to add source: %v\n", err)
-					skippedSources[sourceName] = true
-					continue
-				}
-				fmt.Printf("  Added %s successfully.\n", sourceName)
-			} else {
-				fmt.Printf("  Skipping all skills from %s\n", sourceName)
+			skipped, err := syncPromptAddSource(ctx, sourceName, database, cfg, reader)
+			if err != nil {
+				return nil, err
+			}
+			if skipped {
 				skippedSources[sourceName] = true
 			}
 		}
 	}
 
-	// Step 3: Resolve skills
+	return skippedSources, nil
+}
+
+// syncPromptAddSource prompts the user to add a missing source repository.
+// Returns true if the source was skipped (not added).
+func syncPromptAddSource(
+	ctx context.Context,
+	sourceName string,
+	database *db.DB,
+	cfg *config.Config,
+	reader *bufio.Reader,
+) (bool, error) {
+	fmt.Printf("\nSource '%s' not found in your database.\n", sourceName)
+	fmt.Print("Add it? [y/N] ")
+
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer != "y" && answer != "yes" {
+		fmt.Printf("  Skipping all skills from %s\n", sourceName)
+		return true, nil
+	}
+
+	fmt.Printf("Adding %s...\n", sourceName)
+
+	parts := strings.SplitN(sourceName, "/", 2)
+	if len(parts) != 2 {
+		fmt.Printf("  Invalid source format: %s (expected owner/repo)\n", sourceName)
+		return true, nil
+	}
+
+	scraperCfg := scraper.ScraperConfig{
+		Token:        cfg.GitHub.Token,
+		DataDir:      cfg.BaseDir,
+		RepoCacheTTL: cfg.GitHub.RepoCacheTTL,
+		UseGitClone:  cfg.GitHub.UseGitClone,
+	}
+	sc := scraper.NewScraperWithConfig(scraperCfg, database)
+
+	if _, err := sc.ScrapeRepository(ctx, parts[0], parts[1]); err != nil {
+		fmt.Printf("  Failed to add source: %v\n", err)
+		return true, nil
+	}
+
+	fmt.Printf("  Added %s successfully.\n", sourceName)
+	return false, nil
+}
+
+// syncResolveSkills resolves manifest slugs to database skills, skipping any from skipped sources
+// or not found in the database. Returns the skills to install and the count of skipped skills.
+func syncResolveSkills(
+	mf *manifest.ManifestFile,
+	database *db.DB,
+	skippedSources map[string]bool,
+) ([]*models.Skill, int) {
 	var skillsToInstall []*models.Skill
 	var skippedSkills int
 
@@ -159,38 +238,28 @@ func runSync(cmd *cobra.Command, args []string) error {
 		skillsToInstall = append(skillsToInstall, skill)
 	}
 
-	if len(skillsToInstall) == 0 {
-		fmt.Println("\nNo skills to install.")
-		if skippedSkills > 0 {
-			fmt.Printf("(%d skill(s) skipped)\n", skippedSkills)
-		}
-		return nil
-	}
+	return skillsToInstall, skippedSkills
+}
 
-	// Step 4: Platform and scope selection
-	fmt.Printf("\n%d skill(s) to install. Select where to install them:\n\n", len(skillsToInstall))
-
-	opts, err := selectSyncPlatformsAndScope(ctx, service)
-	if err != nil {
-		return trackCLIError("sync", err)
-	}
-	if opts == nil {
-		fmt.Println("Cancelled.")
-		return nil
-	}
-
-	// Step 5: Install skills
+// syncInstallSkills installs the resolved skills, prompting for confirmation when a skill is
+// already partially installed. Returns counts of installed, skipped, and errored skills.
+func syncInstallSkills(
+	ctx context.Context,
+	skills []*models.Skill,
+	service *installer.InstallService,
+	opts *installer.InstallOptions,
+	reader *bufio.Reader,
+) (installed, skipped, errored int) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
 
-	var installed, skipped, errored int
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	skipStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
 	skipAll := false
 
-	for _, skill := range skillsToInstall {
+	for _, skill := range skills {
 		locations, _ := service.GetInstallLocations(ctx, skill.Slug)
 		allInstalled := syncIsInstalledAtAll(locations, opts.Platforms, opts.Scopes)
 
@@ -231,21 +300,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		installed++
 	}
 
-	// Summary
-	fmt.Println()
-	fmt.Println(strings.Repeat("\u2500", 50))
-	fmt.Printf("Done! Installed: %d, Skipped: %d", installed, skipped)
-	if errored > 0 {
-		fmt.Printf(", Errors: %d", errored)
-	}
-	if skippedSkills > 0 {
-		fmt.Printf(", Not found: %d", skippedSkills)
-	}
-	fmt.Println()
-
-	telemetryClient.TrackManifestSynced(mf.SkillCount(), installed, skipped)
-
-	return nil
+	return installed, skipped, errored
 }
 
 // selectSyncPlatformsAndScope runs the platform and scope selection prompts for sync.

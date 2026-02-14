@@ -60,12 +60,10 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	mf := manifest.New()
-	skippedLocal := 0
-	seen := make(map[string]bool)
-
 	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
+	var entries []manifest.SkillEntry
+	seen := make(map[string]bool)
 	for _, inst := range installations {
 		if seen[inst.SkillID] {
 			continue
@@ -77,15 +75,24 @@ func runSave(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		if skill.SourceID == nil || skill.Source == nil {
-			skippedLocal++
+		localOnly := skill.SourceID == nil || skill.Source == nil
+		if localOnly {
 			fmt.Printf("  %s %s (local-only, no source repository)\n",
 				warnStyle.Render("SKIP"), skill.Slug)
-			continue
 		}
 
-		mf.Skills[skill.Slug] = skill.Source.FullName
+		sourceName := ""
+		if skill.Source != nil {
+			sourceName = skill.Source.FullName
+		}
+		entries = append(entries, manifest.SkillEntry{
+			Slug:       skill.Slug,
+			SourceName: sourceName,
+			LocalOnly:  localOnly,
+		})
 	}
+
+	mf, skippedLocal := manifest.BuildFromSkills(entries)
 
 	if err := manifest.Write(cwd, mf); err != nil {
 		return trackCLIError("save", fmt.Errorf("write manifest: %w", err))

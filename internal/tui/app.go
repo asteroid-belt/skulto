@@ -2376,18 +2376,31 @@ func (m *Model) saveManifestCmd() tea.Cmd {
 		}
 
 		// Build manifest from installations
-		mf := manifest.New()
+		var entries []manifest.SkillEntry
+		seen := make(map[string]bool)
 		for _, inst := range installations {
+			if seen[inst.SkillID] {
+				continue
+			}
+			seen[inst.SkillID] = true
+
 			skill, err := m.db.GetSkill(inst.SkillID)
 			if err != nil || skill == nil {
 				continue
 			}
-			// Skip local-only skills (no source)
-			if skill.SourceID == nil || *skill.SourceID == "" {
-				continue
+
+			sourceName := ""
+			if skill.Source != nil {
+				sourceName = skill.Source.FullName
 			}
-			mf.Skills[skill.Slug] = *skill.SourceID
+			entries = append(entries, manifest.SkillEntry{
+				Slug:       skill.Slug,
+				SourceName: sourceName,
+				LocalOnly:  skill.SourceID == nil || skill.Source == nil,
+			})
 		}
+
+		mf, _ := manifest.BuildFromSkills(entries)
 
 		// Write manifest
 		if err := manifest.Write(cwd, mf); err != nil {
