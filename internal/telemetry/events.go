@@ -73,6 +73,12 @@ const (
 	EventMCPToolCalled = "mcp_tool_called" // Track each MCP tool invocation
 )
 
+// Event names - Manifest
+const (
+	EventManifestSaved  = "manifest_saved"
+	EventManifestSynced = "manifest_synced"
+)
+
 // Version is set at compile time via ldflags.
 var Version string
 
@@ -476,6 +482,25 @@ func (c *posthogClient) TrackMCPToolCalled(toolName string, durationMs int64, su
 	c.Track(EventMCPToolCalled, props)
 }
 
+// --- Manifest Tracking Methods ---
+
+// TrackManifestSaved tracks when a manifest file is saved.
+func (c *posthogClient) TrackManifestSaved(skillCount int, source string) {
+	props := baseProperties()
+	props["skill_count"] = skillCount
+	props["source"] = source // "cli" or "tui"
+	c.Track(EventManifestSaved, props)
+}
+
+// TrackManifestSynced tracks when skills are synced from a manifest.
+func (c *posthogClient) TrackManifestSynced(totalSkills, installedCount, skippedCount int) {
+	props := baseProperties()
+	props["total_skills"] = totalSkills
+	props["installed_count"] = installedCount
+	props["skipped_count"] = skippedCount
+	c.Track(EventManifestSynced, props)
+}
+
 func (c *noopClient) TrackSkillsDiscovered(count int, scopeGlobal, scopeProject bool) {}
 func (c *noopClient) TrackSkillIngested(skillName, scope string)                      {}
 
@@ -487,3 +512,5 @@ func (c *noopClient) TrackStatsViewed()                                         
 func (c *noopClient) TrackRecentSkillsViewed(count int)                                  {}
 func (c *noopClient) TrackInstalledSkillsChecked(count int)                              {}
 func (c *noopClient) TrackMCPToolCalled(toolName string, durationMs int64, success bool) {}
+func (c *noopClient) TrackManifestSaved(skillCount int, source string)                   {}
+func (c *noopClient) TrackManifestSynced(totalSkills, installedCount, skippedCount int)  {}

@@ -32,6 +32,7 @@ const (
 	ManageActionBack
 	ManageActionSelectSkill
 	ManageActionSelectDiscovery
+	ManageActionSave
 )
 
 // ManageSkillsLoadedMsg is sent when skills data has been loaded.
@@ -222,6 +223,9 @@ func (mv *ManageView) Update(key string) (ManageAction, tea.Cmd) {
 		default:
 			return ManageActionNone, nil
 		}
+
+	case "S":
+		return ManageActionSave, nil
 	}
 
 	return ManageActionNone, nil
@@ -869,7 +873,7 @@ func (mv *ManageView) renderFooter() string {
 	if mv.section == ManageSectionDiscovered {
 		enterAction = "import"
 	}
-	help := helpStyle.Render(fmt.Sprintf("↑↓ navigate • Tab switch sections • Enter %s • Esc back", enterAction))
+	help := helpStyle.Render(fmt.Sprintf("↑↓ navigate • Tab switch sections • Enter %s • S save • Esc back", enterAction))
 
 	return lipgloss.JoinVertical(lipgloss.Top, count, help)
 }
@@ -901,6 +905,7 @@ func (mv *ManageView) GetKeyboardCommands() ViewCommands {
 			{Key: "d/u", Description: "Page down/up"},
 			{Key: "g/G", Description: "Jump to start/end"},
 			{Key: "Enter", Description: "Edit skill locations"},
+			{Key: "S", Description: "Save project skills to skulto.json"},
 			{Key: "Esc, q", Description: "Return to Home"},
 		},
 	}

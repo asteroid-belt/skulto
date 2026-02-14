@@ -114,6 +114,11 @@ func (m *mockTelemetryClient) TrackMCPToolCalled(toolName string, durationMs int
 	m.Track(telemetry.EventMCPToolCalled, map[string]interface{}{"tool_name": toolName, "success": success})
 }
 
+// Manifest events
+func (m *mockTelemetryClient) TrackManifestSaved(skillCount int, source string) {}
+func (m *mockTelemetryClient) TrackManifestSynced(totalSkills, installedCount, skippedCount int) {
+}
+
 func (m *mockTelemetryClient) getEvents() []mockEvent {
 	m.mu.Lock()
 	defer m.mu.Unlock()

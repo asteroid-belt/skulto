@@ -16,6 +16,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/favorites"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/log"
+	"github.com/asteroid-belt/skulto/internal/manifest"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/asteroid-belt/skulto/internal/search"
@@ -181,6 +182,12 @@ type (
 	ingestCompleteMsg struct {
 		name string
 		err  error
+	}
+
+	// manifestSavedMsg is sent when the manifest file has been saved
+	manifestSavedMsg struct {
+		count int
+		err   error
 	}
 )
 
@@ -748,6 +755,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.currentView = ViewSkillDetail
 					return m, m.detailView.SetSkill(skill.ID)
 				}
+			case views.HomeActionSave:
+				return m, m.saveManifestCmd()
 			}
 
 			// Handle 'm' key to open Manage view
@@ -1031,6 +1040,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.ingestDiscoveredSkillCmd(disc)
 				}
 				return m, nil
+
+			case views.ManageActionSave:
+				return m, m.saveManifestCmd()
 			}
 
 		case ViewOnboardingIntro:
@@ -1195,6 +1207,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.DiscoveriesLoadedMsg:
 		m.manageView.HandleDiscoveriesLoaded(msg)
+
+	case manifestSavedMsg:
+		if msg.err != nil {
+			m.setError(msg.err, "manifest_save")
+		}
+		// Manifest saved successfully - no additional UI update needed
 
 	case ingestCompleteMsg:
 		if msg.err != nil {
@@ -2341,6 +2359,44 @@ func parsePlatformsFromState(state *models.UserState) []installer.Platform {
 	}
 
 	return platforms
+}
+
+// saveManifestCmd returns a command that saves project-scope installations to skulto.json.
+func (m *Model) saveManifestCmd() tea.Cmd {
+	return func() tea.Msg {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return manifestSavedMsg{err: fmt.Errorf("failed to get working directory: %w", err)}
+		}
+
+		// Query project-scope installations for current directory
+		installations, err := m.db.GetProjectInstallations(cwd)
+		if err != nil {
+			return manifestSavedMsg{err: fmt.Errorf("failed to query installations: %w", err)}
+		}
+
+		// Build manifest from installations
+		mf := manifest.New()
+		for _, inst := range installations {
+			skill, err := m.db.GetSkill(inst.SkillID)
+			if err != nil || skill == nil {
+				continue
+			}
+			// Skip local-only skills (no source)
+			if skill.SourceID == nil || *skill.SourceID == "" {
+				continue
+			}
+			mf.Skills[skill.Slug] = *skill.SourceID
+		}
+
+		// Write manifest
+		if err := manifest.Write(cwd, mf); err != nil {
+			return manifestSavedMsg{err: fmt.Errorf("failed to write manifest: %w", err)}
+		}
+
+		m.telemetry.TrackManifestSaved(mf.SkillCount(), "tui")
+		return manifestSavedMsg{count: mf.SkillCount()}
+	}
 }
 
 // saveNewSkillCmd returns a command to save the quick-generated skill.

@@ -57,6 +57,15 @@ func (db *DB) GetAllInstallations() ([]models.SkillInstallation, error) {
 	return installations, err
 }
 
+// GetProjectInstallations returns all project-scope installations for a specific base path.
+// Used by the manifest save command to find which skills are installed for the current project.
+func (db *DB) GetProjectInstallations(basePath string) ([]models.SkillInstallation, error) {
+	var installations []models.SkillInstallation
+	err := db.Where("scope = ? AND base_path = ?", "project", basePath).
+		Find(&installations).Error
+	return installations, err
+}
+
 // GetLastInstallLocations returns the platform+scope pairs from the most recent
 // install event. An "install event" is a group of installations sharing the same
 // installed_at timestamp (i.e. all locations chosen in one dialog confirmation).

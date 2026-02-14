@@ -164,10 +164,10 @@ func (db *DB) GetSkill(id string) (*models.Skill, error) {
 	return &skill, nil
 }
 
-// GetSkillBySlug retrieves a skill by slug.
+// GetSkillBySlug retrieves a skill by slug with its source and tags.
 func (db *DB) GetSkillBySlug(slug string) (*models.Skill, error) {
 	var skill models.Skill
-	err := db.Preload("Tags").First(&skill, "slug = ?", slug).Error
+	err := db.Joins("Source").Preload("Tags").First(&skill, "skills.slug = ?", slug).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil

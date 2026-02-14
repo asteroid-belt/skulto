@@ -26,6 +26,7 @@ const (
 	HomeActionSettings
 	HomeActionSelectTag
 	HomeActionSelectSkill
+	HomeActionSave
 )
 
 // Home view layout constants.
@@ -277,6 +278,9 @@ func (hv *HomeView) Update(key string) HomeAction {
 
 	case "s":
 		return HomeActionSettings
+
+	case "S":
+		return HomeActionSave
 
 	case "enter":
 		// Check if tag is selected first
@@ -531,7 +535,7 @@ func (hv *HomeView) renderWelcome() string {
 
 	return welcomeStyle.Render("Welcome to SKULTO") + "\n" +
 		msgStyle.Render(fmt.Sprintf("/ (search) • ↑↓ (nav) • %s • p (pull) • q (quit)", manageText)) + "\n" +
-		secondaryStyle.Render("a (add repo) • s (settings) • n (new skill) • ? (help)")
+		secondaryStyle.Render("a (add repo) • s (settings) • S (save) • n (new skill) • ? (help)")
 }
 
 // renderRecentSkillsWithLimit renders recent skills with scrolling support.
@@ -985,6 +989,7 @@ func (hv *HomeView) GetKeyboardCommands() ViewCommands {
 			{Key: "p", Description: "Pull latest from seed repositories"},
 			{Key: "s", Description: "Open settings"},
 			{Key: "n", Description: "New skill - create a skill from a prompt"},
+			{Key: "S", Description: "Save project skills to skulto.json"},
 		},
 	}
 }

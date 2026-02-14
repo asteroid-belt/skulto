@@ -78,6 +78,10 @@ type Client interface {
 
 	// MCP events
 	TrackMCPToolCalled(toolName string, durationMs int64, success bool)
+
+	// Manifest events
+	TrackManifestSaved(skillCount int, source string)
+	TrackManifestSynced(totalSkills, installedCount, skippedCount int)
 }
 
 // posthogClient wraps the PostHog SDK.

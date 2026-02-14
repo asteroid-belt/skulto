@@ -67,7 +67,9 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(removeCmd)
+	rootCmd.AddCommand(saveCmd)
 	rootCmd.AddCommand(scanCmd)
+	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(uninstallCmd)
 	rootCmd.AddCommand(updateCmd)
 }

@@ -28,9 +28,14 @@ func TestInstallCmd_Structure(t *testing.T) {
 	assert.Equal(t, "y", yFlag.Shorthand)
 }
 
-func TestInstallCmd_RequiresArg(t *testing.T) {
+func TestInstallCmd_AcceptsNoArgs(t *testing.T) {
 	err := installCmd.Args(installCmd, []string{})
-	assert.Error(t, err, "Should require at least 1 argument")
+	assert.NoError(t, err, "Should accept 0 arguments (delegates to sync)")
+}
+
+func TestInstallCmd_RejectsTwoArgs(t *testing.T) {
+	err := installCmd.Args(installCmd, []string{"a", "b"})
+	assert.Error(t, err, "Should reject more than 1 argument")
 }
 
 func TestInstallCmd_AcceptsArg(t *testing.T) {

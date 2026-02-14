@@ -25,10 +25,14 @@ var (
 )
 
 var installCmd = &cobra.Command{
-	Use:     "install <slug|url>",
+	Use:     "install [slug|url]",
 	Aliases: []string{"i"},
-	Short:   "Install a skill to AI tool directories (alias: i)",
+	Short:   "Install skill(s) to AI tool directories (alias: i)",
 	Long: `Install a skill by slug or from a repository URL.
+
+No arguments:
+  Reads skulto.json and installs all listed skills.
+  Equivalent to 'skulto sync'.
 
 The install command creates symlinks in your AI tool directories,
 making skills available to Claude, Cursor, Windsurf, and other tools.
@@ -72,8 +76,11 @@ Examples:
   skulto install https://github.com/owner/skills
 
   # Install from short format
-  skulto install owner/skills`,
-	Args: cobra.ExactArgs(1),
+  skulto install owner/skills
+
+  # Install all from manifest (no arguments)
+  skulto install`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: runInstall,
 }
 
@@ -87,6 +94,11 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
+	// No arguments: delegate to sync (install from skulto.json)
+	if len(args) == 0 {
+		return runSync(cmd, args)
+	}
+
 	ctx := cmd.Context()
 	input := args[0]
 
