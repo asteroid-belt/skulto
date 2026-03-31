@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/log"
 )
 
@@ -437,11 +438,7 @@ func (e *CLIExecutor) InteractiveCommand(tool AITool, userPrompt string) (*exec.
 
 // SkillsDir returns the skulto skills directory path.
 func SkillsDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(homeDir, ".skulto", "skills"), nil
+	return filepath.Join(config.DefaultBaseDir(), "skills"), nil
 }
 
 // SkillInfo represents basic info about a skill in the skills folder.

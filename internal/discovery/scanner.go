@@ -112,14 +112,16 @@ func (s *ScannerService) CategorizeSymlink(path string) models.ManagementSource 
 
 // categorizeByTarget categorizes based on the symlink target path.
 func (s *ScannerService) categorizeByTarget(target string) models.ManagementSource {
-	// Check for skulto management (.skulto/skills/ or .skulto/repositories/)
-	if strings.Contains(target, ".skulto"+string(filepath.Separator)+"skills") ||
-		strings.Contains(target, ".skulto"+string(filepath.Separator)+"repositories") {
+	sep := string(filepath.Separator)
+	// Check for skulto management (new: .agents/skulto/ or legacy: .skulto/)
+	if strings.Contains(target, ".agents"+sep+"skulto"+sep) ||
+		strings.Contains(target, ".skulto"+sep+"skills") ||
+		strings.Contains(target, ".skulto"+sep+"repositories") {
 		return models.ManagementSkulto
 	}
 
 	// Check for Vercel management (~/.agents/skills/)
-	if strings.Contains(target, ".agents"+string(filepath.Separator)+"skills") {
+	if strings.Contains(target, ".agents"+sep+"skills") {
 		return models.ManagementVercel
 	}
 

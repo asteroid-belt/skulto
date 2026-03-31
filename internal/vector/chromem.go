@@ -25,11 +25,11 @@ func NewChromemStore(cfg Config) (*ChromemStore, error) {
 		return nil, fmt.Errorf("OPENAI_API_KEY required for embeddings")
 	}
 
-	// Determine data directory
+	// Determine data directory (cfg.DataDir is populated from cfg.BaseDir in config.Load)
 	dataDir := cfg.DataDir
 	if dataDir == "" {
 		home, _ := os.UserHomeDir()
-		dataDir = filepath.Join(home, ".skulto", "vectors")
+		dataDir = filepath.Join(home, ".agents", "skulto", "vectors")
 	}
 
 	// Ensure directory exists
