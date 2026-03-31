@@ -75,14 +75,14 @@ dev:
 ## test: Run all tests including integration tests that require network access
 test:
 	@echo "Running tests with coverage..."
-	$(GO) test -v -coverprofile=coverage.out ./internal/...
+	SKULTO_SKIP_MIGRATION=1 $(GO) test -v -coverprofile=coverage.out ./internal/...
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
 ## test-race: Run tests with race detector (requires CGO, excludes integration tests)
 test-race:
 	@echo "Running tests with race detector..."
-	CGO_ENABLED=1 $(GO) test -v -race ./internal/...
+	SKULTO_SKIP_MIGRATION=1 CGO_ENABLED=1 $(GO) test -v -race ./internal/...
 	@echo "✅ Tests passed"
 
 ## lint: Run linters

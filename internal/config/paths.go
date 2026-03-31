@@ -27,11 +27,11 @@ func GetPaths(cfg *Config) Paths {
 	}
 }
 
-// DefaultBaseDir returns the default base directory (~/.skulto).
+// DefaultBaseDir returns the default base directory (~/.agents/skulto).
 func DefaultBaseDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".skulto"
+		return filepath.Join(".agents", "skulto")
 	}
-	return filepath.Join(home, ".skulto")
+	return filepath.Join(home, ".agents", "skulto")
 }

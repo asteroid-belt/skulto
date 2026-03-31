@@ -17,6 +17,7 @@ func TestEmbeddingConfigDefaults(t *testing.T) {
 }
 
 func TestEmbeddingConfigFromEnv(t *testing.T) {
+	t.Setenv("SKULTO_SKIP_MIGRATION", "1")
 	// Save and restore original env
 	originalKey := os.Getenv("OPENAI_API_KEY")
 	defer func() {
@@ -47,6 +48,7 @@ func TestLLMConfigDefaults(t *testing.T) {
 }
 
 func TestLLMConfigFromEnv(t *testing.T) {
+	t.Setenv("SKULTO_SKIP_MIGRATION", "1")
 	// Save and restore original env
 	originalAnthropicKey := os.Getenv("ANTHROPIC_API_KEY")
 	originalOpenAIKey := os.Getenv("OPENAI_API_KEY")
@@ -90,6 +92,7 @@ func TestDefaultConfigIncludesLLM(t *testing.T) {
 }
 
 func TestGitHubTokenFromEnv(t *testing.T) {
+	t.Setenv("SKULTO_SKIP_MIGRATION", "1")
 	// Save and restore original env
 	originalToken := os.Getenv("GITHUB_TOKEN")
 	defer func() {

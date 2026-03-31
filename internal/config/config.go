@@ -4,11 +4,13 @@ package config
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/asteroid-belt/skulto/internal/log"
 )
 
 // Config holds all application configuration.
 type Config struct {
-	// Base directory for all Skulto data (~/.skulto)
+	// Base directory for all Skulto data (~/.agents/skulto)
 	BaseDir string
 
 	// GitHub API settings
@@ -49,7 +51,7 @@ type VectorConfig struct {
 	APIKey string
 	// Model for embeddings (default: text-embedding-3-small)
 	Model string
-	// DataDir for chromem-go persistence (default: ~/.skulto/vectors)
+	// DataDir for chromem-go persistence (default: ~/.agents/skulto/vectors)
 	DataDir string
 	// MinSimilarity threshold for search (default: 0.6)
 	MinSimilarity float32
@@ -61,7 +63,7 @@ type VectorConfig struct {
 func DefaultVectorConfig() VectorConfig {
 	return VectorConfig{
 		Model:         "text-embedding-3-small",
-		DataDir:       "", // Will use ~/.skulto/vectors
+		DataDir:       "", // Populated from BaseDir in Load()
 		MinSimilarity: 0.6,
 		Enabled:       false,
 	}
@@ -83,6 +85,21 @@ type GitHubConfig struct {
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
+	// Migrate ~/.skulto → ~/.agents/skulto if needed (runs before ensureDirectories).
+	// Skip during testing to avoid migrating the real home directory.
+	if os.Getenv("SKULTO_SKIP_MIGRATION") == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			if err := migrateBaseDir(home); err != nil {
+				// Migration failed — fall back to old path for this session
+				oldDir := filepath.Join(home, ".skulto")
+				if _, statErr := os.Stat(oldDir); statErr == nil {
+					cfg.BaseDir = oldDir
+					log.Errorf("migrate: failed, using %s for this session: %v\n", oldDir, err)
+				}
+			}
+		}
+	}
+
 	// Read environment variables
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		cfg.GitHub.Token = token
@@ -100,6 +117,11 @@ func Load() (*Config, error) {
 
 	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {
 		cfg.LLM.OpenRouterAPIKey = apiKey
+	}
+
+	// Derive Embedding.DataDir from BaseDir if not explicitly set
+	if cfg.Embedding.DataDir == "" {
+		cfg.Embedding.DataDir = filepath.Join(cfg.BaseDir, "vectors")
 	}
 
 	// Ensure directories exist
