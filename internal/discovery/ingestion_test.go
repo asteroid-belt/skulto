@@ -82,7 +82,7 @@ func TestIngestionService_IngestSkill(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte("# My Skill"), 0644))
 
 	// Create skulto destination directory
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	ds := models.DiscoveredSkill{
@@ -124,7 +124,7 @@ func TestIngestionService_IngestSkill_WithMultipleFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(subDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(subDir, "template.txt"), []byte("template content"), 0644))
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	ds := models.DiscoveredSkill{
@@ -158,7 +158,7 @@ func TestIngestionService_IngestSkill_ValidationFailure(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sourceDir, 0755))
 	// No skill.md file
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	ds := models.DiscoveredSkill{
@@ -185,7 +185,7 @@ func TestIngestionService_IngestSkill_SymlinkPointsToDestination(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sourceDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte("# My Skill"), 0644))
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	ds := models.DiscoveredSkill{
@@ -255,7 +255,7 @@ This skill helps with Python development and testing.
 `
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte(skillContent), 0644))
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	// Create test database
@@ -306,7 +306,7 @@ This skill tests installation record creation.
 `
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte(skillContent), 0644))
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	// Create test database
@@ -356,7 +356,7 @@ Great for test-driven development workflows.
 `
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte(skillContent), 0644))
 
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	database := testDB(t)

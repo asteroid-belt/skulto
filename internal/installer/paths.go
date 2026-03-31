@@ -25,7 +25,7 @@ func (pr *PathResolver) GetGlobalPath(platform Platform, skillSlug string) (stri
 
 // GetSourcePath returns the source path for a skill in its cloned repository.
 // Uses the skill's FilePath to determine the actual directory structure.
-// Example: ~/.skulto/repositories/owner/repo/skills/skill-slug/
+// Example: ~/.agents/skulto/repositories/owner/repo/skills/skill-slug/
 func (pr *PathResolver) GetSourcePath(owner, repo, skillFilePath string) string {
 	// skillFilePath is the path to SKILL.md (e.g., "skills/my-skill/SKILL.md")
 	// We need the parent directory (e.g., "skills/my-skill")

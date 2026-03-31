@@ -653,7 +653,7 @@ func (d *NewSkillDialog) viewLaunching() string {
 		lipgloss.NewStyle().Foreground(goldColor).Bold(true).Render("  Press Ctrl+C in the terminal"),
 		"",
 		instructTextStyle.Render("The AI will create your skill in:"),
-		lipgloss.NewStyle().Foreground(mutedColor).Italic(true).Render("  ~/.skulto/skills/<name>/skill.md"),
+		lipgloss.NewStyle().Foreground(mutedColor).Italic(true).Render("  ~/.agents/skulto/skills/<name>/skill.md"),
 	}
 
 	instructContent := lipgloss.JoinVertical(lipgloss.Center, append([]string{instructTitle}, instructLines...)...)
@@ -741,7 +741,7 @@ func (d *NewSkillDialog) viewGenerating() string {
 		Width(contentWidth).
 		Align(lipgloss.Center).
 		MarginTop(1)
-	footer := footerStyle.Render("Your skill will be saved to ~/.skulto/skills/")
+	footer := footerStyle.Render("Your skill will be saved to ~/.agents/skulto/skills/")
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -955,7 +955,7 @@ func (d *NewSkillDialog) viewResult() string {
 		Width(contentWidth).
 		Align(lipgloss.Center).
 		MarginTop(1)
-	hint := hintStyle.Render("Skills are saved to: ~/.skulto/skills/<name>/skill.md")
+	hint := hintStyle.Render("Skills are saved to: ~/.agents/skulto/skills/<name>/skill.md")
 
 	footerStyle := lipgloss.NewStyle().
 		Foreground(mutedColor).

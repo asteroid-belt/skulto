@@ -127,7 +127,7 @@ The scraper manages GitHub repositories using shallow git clones.
 | `parser.go` | `SkillParser` - SKILL.md/CLAUDE.md parsing with frontmatter |
 
 **Repository caching:**
-- Repos cloned to `~/.skulto/repositories/{owner}/{repo}/`
+- Repos cloned to `~/.agents/skulto/repositories/{owner}/{repo}/`
 - Shallow clones (depth=1) for efficiency
 - `RecentUpdateTTL` (60s) prevents redundant fetches
 - Per-repo mutex locks for concurrent access
@@ -423,7 +423,7 @@ func (s *Server) registerResources() {
 Skills are installed as symlinks pointing to cloned repository files:
 
 ```
-~/.claude/skills/superplan -> ~/.skulto/repositories/asteroid-belt/skills/skills/superplan/
+~/.claude/skills/superplan -> ~/.agents/skulto/repositories/asteroid-belt/skills/skills/superplan/
 ```
 
 **Benefits:**

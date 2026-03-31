@@ -26,8 +26,8 @@ func TestFormatPath(t *testing.T) {
 		},
 		{
 			name:     "path in home directory",
-			input:    filepath.Join(home, ".skulto", "skills"),
-			expected: "~/.skulto/skills",
+			input:    filepath.Join(home, ".agents", "skulto", "skills"),
+			expected: "~/.agents/skulto/skills",
 		},
 		{
 			name:     "home directory itself",

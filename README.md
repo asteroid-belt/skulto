@@ -315,7 +315,7 @@ skulto update --scan-all
 
 #### `skulto favorites`
 
-Manage your favorite skills. Favorites persist across database resets and are stored separately in `~/.skulto/favorites.json`.
+Manage your favorite skills. Favorites persist across database resets and are stored separately in `~/.agents/skulto/favorites.json`.
 
 ```bash
 # Add a skill to favorites
@@ -379,14 +379,14 @@ The MCP server also exposes resources for direct skill access:
 
 ### Database Location
 
-Skulto stores data in `~/.skulto/`:
+Skulto stores data in `~/.agents/skulto/`:
 
 | Path | Purpose |
 | --- | --- |
-| `~/.skulto/skulto.db` | SQLite database |
-| `~/.skulto/skulto.log` | Logfile |
-| `~/.skulto/repositories/` | Cloned git repositories |
-| `~/.skulto/favorites.json` | Favorite skills (persists across DB resets) |
+| `~/.agents/skulto/skulto.db` | SQLite database |
+| `~/.agents/skulto/skulto.log` | Logfile |
+| `~/.agents/skulto/repositories/` | Cloned git repositories |
+| `~/.agents/skulto/favorites.json` | Favorite skills (persists across DB resets) |
 
 ## Development
 

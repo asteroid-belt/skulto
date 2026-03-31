@@ -57,7 +57,7 @@ type Client interface {
 // ScraperConfig holds configuration for the scraper.
 type ScraperConfig struct {
 	Token        string // GitHub token (optional for public repos with git clone)
-	DataDir      string // Base data directory (~/.skulto), repositories cloned to DataDir/repositories
+	DataDir      string // Base data directory (~/.agents/skulto), repositories cloned to DataDir/repositories
 	RepoCacheTTL int    // Days to keep cloned repos
 	UseGitClone  bool   // Use git clone instead of GitHub API
 }

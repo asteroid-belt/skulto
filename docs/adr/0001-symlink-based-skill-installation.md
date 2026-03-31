@@ -11,7 +11,7 @@ Two approaches were considered: copying skill files to each target directory, or
 
 ## Decision
 
-Skills are installed as symlinks. The installer creates a symbolic link from the platform's skills directory to the skill's directory inside the cloned repository at `~/.skulto/repositories/{owner}/{repo}/`.
+Skills are installed as symlinks. The installer creates a symbolic link from the platform's skills directory to the skill's directory inside the cloned repository at `~/.agents/skulto/repositories/{owner}/{repo}/`.
 
 ## Consequences
 

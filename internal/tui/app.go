@@ -141,7 +141,7 @@ type (
 	pullCompleteMsg struct {
 		skillsFound int
 		skillsNew   int
-		localSynced int // Skills synced from ~/.skulto/skills
+		localSynced int // Skills synced from ~/.agents/skulto/skills
 		cwdSynced   int // Skills synced from ./.skulto/skills
 		err         error
 	}
@@ -423,7 +423,7 @@ func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.tickCmd(),
 		m.loadDataCmd(),
-		m.syncLocalSkillsCmd(), // Sync ~/.skulto/skills on startup
+		m.syncLocalSkillsCmd(), // Sync ~/.agents/skulto/skills on startup
 		m.syncCwdSkillsCmd(),   // Sync ./.skulto/skills (cwd) on startup
 	}
 
@@ -1270,7 +1270,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			// Always sync local skills when returning from Claude
-			// This ensures we catch any skills saved to ~/.skulto/skills
+			// This ensures we catch any skills saved to ~/.agents/skulto/skills
 			cmds = append(cmds, m.syncLocalSkillsCmd())
 		}
 
@@ -1617,7 +1617,7 @@ func (m *Model) syncCmd(githubToken string) tea.Cmd {
 			}
 		}
 
-		// Sync local skills from ~/.skulto/skills
+		// Sync local skills from ~/.agents/skulto/skills
 		localSynced := m.syncLocalSkillsInternal()
 
 		// Sync CWD skills from ./.skulto/skills
@@ -1633,7 +1633,7 @@ func (m *Model) syncCmd(githubToken string) tea.Cmd {
 	}
 }
 
-// syncLocalSkillsInternal syncs local skills from ~/.skulto/skills and returns the count.
+// syncLocalSkillsInternal syncs local skills from ~/.agents/skulto/skills and returns the count.
 func (m *Model) syncLocalSkillsInternal() int {
 	localSkills, err := skillgen.ScanSkills()
 	if err != nil || len(localSkills) == 0 {
@@ -1952,7 +1952,7 @@ func (m *Model) installBatchSkillsCmd(skills []models.Skill, locations []install
 	}
 }
 
-// syncLocalSkillsCmd returns a command that scans ~/.skulto/skills and indexes any skills
+// syncLocalSkillsCmd returns a command that scans ~/.agents/skulto/skills and indexes any skills
 // that exist on disk but are not in the database. This ensures local skills are always searchable.
 func (m *Model) syncLocalSkillsCmd() tea.Cmd {
 	return func() tea.Msg {
@@ -2425,7 +2425,7 @@ func (m *Model) saveManifestCmd() tea.Cmd {
 
 // saveNewSkillCmd returns a command to save the quick-generated skill.
 // Note: Legacy skill saving via skillbuilder has been removed.
-// Skills are now saved directly to ~/.skulto/skills by Claude.
+// Skills are now saved directly to ~/.agents/skulto/skills by Claude.
 func (m *Model) saveNewSkillCmd() tea.Cmd {
 	return func() tea.Msg {
 		return views.NewSkillSavedMsg{Err: fmt.Errorf("skill saving disabled - use Claude to save skills directly")}

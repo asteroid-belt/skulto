@@ -26,7 +26,7 @@ func setupTestDB(t *testing.T) *db.DB {
 // setupTestConfig creates a test config with temporary directories.
 func setupTestConfig(t *testing.T) *config.Config {
 	tmpDir := t.TempDir()
-	baseDir := filepath.Join(tmpDir, ".skulto")
+	baseDir := filepath.Join(tmpDir, ".agents", "skulto")
 	return &config.Config{
 		BaseDir: baseDir,
 	}

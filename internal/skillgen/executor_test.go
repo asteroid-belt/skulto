@@ -166,7 +166,7 @@ func TestCLIExecutor_InteractiveCommand_ContainsAbsolutePath(t *testing.T) {
 	}
 
 	// Verify it does NOT contain ~ as a path reference
-	if strings.Contains(systemPrompt, "~/.skulto") {
+	if strings.Contains(systemPrompt, "~/.agents/skulto") {
 		t.Error("System prompt should not contain ~ as path, should use absolute path")
 	}
 }

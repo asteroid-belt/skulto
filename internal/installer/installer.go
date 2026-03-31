@@ -218,7 +218,7 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 	return i.installToLocationsInternal(skill, sourcePath, locations)
 }
 
-// InstallLocalSkillTo installs a local skill (from ~/.skulto/skills) to specific locations.
+// InstallLocalSkillTo installs a local skill (from ~/.agents/skulto/skills) to specific locations.
 // Unlike InstallTo, this doesn't require a Source object since local skills are self-contained.
 func (i *Installer) InstallLocalSkillTo(ctx context.Context, skill *models.Skill, sourcePath string, locations []InstallLocation) error {
 	if skill == nil {

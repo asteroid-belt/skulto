@@ -78,7 +78,24 @@ func TestScannerService_ScanDirectory_NonexistentDir(t *testing.T) {
 func TestScannerService_CategorizeSymlink_Skulto(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create skulto-managed symlink target
+	// Create skulto-managed symlink target (new path)
+	targetDir := filepath.Join(tmpDir, ".agents", "skulto", "repositories", "owner", "repo")
+	require.NoError(t, os.MkdirAll(targetDir, 0755))
+
+	// Create symlink
+	symlinkPath := filepath.Join(tmpDir, "link")
+	require.NoError(t, os.Symlink(targetDir, symlinkPath))
+
+	scanner := NewScannerService()
+	source := scanner.CategorizeSymlink(symlinkPath)
+
+	assert.Equal(t, models.ManagementSkulto, source)
+}
+
+func TestScannerService_CategorizeSymlink_SkultoLegacy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create legacy skulto-managed symlink target
 	targetDir := filepath.Join(tmpDir, ".skulto", "skills", "my-skill")
 	require.NoError(t, os.MkdirAll(targetDir, 0755))
 

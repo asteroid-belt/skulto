@@ -56,7 +56,7 @@ func TestIntegration_ScanToIngest(t *testing.T) {
 	))
 
 	// Setup: Create skulto destination
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
 	// Step 1: Scan for unmanaged skills
@@ -116,7 +116,7 @@ func TestIntegration_RescanAfterIngest(t *testing.T) {
 
 	// Setup skill and ingest it
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "ingested-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# Test"), 0644))
@@ -224,7 +224,7 @@ func TestIntegration_ValidationFailure(t *testing.T) {
 
 	// Create skill without skill.md
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "invalid-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 	// No skill.md file created
@@ -249,7 +249,7 @@ func TestIntegration_NameConflictCheck(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create skulto destination with existing skill
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	existingSkillDir := filepath.Join(skultoDir, "existing-skill")
 	require.NoError(t, os.MkdirAll(existingSkillDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(existingSkillDir, "skill.md"), []byte("# Existing"), 0644))
@@ -333,7 +333,7 @@ func TestIntegration_IngestWithDatabaseCleanup(t *testing.T) {
 
 	// Create skill
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "db-cleanup-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# DB Cleanup Test"), 0644))
@@ -375,7 +375,7 @@ func TestIntegration_MultipleFilesPreserved(t *testing.T) {
 
 	// Create skill with multiple files and subdirectories
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "complex-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 
@@ -420,7 +420,7 @@ func TestIntegration_SymlinkCategorization(t *testing.T) {
 
 	// Setup: Create skulto-managed skill via ingestion
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "categorize-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# Categorize"), 0644))
@@ -523,7 +523,7 @@ func TestIntegration_EndToEndUserJourney(t *testing.T) {
 
 	// Step 1: User has manually created a skill
 	skillDir := filepath.Join(tmpDir, ".claude", "skills", "user-skill")
-	skultoDir := filepath.Join(tmpDir, ".skulto", "skills")
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
 	require.NoError(t, os.MkdirAll(skillDir, 0755))
 	require.NoError(t, os.MkdirAll(skultoDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# User Created Skill\n\nMy awesome skill."), 0644))

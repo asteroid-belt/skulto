@@ -167,8 +167,8 @@ For skill `superplan` on Claude:
 
 | Scope | Full Path |
 |-------|-----------|
-| Global | `~/.claude/skills/superplan` -> `~/.skulto/repositories/asteroid-belt/skills/skills/superplan/` |
-| Project | `./.claude/skills/superplan` -> `~/.skulto/repositories/asteroid-belt/skills/skills/superplan/` |
+| Global | `~/.claude/skills/superplan` -> `~/.agents/skulto/repositories/asteroid-belt/skills/skills/superplan/` |
+| Project | `./.claude/skills/superplan` -> `~/.agents/skulto/repositories/asteroid-belt/skills/skills/superplan/` |
 
 ## InstallLocation
 
@@ -219,7 +219,7 @@ func (i *Installer) createSymlink(skillDir, targetPath string) error {
 For repository skills:
 ```go
 sourceDir = filepath.Join(
-    cfg.BaseDir,                    // ~/.skulto
+    cfg.BaseDir,                    // ~/.agents/skulto
     "repositories",
     source.Owner,                   // asteroid-belt
     source.Repo,                    // skills
@@ -229,7 +229,7 @@ sourceDir = filepath.Join(
 
 For local skills:
 ```go
-sourceDir = filepath.Dir(skill.FilePath)  // ~/.skulto/skills/my-skill
+sourceDir = filepath.Dir(skill.FilePath)  // ~/.agents/skulto/skills/my-skill
 ```
 
 ## Database Tracking

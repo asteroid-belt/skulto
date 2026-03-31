@@ -35,7 +35,7 @@ skulto/
 │   ├── detect/              # AI tool detection on system (command/dir checks)
 │   ├── discovery/           # Skill discovery and ingestion from local dirs
 │   ├── embedding/           # OpenAI embedding provider abstraction
-│   ├── favorites/           # File-based favorites persistence (~/.skulto/favorites.json)
+│   ├── favorites/           # File-based favorites persistence (~/.agents/skulto/favorites.json)
 │   ├── installer/           # Skill installation via symlinks (33 platforms)
 │   ├── llm/                 # LLM provider abstraction (Anthropic, OpenAI, OpenRouter)
 │   ├── log/                 # Structured logging
@@ -45,7 +45,7 @@ skulto/
 │   ├── scraper/             # GitHub scraping (git clone based, shallow clones)
 │   ├── search/              # Hybrid search service (FTS5 + semantic)
 │   ├── security/            # Security scanner (prompt injection detection)
-│   ├── skillgen/            # Local skill scanning (~/.skulto/skills, ./.skulto/skills)
+│   ├── skillgen/            # Local skill scanning (~/.agents/skulto/skills, ./.skulto/skills)
 │   ├── telemetry/           # PostHog analytics (opt-in events defined in events.go)
 │   ├── testutil/            # Test utilities and helpers
 │   ├── tui/                 # Bubble Tea TUI application
@@ -165,15 +165,15 @@ Downloads Go modules, runs `go mod tidy`, and installs golangci-lint to `./bin/`
 
 ### Data Directory
 
-Skulto stores data in `~/.skulto/`:
+Skulto stores data in `~/.agents/skulto/`:
 
 | Path | Purpose |
 |------|---------|
-| `~/.skulto/skulto.db` | SQLite database |
-| `~/.skulto/skulto.log` | Logfile |
-| `~/.skulto/repositories/{owner}/{repo}/` | Cloned git repositories |
-| `~/.skulto/favorites.json` | Favorite skills (persists across DB resets) |
-| `~/.skulto/skills/` | User's local skills directory |
+| `~/.agents/skulto/skulto.db` | SQLite database |
+| `~/.agents/skulto/skulto.log` | Logfile |
+| `~/.agents/skulto/repositories/{owner}/{repo}/` | Cloned git repositories |
+| `~/.agents/skulto/favorites.json` | Favorite skills (persists across DB resets) |
+| `~/.agents/skulto/skills/` | User's local skills directory |
 
 ## Common Tasks
 

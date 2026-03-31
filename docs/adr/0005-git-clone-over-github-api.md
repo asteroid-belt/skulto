@@ -11,7 +11,7 @@ The GitHub API has rate limits (60 requests/hour unauthenticated, 5000/hour with
 
 ## Decision
 
-Use git clone (via the go-git library) with shallow clones to fetch repositories locally. Cloned repositories are stored at `~/.skulto/repositories/{owner}/{repo}/`. The `UseGitClone` config flag defaults to `true`.
+Use git clone (via the go-git library) with shallow clones to fetch repositories locally. Cloned repositories are stored at `~/.agents/skulto/repositories/{owner}/{repo}/`. The `UseGitClone` config flag defaults to `true`.
 
 The scraper retains a `Client` interface that abstracts the data source, allowing fallback to the GitHub API if needed.
 

@@ -54,7 +54,7 @@ func NewSaveOptionsDialog() *SaveOptionsDialog {
 			{
 				Destination: SaveToFiles,
 				Title:       "Local Files Only",
-				Description: "Save to .skulto/skills/ as markdown files",
+				Description: "Save to .agents/skulto/skills/ as markdown files",
 				Icon:        "󰈙",
 			},
 		},

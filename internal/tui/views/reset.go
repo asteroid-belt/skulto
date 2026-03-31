@@ -141,7 +141,7 @@ func (v *ResetView) HandleResetComplete(msg ResetCompleteMsg) {
 
 // performResetAsync deletes all cached data for a clean slate.
 // This includes: symlinks, database, repositories, vectors, embeddings, and logs.
-// User skills in ~/.skulto/skills are preserved.
+// User skills in ~/.agents/skulto/skills are preserved.
 // This runs asynchronously in a goroutine to avoid blocking the TUI.
 // installations is passed in because the database is closed before this runs.
 func (v *ResetView) performResetAsync(installations []models.SkillInstallation) error {

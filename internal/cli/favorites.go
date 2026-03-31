@@ -14,7 +14,7 @@ var favoritesCmd = &cobra.Command{
 	Short: "Manage favorite skills",
 	Long: `Manage your favorite skills.
 
-Favorites persist across database resets and are stored in ~/.skulto/favorites.json.
+Favorites persist across database resets and are stored in ~/.agents/skulto/favorites.json.
 
 Subcommands:
   add <slug>     Add a skill to favorites

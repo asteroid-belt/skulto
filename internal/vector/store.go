@@ -40,7 +40,7 @@ type SearchHit struct {
 
 // Config holds vector store configuration.
 type Config struct {
-	// DataDir is where chromem-go persists vectors (default: ~/.skulto/vectors)
+	// DataDir is where chromem-go persists vectors (default: ~/.agents/skulto/vectors)
 	DataDir string
 
 	// OpenAI settings for embeddings

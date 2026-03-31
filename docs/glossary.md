@@ -16,7 +16,7 @@ are omitted unless they have a project-specific meaning.
 | Threat Level | Security classification assigned by the scanner: NONE, LOW, MEDIUM, HIGH, or CRITICAL. Determines whether a skill is quarantined. | `internal/models/security.go`, `internal/security/` |
 | Quarantine | A security status that blocks a skill from being installed. Applied when scanning detects prompt injection patterns above a confidence threshold. | `internal/security/scanner.go` |
 | Discovered Skill | A non-symlinked skill directory found in a platform's skill folder that is not managed by Skulto. The discovery system notifies users about these. | `internal/models/discovered_skill.go`, `internal/discovery/` |
-| Ingestion | The process of importing a discovered (unmanaged) skill into Skulto management by copying it to `~/.skulto/skills/` and replacing the original with a symlink. | `internal/discovery/ingestion.go` |
+| Ingestion | The process of importing a discovered (unmanaged) skill into Skulto management by copying it to `~/.agents/skulto/skills/` and replacing the original with a symlink. | `internal/discovery/ingestion.go` |
 | Seed | A pre-configured source repository that ships with Skulto (e.g., `asteroid-belt/skills`). Seeds are scraped during onboarding. | `internal/scraper/seeds.go` |
 | Onboarding | The first-run experience where users select AI platforms and starter skills. Tracked via `UserState.OnboardingStatus`. | `internal/tui/views/onboarding_*.go` |
 | FTS5 | SQLite's Full-Text Search extension version 5, used for BM25-ranked skill search. Skulto maintains a virtual table (`skills_fts`) synchronized via triggers. | `internal/db/db.go`, `internal/db/skills.go` |
@@ -25,7 +25,7 @@ are omitted unless they have a project-specific meaning.
 | MCP | Model Context Protocol - a JSON-RPC 2.0 protocol over stdio that enables AI assistants like Claude Code to interact with external tools. Skulto's MCP server exposes search, install, and management capabilities. | `internal/mcp/`, `cmd/skulto-mcp/` |
 | Auxiliary File | A non-markdown file (script, reference, asset) bundled with a skill. These are tracked separately and scanned independently for security threats. | `internal/models/skill.go` |
 | Tag | A categorization label applied to skills. Tags have categories (language, framework, tool, concept, domain) and are used for browsing and filtering. | `internal/models/tag.go`, `internal/db/tags.go` |
-| Favorites | User-bookmarked skills persisted in `~/.skulto/favorites.json`. Favorites survive database resets because they are stored outside the SQLite database. | `internal/favorites/favorites.go` |
+| Favorites | User-bookmarked skills persisted in `~/.agents/skulto/favorites.json`. Favorites survive database resets because they are stored outside the SQLite database. | `internal/favorites/favorites.go` |
 
 ## Acronyms
 

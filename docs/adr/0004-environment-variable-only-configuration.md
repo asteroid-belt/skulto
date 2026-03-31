@@ -19,7 +19,7 @@ Key environment variables:
 - `ANTHROPIC_API_KEY` - LLM provider for skill generation
 - `SKULTO_TELEMETRY_TRACKING_ENABLED` - Telemetry opt-out
 
-The base data directory (`~/.skulto/`) is hardcoded rather than configurable.
+The base data directory (`~/.agents/skulto/`) is hardcoded rather than configurable.
 
 ## Consequences
 
@@ -52,7 +52,7 @@ The base data directory (`~/.skulto/`) is hardcoded rather than configurable.
 |-------------|-----------|
 | Code | `internal/config/config.go:82` - `Load()` reads exclusively from `os.Getenv()` |
 | Code comment | `AGENTS.md:33` - "Configuration (env vars only, no config file)" |
-| Code | `internal/config/paths.go` - hardcoded `~/.skulto` base directory |
+| Code | `internal/config/paths.go` - hardcoded `~/.agents/skulto` base directory |
 
 ## Related
 

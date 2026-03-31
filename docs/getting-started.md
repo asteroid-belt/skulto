@@ -54,15 +54,15 @@ Skulto uses environment variables exclusively - there is no config file.
 | `OPENAI_API_KEY` | No | Enables semantic search with OpenAI embeddings | None (FTS5 only) |
 | `SKULTO_TELEMETRY_TRACKING_ENABLED` | No | Set to `false` to disable anonymous telemetry | `true` |
 
-All data is stored in `~/.skulto/`:
+All data is stored in `~/.agents/skulto/`:
 
 | Path | Purpose |
 |------|---------|
-| `~/.skulto/skulto.db` | SQLite database |
-| `~/.skulto/skulto.log` | Log file |
-| `~/.skulto/repositories/` | Cloned git repositories |
-| `~/.skulto/favorites.json` | Favorite skills (persists across DB resets) |
-| `~/.skulto/skills/` | User's local skills directory |
+| `~/.agents/skulto/skulto.db` | SQLite database |
+| `~/.agents/skulto/skulto.log` | Log file |
+| `~/.agents/skulto/repositories/` | Cloned git repositories |
+| `~/.agents/skulto/favorites.json` | Favorite skills (persists across DB resets) |
+| `~/.agents/skulto/skills/` | User's local skills directory |
 
 ## Running Locally
 

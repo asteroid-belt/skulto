@@ -4,7 +4,7 @@
 
 ## Overview
 
-Skulto uses SQLite with GORM ORM and FTS5 for full-text search. The database is stored at `~/.skulto/skulto.db`.
+Skulto uses SQLite with GORM ORM and FTS5 for full-text search. The database is stored at `~/.agents/skulto/skulto.db`.
 
 ## Database Configuration
 
