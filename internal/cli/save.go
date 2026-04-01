@@ -1,13 +1,18 @@
 package cli
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/discovery"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/manifest"
+	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
@@ -115,6 +120,35 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return trackCLIError("save", fmt.Errorf("read existing manifest: %w", err))
 	}
 
+	// Check for unmanaged skills in project platform dirs
+	if reconcileResult != nil && len(reconcileResult.Unmanaged) > 0 {
+		newUnmanaged := filterIgnored(reconcileResult.Unmanaged, existing)
+		if len(newUnmanaged) > 0 {
+			if isInteractive() {
+				handleUnmanagedSkills(newUnmanaged, mf, cwd, database, cfg)
+			} else {
+				fmt.Printf("Found %d unmanaged skill(s). Run `skulto save` interactively to ingest.\n\n",
+					len(newUnmanaged))
+			}
+		}
+	}
+
+	// Merge ignored from existing manifest (preserve previously ignored)
+	if existing != nil {
+		for _, ig := range existing.Ignored {
+			found := false
+			for _, mig := range mf.Ignored {
+				if mig == ig {
+					found = true
+					break
+				}
+			}
+			if !found {
+				mf.Ignored = append(mf.Ignored, ig)
+			}
+		}
+	}
+
 	if existing != nil && manifest.ManifestEqual(existing, mf) {
 		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 		fmt.Printf("%s (version %d)\n", infoStyle.Render("No changes to skulto.json"), existing.Version)
@@ -150,6 +184,79 @@ func runSave(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	telemetryClient.TrackManifestSaved(mf.SkillCount(), "cli")
+
+	return nil
+}
+
+// filterIgnored removes entries whose Name appears in the manifest's ignored list.
+func filterIgnored(unmanaged []installer.UnmanagedEntry, existing *manifest.ManifestFile) []installer.UnmanagedEntry {
+	if existing == nil {
+		return unmanaged
+	}
+	ignoredSet := make(map[string]bool, len(existing.Ignored))
+	for _, s := range existing.Ignored {
+		ignoredSet[s] = true
+	}
+	var filtered []installer.UnmanagedEntry
+	for _, entry := range unmanaged {
+		if !ignoredSet[entry.Name] {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+// handleUnmanagedSkills prompts the user about each unmanaged skill.
+func handleUnmanagedSkills(unmanaged []installer.UnmanagedEntry, mf *manifest.ManifestFile, cwd string, database *db.DB, cfg *config.Config) {
+	reader := bufio.NewReader(os.Stdin)
+	promptStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+
+	for _, entry := range unmanaged {
+		fmt.Printf("\n%s %s (%s)\n", promptStyle.Render("Found unmanaged skill:"), entry.Name, entry.Platform)
+		fmt.Print("  [y] Ingest into skulto  [N] Skip  [i] Ignore permanently\n  Choice [N]: ")
+
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		switch input {
+		case "y", "yes":
+			if err := safeIngestSkill(entry, cwd, database, cfg); err != nil {
+				fmt.Printf("  Failed to ingest %s: %v\n", entry.Name, err)
+			} else {
+				fmt.Printf("  %s %s\n", successStyle.Render("Ingested"), entry.Name)
+			}
+		case "i", "ignore":
+			mf.Ignored = append(mf.Ignored, entry.Name)
+			fmt.Printf("  Added %s to ignored list\n", entry.Name)
+		default:
+			// N or empty — skip
+		}
+	}
+}
+
+// safeIngestSkill ingests an unmanaged skill using the discovery ingestion pipeline.
+// Uses IngestOptions to set the correct BasePath for project-scope installations.
+func safeIngestSkill(entry installer.UnmanagedEntry, cwd string, database *db.DB, cfg *config.Config) error {
+	svc := discovery.NewIngestionService(database, cfg)
+
+	ds := &models.DiscoveredSkill{
+		Platform: string(entry.Platform),
+		Scope:    "project",
+		Path:     entry.Path,
+		Name:     entry.Name,
+	}
+	ds.ID = ds.GenerateID()
+
+	// Pass BasePath = cwd so the installation record is findable by GetProjectInstallations(cwd)
+	opts := &discovery.IngestOptions{
+		BasePath: cwd,
+	}
+
+	_, err := svc.IngestSkill(context.TODO(), ds, opts)
+	if err != nil {
+		return fmt.Errorf("ingestion failed: %w", err)
+	}
 
 	return nil
 }

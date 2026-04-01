@@ -50,10 +50,7 @@ func (i *Installer) ReconcileProjectSkills(cwd string) (*ReconcileResult, error)
 			entryPath := filepath.Join(skillsDir, entry.Name())
 
 			if !isSymlink(entryPath) {
-				// Plain directory — unmanaged
-				result.Unmanaged = append(result.Unmanaged, UnmanagedEntry{
-					Name: entry.Name(), Platform: platform, Path: entryPath,
-				})
+				// Plain directory — skip silently (committed to repo, not skulto-managed)
 				continue
 			}
 

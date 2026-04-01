@@ -63,7 +63,7 @@ func TestReconcile_NonSkultoSymlink_Unmanaged(t *testing.T) {
 	assert.Equal(t, PlatformClaude, result.Unmanaged[0].Platform)
 }
 
-func TestReconcile_PlainDir_Unmanaged(t *testing.T) {
+func TestReconcile_PlainDir_Skipped(t *testing.T) {
 	database := setupTestDB(t)
 	defer func() { _ = database.Close() }()
 	cfg := setupTestConfig(t)
@@ -76,8 +76,7 @@ func TestReconcile_PlainDir_Unmanaged(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, result.Reconciled)
-	assert.Len(t, result.Unmanaged, 1)
-	assert.Equal(t, "manual", result.Unmanaged[0].Name)
+	assert.Empty(t, result.Unmanaged, "plain directories should be silently skipped")
 }
 
 func TestReconcile_AlreadyTracked_NoChange(t *testing.T) {
