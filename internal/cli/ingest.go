@@ -172,7 +172,7 @@ func runBulkIngest(database *db.DB, cfg *config.Config, ingestionSvc *discovery.
 		}
 
 		// Perform ingestion
-		result, err := ingestionSvc.IngestSkill(ctx, skill)
+		result, err := ingestionSvc.IngestSkill(ctx, skill, nil)
 		if err != nil {
 			fmt.Printf("  Error ingesting %s: %v\n", skill.Name, err)
 			errorCount++
@@ -254,7 +254,7 @@ func runSingleIngest(database *db.DB, cfg *config.Config, ingestionSvc *discover
 
 	// Perform ingestion
 	ctx := context.Background()
-	result, err := ingestionSvc.IngestSkill(ctx, skill)
+	result, err := ingestionSvc.IngestSkill(ctx, skill, nil)
 	if err != nil {
 		return trackCLIError("ingest", fmt.Errorf("ingest skill: %w", err))
 	}

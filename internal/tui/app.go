@@ -2438,7 +2438,7 @@ func (m *Model) ingestDiscoveredSkillCmd(disc *models.DiscoveredSkill) tea.Cmd {
 		ingestionSvc := discovery.NewIngestionService(m.db, m.cfg)
 		ctx := context.Background()
 
-		result, err := ingestionSvc.IngestSkill(ctx, disc)
+		result, err := ingestionSvc.IngestSkill(ctx, disc, nil)
 		if err != nil {
 			return ingestCompleteMsg{name: disc.Name, err: err}
 		}

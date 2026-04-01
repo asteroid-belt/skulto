@@ -14,6 +14,13 @@ import (
 	"github.com/asteroid-belt/skulto/internal/scraper"
 )
 
+// IngestOptions provides optional overrides for skill ingestion.
+type IngestOptions struct {
+	// BasePath overrides the BasePath in the installation record.
+	// If empty, defaults to the managed skill destination path.
+	BasePath string
+}
+
 // IngestionResult contains the result of ingesting a skill.
 type IngestionResult struct {
 	Name     string
@@ -69,8 +76,11 @@ func (s *IngestionService) CheckNameConflict(name, scope string) (bool, error) {
 	return true, nil
 }
 
-// IngestSkill copies a discovered skill to skulto and creates a symlink.
-func (s *IngestionService) IngestSkill(ctx context.Context, skill *models.DiscoveredSkill) (*IngestionResult, error) {
+// IngestSkill copies a discovered skill to skulto management.
+// Order: validate → copy → parse/DB → backup original → symlink → cleanup.
+// Rollback at each step ensures the original is never lost.
+// Pass nil for opts to use defaults.
+func (s *IngestionService) IngestSkill(ctx context.Context, skill *models.DiscoveredSkill, opts *IngestOptions) (*IngestionResult, error) {
 	// Validate skill
 	if err := s.ValidateSkill(skill.Path); err != nil {
 		return nil, err
@@ -84,42 +94,48 @@ func (s *IngestionService) IngestSkill(ctx context.Context, skill *models.Discov
 		return nil, fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	// Copy skill directory to destination
+	// Step 1: Copy skill directory to managed storage
 	if err := copyDir(skill.Path, destPath); err != nil {
 		return nil, fmt.Errorf("failed to copy skill: %w", err)
 	}
 
-	// Remove original directory
-	if err := os.RemoveAll(skill.Path); err != nil {
-		// Try to rollback
-		_ = os.RemoveAll(destPath)
-		return nil, fmt.Errorf("failed to remove original directory: %w", err)
+	// Step 2: Remove from discovered_skills table
+	if s.db != nil {
+		_ = s.db.DeleteDiscoveredSkill(skill.ID)
 	}
 
-	// Create symlink from original location to new location
+	// Step 3: Parse skill.md and create DB records BEFORE destructive ops
+	var parsedSkill *models.Skill
+	if s.db != nil {
+		var err error
+		parsedSkill, err = s.parseAndCreateSkillRecord(destPath, skill, opts)
+		if err != nil {
+			_ = os.RemoveAll(destPath) // rollback copy
+			return nil, fmt.Errorf("failed to create skill record: %w", err)
+		}
+	}
+
+	// Step 4: Two-phase filesystem swap — backup original → symlink → delete backup
+	backupPath := skill.Path + ".skulto-backup"
+	if err := os.Rename(skill.Path, backupPath); err != nil {
+		_ = os.RemoveAll(destPath) // rollback copy
+		return nil, fmt.Errorf("failed to backup original directory: %w", err)
+	}
+
 	relPath, err := filepath.Rel(filepath.Dir(skill.Path), destPath)
 	if err != nil {
 		relPath = destPath // Fall back to absolute path
 	}
 
 	if err := os.Symlink(relPath, skill.Path); err != nil {
+		// Restore from backup
+		_ = os.Rename(backupPath, skill.Path)
+		_ = os.RemoveAll(destPath) // rollback copy
 		return nil, fmt.Errorf("failed to create symlink: %w", err)
 	}
 
-	// Remove from discovered_skills table
-	if s.db != nil {
-		_ = s.db.DeleteDiscoveredSkill(skill.ID)
-	}
-
-	// Parse skill.md and create database records
-	var parsedSkill *models.Skill
-	if s.db != nil {
-		var err error
-		parsedSkill, err = s.parseAndCreateSkillRecord(destPath, skill)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create skill record: %w", err)
-		}
-	}
+	// Success — remove backup
+	_ = os.RemoveAll(backupPath)
 
 	return &IngestionResult{
 		Name:     skill.Name,
@@ -197,7 +213,7 @@ func copyFile(src, dst string) error {
 }
 
 // parseAndCreateSkillRecord parses the skill.md file and creates database records.
-func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discoveredSkill *models.DiscoveredSkill) (*models.Skill, error) {
+func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discoveredSkill *models.DiscoveredSkill, opts *IngestOptions) (*models.Skill, error) {
 	// Read skill.md content (try both lowercase and uppercase)
 	skillMdPath := filepath.Join(destPath, "skill.md")
 	content, err := os.ReadFile(skillMdPath)
@@ -239,11 +255,15 @@ func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discovered
 	}
 
 	// Create SkillInstallation record
+	basePath := destPath
+	if opts != nil && opts.BasePath != "" {
+		basePath = opts.BasePath
+	}
 	installation := &models.SkillInstallation{
 		SkillID:     parsedSkill.ID,
 		Platform:    discoveredSkill.Platform,
 		Scope:       discoveredSkill.Scope,
-		BasePath:    destPath,
+		BasePath:    basePath,
 		SymlinkPath: discoveredSkill.Path, // Original path (now a symlink)
 	}
 	installation.ID = installation.GenerateID()

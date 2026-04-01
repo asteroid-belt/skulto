@@ -94,7 +94,7 @@ func TestIngestionService_IngestSkill(t *testing.T) {
 	ds.ID = ds.GenerateID()
 
 	svc := &IngestionService{destDirOverride: skultoDir}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-skill", result.Name)
@@ -136,7 +136,7 @@ func TestIngestionService_IngestSkill_WithMultipleFiles(t *testing.T) {
 	ds.ID = ds.GenerateID()
 
 	svc := &IngestionService{destDirOverride: skultoDir}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "complex-skill", result.Name)
@@ -170,7 +170,7 @@ func TestIngestionService_IngestSkill_ValidationFailure(t *testing.T) {
 	ds.ID = ds.GenerateID()
 
 	svc := &IngestionService{destDirOverride: skultoDir}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -197,7 +197,7 @@ func TestIngestionService_IngestSkill_SymlinkPointsToDestination(t *testing.T) {
 	ds.ID = ds.GenerateID()
 
 	svc := &IngestionService{destDirOverride: skultoDir}
-	_, err := svc.IngestSkill(context.Background(), &ds)
+	_, err := svc.IngestSkill(context.Background(), &ds, nil)
 	require.NoError(t, err)
 
 	// Read symlink target
@@ -273,7 +273,7 @@ This skill helps with Python development and testing.
 		db:              database,
 		destDirOverride: skultoDir,
 	}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -324,7 +324,7 @@ This skill tests installation record creation.
 		db:              database,
 		destDirOverride: skultoDir,
 	}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -373,7 +373,7 @@ Great for test-driven development workflows.
 		db:              database,
 		destDirOverride: skultoDir,
 	}
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)

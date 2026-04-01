@@ -83,7 +83,7 @@ func TestIntegration_ScanToIngest(t *testing.T) {
 
 	// Step 3: Ingest the skill
 	ingestionSvc := &IngestionService{destDirOverride: skultoDir}
-	result, err := ingestionSvc.IngestSkill(context.Background(), &stored[0])
+	result, err := ingestionSvc.IngestSkill(context.Background(), &stored[0], nil)
 	require.NoError(t, err)
 	assert.Equal(t, "my-test-skill", result.Name)
 
@@ -130,7 +130,7 @@ func TestIntegration_RescanAfterIngest(t *testing.T) {
 	// Ingest
 	svc := &IngestionService{destDirOverride: skultoDir}
 	ds := discoveries[0]
-	_, err = svc.IngestSkill(context.Background(), &ds)
+	_, err = svc.IngestSkill(context.Background(), &ds, nil)
 	require.NoError(t, err)
 
 	// Re-scan should find 0 discoveries (original is now a symlink)
@@ -238,7 +238,7 @@ func TestIntegration_ValidationFailure(t *testing.T) {
 	// But ingestion should fail
 	svc := &IngestionService{destDirOverride: skultoDir}
 	ds := discoveries[0]
-	result, err := svc.IngestSkill(context.Background(), &ds)
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "skill.md")
@@ -360,7 +360,7 @@ func TestIntegration_IngestWithDatabaseCleanup(t *testing.T) {
 		destDirOverride: skultoDir,
 	}
 	stored, _ := database.ListDiscoveredSkills()
-	_, err = svc.IngestSkill(context.Background(), &stored[0])
+	_, err = svc.IngestSkill(context.Background(), &stored[0], nil)
 	require.NoError(t, err)
 
 	// Verify removed from database
@@ -399,7 +399,7 @@ func TestIntegration_MultipleFilesPreserved(t *testing.T) {
 
 	svc := &IngestionService{destDirOverride: skultoDir}
 	ds := discoveries[0]
-	_, err = svc.IngestSkill(context.Background(), &ds)
+	_, err = svc.IngestSkill(context.Background(), &ds, nil)
 	require.NoError(t, err)
 
 	// Verify all files were copied
@@ -433,7 +433,7 @@ func TestIntegration_SymlinkCategorization(t *testing.T) {
 
 	svc := &IngestionService{destDirOverride: skultoDir}
 	ds := discoveries[0]
-	_, err = svc.IngestSkill(context.Background(), &ds)
+	_, err = svc.IngestSkill(context.Background(), &ds, nil)
 	require.NoError(t, err)
 
 	// Now categorize the symlink - should be skulto-managed
@@ -560,7 +560,7 @@ func TestIntegration_EndToEndUserJourney(t *testing.T) {
 		db:              database,
 		destDirOverride: skultoDir,
 	}
-	result, err := svc.IngestSkill(context.Background(), &stored[0])
+	result, err := svc.IngestSkill(context.Background(), &stored[0], nil)
 	require.NoError(t, err)
 	assert.Equal(t, "user-skill", result.Name)
 
