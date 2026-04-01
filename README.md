@@ -23,7 +23,7 @@
 
 ## What is Skulto?
 
-Skulto is a cross-platform CLI tool for managing AI coding assistant skills across 30+ platforms. It provides:
+Skulto is a cross-platform CLI tool for managing AI coding assistant skills across 33 platforms. It provides:
 
 1. **Multi-platform installation** - Install skills to Claude Code, Cursor, Windsurf, Copilot, Codex, Cline, Roo Code, Gemini CLI, Kiro CLI, and 25+ more
 2. **Repository management** - Add, sync, and remove skill repositories
@@ -37,7 +37,7 @@ Skulto is a cross-platform CLI tool for managing AI coding assistant skills acro
 
 ![Skill Creation](assets/skill-create-small.gif)
 
-- **30+ platform support** - Claude Code, Cursor, Windsurf, GitHub Copilot, OpenAI Codex, OpenCode, Cline, Roo Code, Gemini CLI, Kiro CLI, Amp, Continue, Goose, Junie, Qwen Code, Trae, and more
+- **33 platform support** - Claude Code, Cursor, Windsurf, GitHub Copilot, OpenAI Codex, OpenCode, Cline, Roo Code, Gemini CLI, Kiro CLI, Amp, Continue, Goose, Junie, Qwen Code, Trae, and more
 - **Platform detection** - Detects installed AI tools and surfaces them in platform choosers
 - **Offline-first** - Works without internet after initial sync
 - **Fast search** - FTS5-powered full-text search with BM25 ranking (~50ms latency)
@@ -120,6 +120,95 @@ On first launch, Skulto walks you through onboarding:
 2. **Skill selection** - Curated starter skills from Asteroid Belt (superplan, superbuild, teach, agentsmd-generator, and more)
 3. **Location chooser** - Pick global or project scope per platform, with your previous selections pre-filled
 
+## Skill Management for Teams
+
+Skulto works like a package manager for AI agent skills. Use `skulto.json` to define the skills your project needs, then `skulto sync` to install them — so every developer and CI environment has the same skill setup.
+
+### The Workflow
+
+```bash
+# 1. Install skills into your project
+skulto install superplan
+skulto install teach
+
+# 2. Save project skills to a manifest
+skulto save
+
+# 3. Commit skulto.json to your repo
+git add skulto.json
+git commit -m "add skulto skill manifest"
+
+# 4. Teammates (or CI) sync from the manifest
+skulto sync
+```
+
+### `skulto.json`
+
+The manifest tracks which skills your project depends on and where they come from:
+
+```json
+{
+  "version": 1,
+  "skills": {
+    "superplan": "asteroid-belt/skills",
+    "teach": "asteroid-belt/skills",
+    "resume-ats-optimizer": "paramchoudhary/resumeskills"
+  }
+}
+```
+
+Each entry maps a skill slug to its source repository (`owner/repo`). When a teammate runs `skulto sync`, Skulto clones any missing repositories, resolves the skills, and installs them to the selected platforms.
+
+### `skulto save`
+
+Captures your current project-scope installations into `skulto.json`:
+
+```bash
+$ skulto save
+
+SAVED to skulto.json
+
+  teach               asteroid-belt/skills
+  superplan           asteroid-belt/skills
+
+2 skill(s) saved
+```
+
+Only project-scope installations are saved — global installs are personal and not shared via the manifest.
+
+### `skulto sync`
+
+Reads `skulto.json` and installs any missing skills:
+
+```bash
+$ skulto sync
+
+SYNCING from skulto.json (2 skills)
+────────────────────────────────────────────────
+Done! Installed: 2, Skipped: 0
+```
+
+On sync, Skulto:
+1. Adds any source repositories not already in the local database
+2. Resolves each skill by slug
+3. Prompts for platform and scope selection (or uses detected defaults with `-y`)
+4. Skips skills that are already installed at the selected locations
+
+### `skulto check`
+
+Shows all installed skills and where they're installed:
+
+```bash
+$ skulto check
+
+SKILL                  INSTALLED LOCATIONS
+─────────────────────────────────────────────────────────────
+superplan              claude (global), codex (global + project)
+teach                  claude (global + project)
+
+2 skill(s) installed
+```
+
 ## Usage
 
 ### TUI Mode (Default)
@@ -194,6 +283,10 @@ Skulto provides CLI subcommands for scripting and automation:
 | --- | --- |
 | `skulto` | Launch the interactive TUI |
 | `skulto install <slug or repo>` | Install skills by slug or from a repository URL |
+| `skulto uninstall <slug>` | Uninstall a skill from selected platforms |
+| `skulto save` | Save project-scope installations to `skulto.json` |
+| `skulto sync` | Install all skills from `skulto.json` manifest |
+| `skulto check` | List all installed skills and their locations |
 | `skulto add <repo>` | Add a skill repository and sync its skills |
 | `skulto list` | List all configured source repositories |
 | `skulto pull` | Pull/sync all repositories and reconcile installed skills |
@@ -361,7 +454,7 @@ Add to your Claude Code settings (`.claude.json`):
 | `skulto_browse_tags` | List available tags by category (language, framework, tool, concept, domain) |
 | `skulto_get_stats` | Get database statistics (total skills, tags, sources) |
 | `skulto_get_recent` | Get recently viewed skills |
-| `skulto_install` | Install a skill to any supported platform (30+ platforms, global or project scope) |
+| `skulto_install` | Install a skill to any supported platform (33 platforms, global or project scope) |
 | `skulto_uninstall` | Uninstall a skill from specified platforms |
 | `skulto_favorite` | Add or remove a skill from favorites |
 | `skulto_get_favorites` | Get favorite skills |
@@ -377,16 +470,19 @@ The MCP server also exposes resources for direct skill access:
 | `skulto://skill/{slug}` | Full markdown content of a skill |
 | `skulto://skill/{slug}/metadata` | JSON metadata including tags, source, and stats |
 
-### Database Location
+### Data Directory
 
-Skulto stores data in `~/.agents/skulto/`:
+Skulto stores data in `~/.agents/skulto/`, coexisting with other agent tooling under the shared `~/.agents/` namespace:
 
 | Path | Purpose |
 | --- | --- |
 | `~/.agents/skulto/skulto.db` | SQLite database |
 | `~/.agents/skulto/skulto.log` | Logfile |
 | `~/.agents/skulto/repositories/` | Cloned git repositories |
+| `~/.agents/skulto/skills/` | User's local skills directory |
 | `~/.agents/skulto/favorites.json` | Favorite skills (persists across DB resets) |
+
+> **Upgrading from a previous version?** If you have an existing `~/.skulto/` directory, Skulto automatically migrates it to `~/.agents/skulto/` on first launch — including database records and installed skill symlinks. No manual steps required.
 
 ## Development
 
