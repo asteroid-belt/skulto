@@ -12,6 +12,7 @@ func TestNewSaveOptionsDialog(t *testing.T) {
 
 	if dialog == nil {
 		t.Fatal("NewSaveOptionsDialog should not return nil")
+		return
 	}
 
 	// Should have 3 options

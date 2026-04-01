@@ -37,6 +37,7 @@ func TestNewOpenAIProvider_ValidAPIKey(t *testing.T) {
 	}
 	if provider == nil {
 		t.Fatal("expected provider to be non-nil")
+		return
 	}
 	if provider.model != OpenAIDefaultModel {
 		t.Errorf("expected default model %q, got %q", OpenAIDefaultModel, provider.model)

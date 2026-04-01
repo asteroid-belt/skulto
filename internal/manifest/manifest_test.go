@@ -28,6 +28,7 @@ func TestRead_FileExists(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("Read returned nil")
+		return
 	}
 	if got.Version != 1 {
 		t.Errorf("Version = %d, want 1", got.Version)

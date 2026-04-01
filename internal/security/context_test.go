@@ -9,6 +9,7 @@ func TestNewContextAnalyzer(t *testing.T) {
 
 	if ca == nil {
 		t.Fatal("NewContextAnalyzer() returned nil")
+		return
 	}
 
 	if ca.window != DefaultProximityWindow {
@@ -26,6 +27,7 @@ func TestNewContextAnalyzerWithWindow(t *testing.T) {
 
 	if ca == nil {
 		t.Fatal("NewContextAnalyzerWithWindow() returned nil")
+		return
 	}
 
 	if ca.window != customWindow {

@@ -74,6 +74,7 @@ func TestNewSkillParser(t *testing.T) {
 	parser := NewSkillParser()
 	if parser == nil {
 		t.Fatal("NewSkillParser returned nil")
+		return
 	}
 	if parser.md == nil {
 		t.Fatal("Parser markdown instance is nil")

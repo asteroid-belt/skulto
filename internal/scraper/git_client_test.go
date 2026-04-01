@@ -12,6 +12,7 @@ func TestNewGitClient(t *testing.T) {
 
 	if client == nil {
 		t.Fatal("Expected non-nil GitClient")
+		return
 	}
 	if client.cache == nil {
 		t.Error("Expected non-nil cache")

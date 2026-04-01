@@ -374,6 +374,7 @@ func TestNewScraperWithConfigGitMode(t *testing.T) {
 	s := NewScraperWithConfig(cfg, nil)
 	if s == nil {
 		t.Fatal("Expected non-nil Scraper")
+		return
 	}
 
 	if s.gitClient == nil {
@@ -393,6 +394,7 @@ func TestNewScraperWithConfigAPIMode(t *testing.T) {
 	s := NewScraperWithConfig(cfg, nil)
 	if s == nil {
 		t.Fatal("Expected non-nil Scraper")
+		return
 	}
 
 	if s.gitClient != nil {
@@ -520,6 +522,7 @@ func TestScrapeSeedsWithOptionsCallsCorrectMethod(t *testing.T) {
 	// This is a structural test - verify the scraper was created correctly
 	if s == nil {
 		t.Fatal("Expected non-nil scraper")
+		return
 	}
 	if s.gitClient == nil {
 		t.Error("Expected gitClient to be set")

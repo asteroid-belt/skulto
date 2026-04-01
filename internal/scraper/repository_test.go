@@ -54,6 +54,7 @@ func TestNewRepositoryManager(t *testing.T) {
 
 	if rm == nil {
 		t.Fatal("Expected non-nil RepositoryManager")
+		return
 	}
 	if rm.baseDir != baseDir {
 		t.Errorf("Expected baseDir %q, got %q", baseDir, rm.baseDir)

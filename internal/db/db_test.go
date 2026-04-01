@@ -130,6 +130,7 @@ func TestSkillCRUD(t *testing.T) {
 	}
 	if retrieved == nil {
 		t.Fatal("GetSkill() returned nil")
+		return
 	}
 	if retrieved.Title != "Test Skill" {
 		t.Errorf("Title = %q, want %q", retrieved.Title, "Test Skill")
@@ -183,6 +184,7 @@ func TestGetSkillBySlug(t *testing.T) {
 	}
 	if retrieved == nil {
 		t.Fatal("GetSkillBySlug() returned nil")
+		return
 	}
 	if retrieved.ID != "slug-test-001" {
 		t.Errorf("ID = %q, want %q", retrieved.ID, "slug-test-001")
@@ -350,6 +352,7 @@ func TestSourceCRUD(t *testing.T) {
 	}
 	if retrieved == nil {
 		t.Fatal("GetSource() returned nil")
+		return
 	}
 	if retrieved.Owner != "anthropics" {
 		t.Errorf("Owner = %q, want %q", retrieved.Owner, "anthropics")
@@ -450,6 +453,7 @@ func TestTagCRUD(t *testing.T) {
 	}
 	if retrieved == nil {
 		t.Fatal("GetTag() returned nil")
+		return
 	}
 	if retrieved.Name != "Python" {
 		t.Errorf("Name = %q, want %q", retrieved.Name, "Python")
@@ -1127,6 +1131,7 @@ func TestEnsureMineTag(t *testing.T) {
 	}
 	if tag == nil {
 		t.Fatal("mine tag should exist after DB init")
+		return
 	}
 	if tag.Priority != 100 {
 		t.Errorf("mine tag priority = %d, want 100", tag.Priority)
@@ -1157,6 +1162,7 @@ func TestMineTagCreatedOnStartup(t *testing.T) {
 	}
 	if tag == nil {
 		t.Fatal("mine tag should be created on DB init")
+		return
 	}
 	if tag.Priority != 100 {
 		t.Errorf("mine tag priority = %d, want 100", tag.Priority)
