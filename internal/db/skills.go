@@ -177,6 +177,24 @@ func (db *DB) GetSkillBySlug(slug string) (*models.Skill, error) {
 	return &skill, nil
 }
 
+// GetSkillBySlugAndSource retrieves a skill by slug + source full name.
+// Returns nil, nil if not found. Used by reconciliation to disambiguate
+// skills with the same slug from different repositories.
+func (db *DB) GetSkillBySlugAndSource(slug, sourceFullName string) (*models.Skill, error) {
+	var skill models.Skill
+	err := db.Joins("JOIN sources ON sources.id = skills.source_id").
+		Preload("Source").Preload("Tags").
+		Where("skills.slug = ? AND sources.full_name = ?", slug, sourceFullName).
+		First(&skill).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &skill, nil
+}
+
 // GetSkillBySlugWithPriority returns the highest priority skill matching a slug.
 // CWD skills (cwd-*) take priority over local skills (local-*).
 func (db *DB) GetSkillBySlugWithPriority(slug string) (*models.Skill, error) {

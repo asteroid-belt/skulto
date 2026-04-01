@@ -1287,3 +1287,63 @@ func TestDB_DiscoveredSkillsTableExists(t *testing.T) {
 		t.Errorf("discovered_skills table should exist, got count = %d", count)
 	}
 }
+
+func TestGetSkillBySlugAndSource(t *testing.T) {
+	db := testDB(t)
+
+	// Create two sources
+	source1 := &models.Source{ID: "org1/repo1", Owner: "org1", Repo: "repo1", FullName: "org1/repo1"}
+	source2 := &models.Source{ID: "org2/repo2", Owner: "org2", Repo: "repo2", FullName: "org2/repo2"}
+	if err := db.Save(source1).Error; err != nil {
+		t.Fatalf("save source1: %v", err)
+	}
+	if err := db.Save(source2).Error; err != nil {
+		t.Fatalf("save source2: %v", err)
+	}
+
+	// Create two skills with same slug, different sources
+	skill1 := &models.Skill{ID: "s1", Slug: "teach", Title: "Teach 1", SourceID: &source1.ID}
+	skill2 := &models.Skill{ID: "s2", Slug: "teach", Title: "Teach 2", SourceID: &source2.ID}
+	if err := db.UpsertSkill(skill1); err != nil {
+		t.Fatalf("upsert skill1: %v", err)
+	}
+	if err := db.UpsertSkill(skill2); err != nil {
+		t.Fatalf("upsert skill2: %v", err)
+	}
+
+	// Match by slug + correct source
+	got, err := db.GetSkillBySlugAndSource("teach", "org1/repo1")
+	if err != nil {
+		t.Fatalf("GetSkillBySlugAndSource: %v", err)
+	}
+	if got == nil || got.ID != "s1" {
+		t.Errorf("expected skill s1, got %v", got)
+	}
+
+	// Match by slug + other source
+	got2, err := db.GetSkillBySlugAndSource("teach", "org2/repo2")
+	if err != nil {
+		t.Fatalf("GetSkillBySlugAndSource: %v", err)
+	}
+	if got2 == nil || got2.ID != "s2" {
+		t.Errorf("expected skill s2, got %v", got2)
+	}
+
+	// No match — wrong source
+	got3, err := db.GetSkillBySlugAndSource("teach", "org3/repo3")
+	if err != nil {
+		t.Fatalf("GetSkillBySlugAndSource: %v", err)
+	}
+	if got3 != nil {
+		t.Errorf("expected nil for wrong source, got %v", got3)
+	}
+
+	// No match — wrong slug
+	got4, err := db.GetSkillBySlugAndSource("nonexistent", "org1/repo1")
+	if err != nil {
+		t.Fatalf("GetSkillBySlugAndSource: %v", err)
+	}
+	if got4 != nil {
+		t.Errorf("expected nil for wrong slug, got %v", got4)
+	}
+}
