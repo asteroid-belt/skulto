@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -60,6 +61,20 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		return trackCLIError("check", fmt.Errorf("initialize database: %w", err))
 	}
 	defer func() { _ = database.Close() }()
+
+	// Reconcile project skills before listing
+	cwd, _ := os.Getwd()
+	inst := installer.New(database, cfg)
+	if reconcileResult, err := inst.ReconcileProjectSkills(cwd); err == nil && len(reconcileResult.Reconciled) > 0 {
+		reconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true)
+		reconSkillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+		reconPlatStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+		fmt.Printf("%s %d project skill(s)\n", reconStyle.Render("RECONCILED"), len(reconcileResult.Reconciled))
+		for _, r := range reconcileResult.Reconciled {
+			fmt.Printf("  %s  %s\n", reconSkillStyle.Render(r.Slug), reconPlatStyle.Render(string(r.Platform)))
+		}
+		fmt.Println()
+	}
 
 	// Create install service
 	svc := installer.NewInstallService(database, cfg, telemetryClient)

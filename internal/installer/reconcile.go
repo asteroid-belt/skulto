@@ -60,7 +60,7 @@ func (i *Installer) ReconcileProjectSkills(cwd string) (*ReconcileResult, error)
 			// Resolve symlink target (handles relative symlinks)
 			resolvedTarget, err := filepath.EvalSymlinks(entryPath)
 			if err != nil {
-				log.Errorf("reconcile: broken symlink %s: %v\n", entryPath, err)
+				log.DebugLog("reconcile", "broken symlink %s: %v", entryPath, err)
 				continue // broken symlink, skip
 			}
 
@@ -81,7 +81,7 @@ func (i *Installer) ReconcileProjectSkills(cwd string) (*ReconcileResult, error)
 			// Check if already tracked in DB
 			installed, err := i.db.IsInstalledAt(skill.ID, string(platform), "project", cwd)
 			if err != nil {
-				log.Errorf("reconcile: DB check failed for %s: %v\n", entry.Name(), err)
+				log.DebugLog("reconcile", "DB check failed for %s: %v", entry.Name(), err)
 				continue
 			}
 			if installed {
@@ -97,7 +97,7 @@ func (i *Installer) ReconcileProjectSkills(cwd string) (*ReconcileResult, error)
 				SymlinkPath: entryPath,
 			}
 			if err := i.db.AddInstallation(&install); err != nil {
-				log.Errorf("reconcile: failed to add installation for %s: %v\n", entry.Name(), err)
+				log.DebugLog("reconcile", "failed to add installation for %s: %v", entry.Name(), err)
 				continue
 			}
 

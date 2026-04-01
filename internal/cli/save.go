@@ -6,6 +6,7 @@ import (
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/manifest"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -46,6 +47,20 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return trackCLIError("save", fmt.Errorf("initialize database: %w", err))
 	}
 	defer func() { _ = database.Close() }()
+
+	// Reconcile project skills before querying installations
+	inst := installer.New(database, cfg)
+	reconcileResult, _ := inst.ReconcileProjectSkills(cwd)
+	if reconcileResult != nil && len(reconcileResult.Reconciled) > 0 {
+		reconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true)
+		reconSkillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+		reconPlatStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+		fmt.Printf("%s %d project skill(s)\n", reconStyle.Render("RECONCILED"), len(reconcileResult.Reconciled))
+		for _, r := range reconcileResult.Reconciled {
+			fmt.Printf("  %s  %s\n", reconSkillStyle.Render(r.Slug), reconPlatStyle.Render(string(r.Platform)))
+		}
+		fmt.Println()
+	}
 
 	installations, err := database.GetProjectInstallations(cwd)
 	if err != nil {
@@ -100,7 +115,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return trackCLIError("save", fmt.Errorf("read existing manifest: %w", err))
 	}
 
-	if existing != nil && manifest.SkillsEqual(existing, mf) {
+	if existing != nil && manifest.ManifestEqual(existing, mf) {
 		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 		fmt.Printf("%s (version %d)\n", infoStyle.Render("No changes to skulto.json"), existing.Version)
 		return nil
