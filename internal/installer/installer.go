@@ -108,6 +108,11 @@ func (i *Installer) IsInstalled(skillID string) (bool, error) {
 // installToLocationsInternal is the shared implementation for installing skills via symlinks.
 // Both InstallTo and InstallLocalSkillTo delegate to this method after resolving the source path.
 func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath string, locations []InstallLocation) error {
+	// Safety: refuse to operate with empty slug — would resolve to the skills directory itself
+	if skill.Slug == "" {
+		return fmt.Errorf("refusing to install: skill has empty slug")
+	}
+
 	// Create symlinks for each location
 	var createdInstalls []models.SkillInstallation
 	var lastErr error
@@ -133,9 +138,11 @@ func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath s
 			createdDirs[targetDir] = true
 		}
 
-		// Remove existing symlink or directory
+		// Remove existing symlink — use os.Remove (not RemoveAll) so a
+		// directory can never be recursively deleted by this code path.
 		if exists(targetPath) {
-			if err := os.RemoveAll(targetPath); err != nil {
+			if err := os.Remove(targetPath); err != nil {
+				log.Printf("skulto: remove existing target failed %s: %v", targetPath, err)
 				lastErr = err
 				continue
 			}

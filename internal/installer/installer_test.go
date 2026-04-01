@@ -719,3 +719,71 @@ func TestSyncInstallStateRemovesOrphans(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, installs)
 }
+
+func TestInstallToLocations_EmptySlugRejected(t *testing.T) {
+	database := setupTestDB(t)
+	defer func() { _ = database.Close() }()
+	cfg := setupTestConfig(t)
+
+	inst := New(database, cfg)
+
+	skill := &models.Skill{
+		ID:   "test-id",
+		Slug: "", // empty slug — should be rejected
+	}
+
+	locations := []InstallLocation{
+		{
+			Platform: PlatformClaude,
+			Scope:    ScopeGlobal,
+			BasePath: t.TempDir(),
+		},
+	}
+
+	err := inst.installToLocationsInternal(skill, "/some/source", locations)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty slug")
+}
+
+func TestInstallToLocations_DoesNotDeleteDirectory(t *testing.T) {
+	database := setupTestDB(t)
+	defer func() { _ = database.Close() }()
+	cfg := setupTestConfig(t)
+
+	inst := New(database, cfg)
+
+	// Create a skills directory with an existing skill inside
+	basePath := t.TempDir()
+	skillsDir := filepath.Join(basePath, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(filepath.Join(skillsDir, "existing-skill"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillsDir, "existing-skill", "SKILL.md"), []byte("# existing"), 0644))
+
+	// Create source for the new skill
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "SKILL.md"), []byte("# new"), 0644))
+
+	skill := &models.Skill{
+		ID:   "new-skill-id",
+		Slug: "new-skill",
+	}
+	require.NoError(t, database.UpsertSkill(skill))
+
+	locations := []InstallLocation{
+		{
+			Platform: PlatformClaude,
+			Scope:    ScopeGlobal,
+			BasePath: basePath,
+		},
+	}
+
+	err := inst.installToLocationsInternal(skill, sourceDir, locations)
+	require.NoError(t, err)
+
+	// The NEW skill should be installed
+	_, err = os.Lstat(filepath.Join(skillsDir, "new-skill"))
+	assert.NoError(t, err, "new skill should exist")
+
+	// The EXISTING skill must still be there
+	_, err = os.Stat(filepath.Join(skillsDir, "existing-skill", "SKILL.md"))
+	assert.NoError(t, err, "existing skill must not be deleted")
+}

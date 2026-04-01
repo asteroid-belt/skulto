@@ -181,9 +181,8 @@ func selectPlatformsAndScope(service *installer.InstallService, ctx context.Cont
 		selectedPlatforms = result.Selected
 	}
 
-	if len(selectedPlatforms) == 0 {
-		selectedPlatforms = prompts.GetDefaultSelectablePlatforms(platforms, installedLocations)
-	}
+	// No fallback — if the user selected nothing in the chooser, abort.
+	// The -y flag path handles non-interactive defaults separately above.
 	if len(selectedPlatforms) == 0 {
 		fmt.Println("No platforms selected. Nothing to install.")
 		return nil, nil
