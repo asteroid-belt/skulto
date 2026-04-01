@@ -74,7 +74,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	case scanAll:
 		skills, err = database.GetAllSkills()
 	case scanSkillID != "":
+		// Try by ID first, then fall back to slug
 		skill, err := database.GetSkill(scanSkillID)
+		if err != nil || skill == nil {
+			skill, err = database.GetSkillBySlug(scanSkillID)
+		}
 		if err != nil || skill == nil {
 			return fmt.Errorf("skill not found: %s", scanSkillID)
 		}
