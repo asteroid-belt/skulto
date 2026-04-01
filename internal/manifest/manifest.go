@@ -125,6 +125,22 @@ func (mf *ManifestFile) SkillCount() int {
 	return len(mf.Skills)
 }
 
+// SkillsEqual returns true if two manifests have identical skills maps.
+func SkillsEqual(a, b *ManifestFile) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if len(a.Skills) != len(b.Skills) {
+		return false
+	}
+	for slug, source := range a.Skills {
+		if b.Skills[slug] != source {
+			return false
+		}
+	}
+	return true
+}
+
 // SortedSlugs returns skill slugs in alphabetical order.
 func (mf *ManifestFile) SortedSlugs() []string {
 	slugs := make([]string, 0, len(mf.Skills))

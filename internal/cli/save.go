@@ -94,6 +94,24 @@ func runSave(cmd *cobra.Command, args []string) error {
 
 	mf, skippedLocal := manifest.BuildFromSkills(entries)
 
+	// Read existing manifest to compare and determine version
+	existing, err := manifest.Read(cwd)
+	if err != nil {
+		return trackCLIError("save", fmt.Errorf("read existing manifest: %w", err))
+	}
+
+	if existing != nil && manifest.SkillsEqual(existing, mf) {
+		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+		fmt.Printf("%s (version %d)\n", infoStyle.Render("No changes to skulto.json"), existing.Version)
+		return nil
+	}
+
+	if existing != nil {
+		mf.Version = existing.Version + 1
+	} else {
+		mf.Version = 1
+	}
+
 	if err := manifest.Write(cwd, mf); err != nil {
 		return trackCLIError("save", fmt.Errorf("write manifest: %w", err))
 	}
@@ -103,7 +121,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 	slugStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
 	sourceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
-	fmt.Printf("%s Saved to %s\n\n", successStyle.Render("SAVED"), manifest.FileName)
+	fmt.Printf("%s Saved to %s (version %d)\n\n", successStyle.Render("SAVED"), manifest.FileName, mf.Version)
 
 	for _, slug := range mf.SortedSlugs() {
 		source := mf.Skills[slug]

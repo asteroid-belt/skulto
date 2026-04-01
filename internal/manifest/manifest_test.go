@@ -178,6 +178,70 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestSkillsEqual_SameMaps(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"teach": "asteroid-belt/skills", "superplan": "asteroid-belt/skills"}}
+	b := &ManifestFile{Skills: map[string]string{"teach": "asteroid-belt/skills", "superplan": "asteroid-belt/skills"}}
+	if !SkillsEqual(a, b) {
+		t.Error("identical maps should be equal")
+	}
+}
+
+func TestSkillsEqual_DifferentValues(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"teach": "asteroid-belt/skills"}}
+	b := &ManifestFile{Skills: map[string]string{"teach": "other-org/repo"}}
+	if SkillsEqual(a, b) {
+		t.Error("different values should not be equal")
+	}
+}
+
+func TestSkillsEqual_ExtraKey(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"teach": "o/r"}}
+	b := &ManifestFile{Skills: map[string]string{"teach": "o/r", "extra": "o/r"}}
+	if SkillsEqual(a, b) {
+		t.Error("extra key should not be equal")
+	}
+}
+
+func TestSkillsEqual_MissingKey(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"teach": "o/r", "extra": "o/r"}}
+	b := &ManifestFile{Skills: map[string]string{"teach": "o/r"}}
+	if SkillsEqual(a, b) {
+		t.Error("missing key should not be equal")
+	}
+}
+
+func TestSkillsEqual_BothEmpty(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{}}
+	b := &ManifestFile{Skills: map[string]string{}}
+	if !SkillsEqual(a, b) {
+		t.Error("both empty should be equal")
+	}
+}
+
+func TestSkillsEqual_BothNilSkills(t *testing.T) {
+	a := &ManifestFile{}
+	b := &ManifestFile{}
+	if !SkillsEqual(a, b) {
+		t.Error("both nil skills should be equal")
+	}
+}
+
+func TestSkillsEqual_OneNilManifest(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"teach": "o/r"}}
+	if SkillsEqual(a, nil) {
+		t.Error("one nil manifest should not be equal")
+	}
+	if SkillsEqual(nil, a) {
+		t.Error("one nil manifest should not be equal (reversed)")
+	}
+}
+
+func TestSkillsEqual_BothNilManifests(t *testing.T) {
+	if !SkillsEqual(nil, nil) {
+		t.Error("both nil manifests should be equal")
+	}
+}
+
 func TestSortedSlugs(t *testing.T) {
 	mf := &ManifestFile{
 		Skills: map[string]string{
