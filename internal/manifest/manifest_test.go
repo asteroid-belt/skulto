@@ -242,6 +242,75 @@ func TestSkillsEqual_BothNilManifests(t *testing.T) {
 	}
 }
 
+func TestIgnoredField_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	original := &ManifestFile{
+		Version: 1,
+		Skills:  map[string]string{"teach": "o/r"},
+		Ignored: []string{"custom-skill", "other-skill"},
+	}
+	if err := Write(dir, original); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	got, err := Read(dir)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if len(got.Ignored) != 2 {
+		t.Errorf("Ignored count = %d, want 2", len(got.Ignored))
+	}
+}
+
+func TestIgnoredField_NilInitialized(t *testing.T) {
+	dir := t.TempDir()
+	p := Path(dir)
+	if err := os.WriteFile(p, []byte(`{"version":1,"skills":{"a":"o/r"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(dir)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got.Ignored == nil {
+		t.Error("Ignored should be empty slice, not nil")
+	}
+	if len(got.Ignored) != 0 {
+		t.Errorf("Ignored should be empty, got %v", got.Ignored)
+	}
+}
+
+func TestManifestEqual_SameSkillsDifferentIgnored(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"x"}}
+	b := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"y"}}
+	if ManifestEqual(a, b) {
+		t.Error("different ignored should not be equal")
+	}
+}
+
+func TestManifestEqual_SameSkillsSameIgnored(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"x", "y"}}
+	b := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"x", "y"}}
+	if !ManifestEqual(a, b) {
+		t.Error("same skills + same ignored should be equal")
+	}
+}
+
+func TestManifestEqual_IgnoredOrderIndependent(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"x", "y"}}
+	b := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"y", "x"}}
+	if !ManifestEqual(a, b) {
+		t.Error("ignored order should not matter")
+	}
+}
+
+func TestSkillsEqual_IgnoresIgnoredField(t *testing.T) {
+	a := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"x"}}
+	b := &ManifestFile{Skills: map[string]string{"a": "o/r"}, Ignored: []string{"y", "z"}}
+	if !SkillsEqual(a, b) {
+		t.Error("SkillsEqual should only compare skills, not ignored")
+	}
+}
+
 func TestSortedSlugs(t *testing.T) {
 	mf := &ManifestFile{
 		Skills: map[string]string{

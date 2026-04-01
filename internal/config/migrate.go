@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "github.com/glebarez/go-sqlite"
 	"github.com/asteroid-belt/skulto/internal/log"
+	_ "github.com/glebarez/go-sqlite"
 )
 
 const migrationMarker = ".migration-complete"

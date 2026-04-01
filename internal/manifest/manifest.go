@@ -19,7 +19,8 @@ const (
 // ManifestFile is the JSON structure of skulto.json.
 type ManifestFile struct {
 	Version int               `json:"version"`
-	Skills  map[string]string `json:"skills"` // slug -> "owner/repo"
+	Skills  map[string]string `json:"skills"`            // slug -> "owner/repo"
+	Ignored []string          `json:"ignored,omitempty"` // skills explicitly excluded from manifest
 }
 
 // Read reads a manifest from the given directory.
@@ -42,6 +43,9 @@ func Read(dir string) (*ManifestFile, error) {
 
 	if mf.Skills == nil {
 		mf.Skills = make(map[string]string)
+	}
+	if mf.Ignored == nil {
+		mf.Ignored = []string{}
 	}
 
 	return &mf, nil
@@ -135,6 +139,30 @@ func SkillsEqual(a, b *ManifestFile) bool {
 	}
 	for slug, source := range a.Skills {
 		if b.Skills[slug] != source {
+			return false
+		}
+	}
+	return true
+}
+
+// ManifestEqual returns true if two manifests have identical skills AND ignored lists.
+// Used as the write gate in save.go (replaces SkillsEqual for no-op detection).
+func ManifestEqual(a, b *ManifestFile) bool {
+	if !SkillsEqual(a, b) {
+		return false
+	}
+	if a == nil || b == nil {
+		return a == b
+	}
+	if len(a.Ignored) != len(b.Ignored) {
+		return false
+	}
+	aSet := make(map[string]bool, len(a.Ignored))
+	for _, s := range a.Ignored {
+		aSet[s] = true
+	}
+	for _, s := range b.Ignored {
+		if !aSet[s] {
 			return false
 		}
 	}
