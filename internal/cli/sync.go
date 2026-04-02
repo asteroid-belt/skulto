@@ -85,7 +85,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return trackCLIError("sync", err)
 	}
 
-	skillsToInstall, skippedSkills := syncResolveSkills(mf, database, skippedSources)
+	skillsToInstall, skippedSkills := syncResolveSkills(mf, database, skippedSources, reader, cwd)
 
 	if len(skillsToInstall) == 0 {
 		fmt.Println("\nNo skills to install.")
@@ -207,11 +207,11 @@ func syncResolveSkills(
 	mf *manifest.ManifestFile,
 	database *db.DB,
 	skippedSources map[string]bool,
+	reader *bufio.Reader,
+	cwd string,
 ) ([]*models.Skill, int) {
 	var skillsToInstall []*models.Skill
 	var skippedSkills int
-
-	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
 	for _, slug := range mf.SortedSlugs() {
 		sourceName := mf.Skills[slug]
@@ -223,16 +223,25 @@ func syncResolveSkills(
 
 		skill, err := database.GetSkillBySlug(slug)
 		if err != nil || skill == nil {
+			warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 			fmt.Printf("  %s Skill '%s' not found in database\n", warnStyle.Render("WARN"), slug)
 			skippedSkills++
 			continue
 		}
 
-		if skill.Source != nil && skill.Source.FullName != sourceName {
-			fmt.Printf("  %s Skill '%s' found but from different source (%s, expected %s)\n",
-				warnStyle.Render("WARN"), slug, skill.Source.FullName, sourceName)
-			skippedSkills++
-			continue
+		if mismatch := CheckSourceMismatch(skill, sourceName); mismatch != nil {
+			action := PromptSourceMismatch(mismatch, reader, isInteractive())
+			switch action {
+			case SourceMismatchSkip:
+				skippedSkills++
+				continue
+			case SourceMismatchAccept:
+				if err := ApplySourceMismatchAccept(cwd, slug, mismatch.ActualSource); err != nil {
+					fmt.Printf("  Error updating manifest: %v\n", err)
+				}
+			case SourceMismatchInstallAnyway:
+				// proceed without updating manifest
+			}
 		}
 
 		skillsToInstall = append(skillsToInstall, skill)

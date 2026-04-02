@@ -11,6 +11,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/manifest"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/asteroid-belt/skulto/internal/security"
@@ -213,6 +214,36 @@ func selectPlatformsAndScope(service *installer.InstallService, ctx context.Cont
 }
 
 func runInstallBySlug(ctx context.Context, service *installer.InstallService, slug string) error {
+	// Check for source mismatch against manifest
+	if !installYes {
+		cwd, err := os.Getwd()
+		if err == nil {
+			mf, _ := manifest.Read(cwd)
+			if mf != nil {
+				if expectedSource, ok := mf.Skills[slug]; ok {
+					skill, err := service.ResolveSkill(slug)
+					if err == nil && skill != nil {
+						if mismatch := CheckSourceMismatch(skill, expectedSource); mismatch != nil {
+							reader := bufio.NewReader(os.Stdin)
+							action := PromptSourceMismatch(mismatch, reader, isInteractive())
+							switch action {
+							case SourceMismatchSkip:
+								fmt.Println("  Skipped.")
+								return nil
+							case SourceMismatchAccept:
+								if err := ApplySourceMismatchAccept(cwd, slug, mismatch.ActualSource); err != nil {
+									fmt.Printf("  Error updating manifest: %v\n", err)
+								}
+							case SourceMismatchInstallAnyway:
+								// proceed
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	opts, err := selectPlatformsAndScope(service, ctx, slug)
 	if err != nil {
 		return trackCLIError("install", err)

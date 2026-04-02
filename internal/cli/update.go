@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/installer"
+	"github.com/asteroid-belt/skulto/internal/manifest"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
 	"github.com/asteroid-belt/skulto/internal/security"
@@ -95,6 +98,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	if err := runUpdatePull(ctx, cfg, database, result); err != nil {
 		return err
+	}
+
+	// Check for source mismatches against manifest
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		runUpdateSourceCheck(cwd, database)
 	}
 
 	// Phase 2: Security scan
@@ -367,5 +376,61 @@ func getThreatIndicator(level models.ThreatLevel) string {
 		return lowStyle.Render(" [LOW]")
 	default:
 		return ""
+	}
+}
+
+// runUpdateSourceCheck checks for source mismatches against skulto.json after pulling.
+// This is advisory — it does not block the update, it surfaces drift.
+func runUpdateSourceCheck(cwd string, database *db.DB) {
+	mf, err := manifest.Read(cwd)
+	if err != nil || mf == nil {
+		return // No manifest, nothing to check
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	var acceptedUpdates []struct {
+		slug      string
+		newSource string
+	}
+
+	for _, slug := range mf.SortedSlugs() {
+		expectedSource := mf.Skills[slug]
+
+		skill, err := database.GetSkillBySlug(slug)
+		if err != nil || skill == nil {
+			continue // Skill not in DB, skip
+		}
+
+		mismatch := CheckSourceMismatch(skill, expectedSource)
+		if mismatch == nil {
+			continue
+		}
+
+		action := PromptSourceMismatch(mismatch, reader, isInteractive())
+		switch action {
+		case SourceMismatchAccept:
+			acceptedUpdates = append(acceptedUpdates, struct {
+				slug      string
+				newSource string
+			}{slug, mismatch.ActualSource})
+		case SourceMismatchSkip, SourceMismatchInstallAnyway:
+			// Skip and Install anyway both do nothing to the manifest during update
+		}
+	}
+
+	// Batch-apply accepted source updates
+	if len(acceptedUpdates) > 0 {
+		mf, err := manifest.Read(cwd)
+		if err != nil || mf == nil {
+			return
+		}
+		for _, u := range acceptedUpdates {
+			mf.Skills[u.slug] = u.newSource
+		}
+		if err := manifest.Write(cwd, mf); err != nil {
+			fmt.Printf("  Error updating manifest: %v\n", err)
+		} else {
+			fmt.Printf("  Updated skulto.json with %d source change(s)\n", len(acceptedUpdates))
+		}
 	}
 }

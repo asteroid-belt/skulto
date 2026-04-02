@@ -217,6 +217,16 @@ func (s *InstallService) Install(ctx context.Context, slug string, opts InstallO
 	}, nil
 }
 
+// ResolveSkill looks up a skill by slug without installing it.
+// Returns nil, nil if the skill is not found.
+func (s *InstallService) ResolveSkill(slug string) (*models.Skill, error) {
+	skill, err := s.db.GetSkillBySlug(slug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up skill: %w", err)
+	}
+	return skill, nil
+}
+
 // InstallBatch installs multiple skills with the same options.
 // Returns results for each skill, including errors.
 func (s *InstallService) InstallBatch(ctx context.Context, slugs []string, opts InstallOptions) []InstallResult {

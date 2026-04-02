@@ -49,23 +49,23 @@ Phase 1B ─────────┤    (sync.go)         │
 
 | Phase | Name | Depends On | Parallel With | Estimate | Status |
 |-------|------|------------|---------------|----------|--------|
-| 1A | Shared helper + unit tests | — | 1B | 5 | pending |
-| 1B | `ResolveSkill` method | — | 1A | 1 | pending |
-| 2A | Wire into sync | 1A | 2B, 2C | 3 | pending |
-| 2B | Wire into install | 1A, 1B | 2A, 2C | 5 | pending |
-| 2C | Wire into update | 1A | 2A, 2B | 3 | pending |
-| 3 | Integration tests | 2A, 2B, 2C | — | 1 | pending |
+| 1A | Shared helper + unit tests | — | 1B | 5 | ✅ done |
+| 1B | `ResolveSkill` method | — | 1A | 1 | ✅ done |
+| 2A | Wire into sync | 1A | 2B, 2C | 3 | ✅ done |
+| 2B | Wire into install | 1A, 1B | 2A, 2C | 5 | ✅ done |
+| 2C | Wire into update | 1A | 2A, 2B | 3 | ✅ done |
+| 3 | Integration tests | 2A, 2B, 2C | — | 1 | ✅ done |
 
 ---
 
 ## Phase 1A: Shared helper + unit tests (5 pts)
 
 ### Definition of Done
-- [ ] `source_check.go` created with all three functions
-- [ ] `source_check_test.go` with full coverage
-- [ ] Code passes linter (`make lint`)
-- [ ] Code passes formatter (`make format`)
-- [ ] All tests pass (`make test`)
+- [x] `source_check.go` created with all three functions
+- [x] `source_check_test.go` with full coverage
+- [x] Code passes linter (`make lint`)
+- [x] Code passes formatter (`make format`)
+- [x] All tests pass (`make test`)
 
 ### Code Deltas
 
@@ -307,9 +307,9 @@ func TestApplySourceMismatchAccept_NoManifest(t *testing.T) {
 ## Phase 1B: `ResolveSkill` method (1 pt)
 
 ### Definition of Done
-- [ ] `ResolveSkill` added to `InstallService`
-- [ ] Code passes linter (`make lint`)
-- [ ] All tests pass (`make test`)
+- [x] `ResolveSkill` added to `InstallService`
+- [x] Code passes linter (`make lint`)
+- [x] All tests pass (`make test`)
 
 ### Code Deltas
 
@@ -334,11 +334,11 @@ Add after the existing `Install` method:
 ## Phase 2A: Wire into sync (3 pts)
 
 ### Definition of Done
-- [ ] Inline mismatch check replaced with shared helper
-- [ ] `syncResolveSkills` accepts `reader` and `cwd` parameters
-- [ ] All three actions (Accept/Skip/Install anyway) work correctly
-- [ ] Code passes linter (`make lint`)
-- [ ] All tests pass (`make test`)
+- [x] Inline mismatch check replaced with shared helper
+- [x] `syncResolveSkills` accepts `reader` and `cwd` parameters
+- [x] All three actions (Accept/Skip/Install anyway) work correctly
+- [x] Code passes linter (`make lint`)
+- [x] All tests pass (`make test`)
 
 ### Code Deltas
 
@@ -413,12 +413,12 @@ Note: The `lipgloss` import may become unused if the only usage was the `warnSty
 ## Phase 2B: Wire into install (5 pts)
 
 ### Definition of Done
-- [ ] Mismatch check added to `runInstallBySlug`
-- [ ] Respects `-y` flag (defaults to Skip)
-- [ ] Only checks when `skulto.json` exists
-- [ ] All three actions work correctly
-- [ ] Code passes linter (`make lint`)
-- [ ] All tests pass (`make test`)
+- [x] Mismatch check added to `runInstallBySlug`
+- [x] Respects `-y` flag (defaults to Skip)
+- [x] Only checks when `skulto.json` exists
+- [x] All three actions work correctly
+- [x] Code passes linter (`make lint`)
+- [x] All tests pass (`make test`)
 
 ### Code Deltas
 
@@ -489,11 +489,11 @@ Note: `bufio` is already imported. `manifest` is the new import.
 ## Phase 2C: Wire into update (3 pts)
 
 ### Definition of Done
-- [ ] Post-pull mismatch check added when manifest exists
-- [ ] Mismatches prompted one at a time
-- [ ] Accept actions batch-applied in single `manifest.Write`
-- [ ] Code passes linter (`make lint`)
-- [ ] All tests pass (`make test`)
+- [x] Post-pull mismatch check added when manifest exists
+- [x] Mismatches prompted one at a time
+- [x] Accept actions batch-applied in single `manifest.Write`
+- [x] Code passes linter (`make lint`)
+- [x] All tests pass (`make test`)
 
 ### Code Deltas
 
@@ -597,10 +597,10 @@ func runUpdateSourceCheck(cwd string, database *db.DB) {
 ## Phase 3: Integration tests (1 pt)
 
 ### Definition of Done
-- [ ] Sync test covers mismatch detection with shared helper
-- [ ] Install test covers manifest-based mismatch detection
-- [ ] All tests pass (`make test`)
-- [ ] `make lint` passes
+- [x] Sync test covers mismatch detection with shared helper
+- [x] Install test covers manifest-based mismatch detection
+- [x] All tests pass (`make test`)
+- [x] `make lint` passes
 
 ### Code Deltas
 
