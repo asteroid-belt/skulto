@@ -60,7 +60,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		_ = database.Close()
 	}()
 
-	fmt.Printf("\U0001F4E6 Parsing repository URL: %s\n", repoURL)
+	fmt.Printf("Parsing repository URL: %s\n", repoURL)
 	source, err := scraper.ParseRepositoryURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("invalid repository URL: %w", err)
@@ -74,14 +74,14 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("repository %s already exists in database", source.ID)
 	}
 
-	fmt.Println("\n\U0001F4DD Adding repository to database...")
+	fmt.Println("\nAdding repository to database...")
 	if err := database.UpsertSource(source); err != nil {
 		return fmt.Errorf("failed to add source: %w", err)
 	}
 	fmt.Println("   \u2713 Repository added")
 
 	if !addNoSync {
-		fmt.Println("\n\U0001F504 Cloning and syncing repository...")
+		fmt.Println("\nCloning and syncing repository...")
 
 		scraperCfg := scraper.ScraperConfig{
 			Token:        cfg.GitHub.Token,
@@ -99,13 +99,18 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to sync %s: %w", source.ID, err)
 		}
 
-		fmt.Printf("   \u2713 Skills found: %d\n", result.SkillsNew)
+		fmt.Printf("   Skills found: %d\n", result.SkillsNew)
+		if result.SkillsWithThreats > 0 {
+			fmt.Printf("   ⚠ %d skill(s) with security warnings\n", result.SkillsWithThreats)
+		} else {
+			fmt.Println("   ✓ All skills clean")
+		}
 	} else {
-		fmt.Println("\n\u23ED\uFE0F  Skipping sync (--no-sync specified)")
+		fmt.Println("\nSkipping sync (--no-sync specified)")
 		fmt.Println("   Run 'skulto' and press 'p' to sync later")
 	}
 
-	fmt.Printf("\n🚀 Repository %s added successfully!\n", source.ID)
+	fmt.Printf("\nRepository %s added successfully!\n", source.ID)
 
 	// Track telemetry event
 	skillCount := 0

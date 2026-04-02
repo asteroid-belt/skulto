@@ -12,6 +12,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
+	"github.com/asteroid-belt/skulto/internal/security"
 )
 
 // IngestOptions provides optional overrides for skill ingestion.
@@ -23,10 +24,12 @@ type IngestOptions struct {
 
 // IngestionResult contains the result of ingesting a skill.
 type IngestionResult struct {
-	Name     string
-	OrigPath string
-	DestPath string
-	Skill    *models.Skill // The created skill record
+	Name            string
+	OrigPath        string
+	DestPath        string
+	Skill           *models.Skill // The created skill record
+	ScanHasWarning  bool          // true if security threats found
+	ScanThreatLevel string        // threat level string for display
 }
 
 // IngestionService handles copying discovered skills to skulto management.
@@ -137,11 +140,19 @@ func (s *IngestionService) IngestSkill(ctx context.Context, skill *models.Discov
 	// Success — remove backup
 	_ = os.RemoveAll(backupPath)
 
+	scanWarning := parsedSkill != nil && parsedSkill.SecurityStatus == models.SecurityStatusQuarantined
+	scanLevel := ""
+	if parsedSkill != nil {
+		scanLevel = string(parsedSkill.ThreatLevel)
+	}
+
 	return &IngestionResult{
-		Name:     skill.Name,
-		OrigPath: skill.Path,
-		DestPath: destPath,
-		Skill:    parsedSkill,
+		Name:            skill.Name,
+		OrigPath:        skill.Path,
+		DestPath:        destPath,
+		Skill:           parsedSkill,
+		ScanHasWarning:  scanWarning,
+		ScanThreatLevel: scanLevel,
 	}, nil
 }
 
@@ -248,6 +259,10 @@ func (s *IngestionService) parseAndCreateSkillRecord(destPath string, discovered
 
 	// Extract tags from content
 	tags := scraper.ExtractTagsWithContext(parsedSkill.Title, parsedSkill.Description, string(content))
+
+	// Scan for security threats before persisting
+	secScanner := security.NewScanner()
+	secScanner.ScanAndClassify(parsedSkill)
 
 	// Upsert skill with tags
 	if err := s.db.UpsertSkillWithTags(parsedSkill, tags); err != nil {

@@ -54,11 +54,11 @@ func runPull(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(sources) == 0 {
-		fmt.Println("📦 No repositories configured. Use 'skulto add <repo>' to add one.")
+		fmt.Println("No repositories configured. Use 'skulto add <repo>' to add one.")
 		return nil
 	}
 
-	fmt.Println("🔄 Pulling skill repositories...")
+	fmt.Println("Pulling skill repositories...")
 	fmt.Println()
 
 	// Create scraper
@@ -73,6 +73,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	// Initialize progress bar
 	progress := NewProgressBar(len(sources), 15)
 	reposErrored := 0
+	totalThreats := 0
 
 	// Sync each repository
 	for i, source := range sources {
@@ -87,10 +88,12 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 		if err != nil {
 			ClearLine()
-			fmt.Printf("   ❌ %s: %v\n", repoName, err)
+			fmt.Printf("   x %s: %v\n", repoName, err)
 			reposErrored++
 			continue
 		}
+
+		totalThreats += result.SkillsWithThreats
 
 		// Track telemetry per repo
 		telemetryClient.TrackRepoSynced(source.ID, result.SkillsNew, 0, result.SkillsUpdated)
@@ -103,18 +106,23 @@ func runPull(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Println("   ✓ Pull complete")
 	}
+	if totalThreats > 0 {
+		fmt.Printf("   ⚠ %d skill(s) with security warnings\n", totalThreats)
+	} else {
+		fmt.Println("   ✓ All skills clean")
+	}
 
 	// Sync install state
-	fmt.Println("\n🔍 Scanning AI tool directories for installed skills...")
+	fmt.Println("\nScanning AI tool directories for installed skills...")
 
 	inst := installer.New(database, cfg)
 	if err := inst.SyncInstallState(ctx); err != nil {
-		fmt.Printf("⚠️  Install sync warning: %v\n", err)
+		fmt.Printf("   Install sync warning: %v\n", err)
 	} else {
 		fmt.Println("   ✓ Install state reconciled")
 	}
 
-	fmt.Println("\n⚡ Pull complete!")
+	fmt.Println("\nPull complete!")
 
 	return nil
 }

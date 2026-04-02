@@ -179,6 +179,9 @@ func runBulkIngest(database *db.DB, cfg *config.Config, ingestionSvc *discovery.
 			continue
 		}
 
+		if result.ScanHasWarning {
+			fmt.Printf("  ⚠ %-8s %s\n", result.ScanThreatLevel, result.Name)
+		}
 		fmt.Printf("  Imported: %s -> %s\n", result.Name, result.DestPath)
 		telemetryClient.TrackSkillIngested(skill.Name, skill.Scope)
 		successCount++

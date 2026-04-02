@@ -688,7 +688,7 @@ func TestScrapeRepository_CleansUpStaleSkills(t *testing.T) {
 
 	scraper := &Scraper{
 		client: mock, parser: NewSkillParser(), db: database,
-		config: ScraperConfig{DataDir: tmpDir}, claimedSlugs: make(map[string]string),
+		config: ScraperConfig{DataDir: tmpDir}, claimedSlugs: make(map[string]string), claimedEmbeddings: make(map[string]string),
 	}
 
 	// Run real ScrapeRepository — exercises full production code path

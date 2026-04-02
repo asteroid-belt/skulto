@@ -2231,6 +2231,10 @@ func (m *Model) installCmd(skill *models.Skill) tea.Cmd {
 		// Use skill_installations as source of truth for installed status
 		hasInstalls, _ := m.db.HasInstallations(skill.ID)
 		if !hasInstalls {
+			// Scan before install (informational — does not block)
+			secScanner := security.NewScanner()
+			secScanner.ScanAndClassify(skill)
+			_ = m.db.UpdateSkillSecurity(skill)
 			// Installing (skill has no installations, user wants to install)
 			err = m.installer.Install(context.Background(), skill, skill.Source)
 			if err == nil {
@@ -2256,6 +2260,10 @@ func (m *Model) installCmd(skill *models.Skill) tea.Cmd {
 // installToLocationsCmd performs async skill installation to specific locations.
 func (m *Model) installToLocationsCmd(skill *models.Skill, source *models.Source, locations []installer.InstallLocation) tea.Cmd {
 	return func() tea.Msg {
+		// Scan before install (informational — does not block)
+		secScanner := security.NewScanner()
+		secScanner.ScanAndClassify(skill)
+		_ = m.db.UpdateSkillSecurity(skill)
 		err := m.installer.InstallTo(context.Background(), skill, source, locations)
 		return views.SkillInstalledMsg{
 			Success: err == nil,
@@ -2302,6 +2310,11 @@ func (m *Model) installLocalSkillCmd(skillInfo skillgen.SkillInfo, locations []i
 		// Get the source directory (parent of skill.md)
 		sourcePath := filepath.Dir(skillInfo.Path)
 
+		// Scan before install (informational — does not block)
+		secScanner := security.NewScanner()
+		secScanner.ScanAndClassify(skill)
+		_ = m.db.UpdateSkillSecurity(skill)
+
 		// Install using the local skill method
 		err = m.installer.InstallLocalSkillTo(context.Background(), skill, sourcePath, locations)
 		if err != nil {
@@ -2336,6 +2349,11 @@ func (m *Model) installLocalSkillFromDetailCmd(skill *models.Skill, locations []
 				Err:     fmt.Errorf("skill has no file path"),
 			}
 		}
+
+		// Scan before install (informational — does not block)
+		secScanner := security.NewScanner()
+		secScanner.ScanAndClassify(skill)
+		_ = m.db.UpdateSkillSecurity(skill)
 
 		// Install using the local skill method
 		err := m.installer.InstallLocalSkillTo(context.Background(), skill, sourcePath, locations)

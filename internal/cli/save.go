@@ -253,9 +253,12 @@ func safeIngestSkill(entry installer.UnmanagedEntry, cwd string, database *db.DB
 		BasePath: cwd,
 	}
 
-	_, err := svc.IngestSkill(context.TODO(), ds, opts)
+	result, err := svc.IngestSkill(context.TODO(), ds, opts)
 	if err != nil {
 		return fmt.Errorf("ingestion failed: %w", err)
+	}
+	if result.ScanHasWarning {
+		fmt.Printf("    ⚠ %-8s %s\n", result.ScanThreatLevel, result.Skill.Slug)
 	}
 
 	return nil

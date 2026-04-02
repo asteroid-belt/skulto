@@ -144,6 +144,29 @@ func expandHomePath(path string) string {
 	return path
 }
 
+// ScanSkill scans a skill by slug and returns scan metadata without installing.
+// Use this to check threats before prompting the user.
+func (s *InstallService) ScanSkill(slug string) (*ScanInfo, error) {
+	skill, err := s.db.GetSkillBySlug(slug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up skill: %w", err)
+	}
+	if skill == nil {
+		return nil, fmt.Errorf("skill not found: %s", slug)
+	}
+
+	scanner := security.NewScanner()
+	scanResult := scanner.ScanAndClassify(skill)
+	_ = s.db.UpdateSkillSecurity(skill)
+
+	return &ScanInfo{
+		Scanned:       true,
+		HasWarning:    scanResult.HasWarning,
+		ThreatLevel:   scanResult.ThreatLevel,
+		ThreatSummary: scanResult.ThreatSummary,
+	}, nil
+}
+
 // Install installs a skill to the specified locations.
 func (s *InstallService) Install(ctx context.Context, slug string, opts InstallOptions) (*InstallResult, error) {
 	// Look up skill
@@ -249,11 +272,16 @@ func (s *InstallService) InstallBatch(ctx context.Context, slugs []string, opts 
 	for i, slug := range slugs {
 		result, err := s.Install(ctx, slug, opts)
 		if err != nil {
-			// Still look up the skill for the result if possible
-			skill, _ := s.db.GetSkillBySlug(slug)
-			results[i] = InstallResult{
-				Skill:  skill,
-				Errors: []error{err},
+			if result != nil {
+				// Install() returns partial result with scan info even on error
+				results[i] = *result
+			} else {
+				// Skill not found — no scan possible
+				skill, _ := s.db.GetSkillBySlug(slug)
+				results[i] = InstallResult{
+					Skill:  skill,
+					Errors: []error{err},
+				}
 			}
 		} else {
 			results[i] = *result

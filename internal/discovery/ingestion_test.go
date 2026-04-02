@@ -392,6 +392,48 @@ Great for test-driven development workflows.
 	assert.Contains(t, tagNames, "python", "Should extract python tag from content")
 }
 
+func TestIngestionService_IngestSkill_SetsSecurityStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a clean skill
+	sourceDir := filepath.Join(tmpDir, "platforms", ".claude", "skills", "safe-skill")
+	require.NoError(t, os.MkdirAll(sourceDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "skill.md"), []byte("# Safe Skill\n\nJust a helpful skill."), 0644))
+
+	skultoDir := filepath.Join(tmpDir, ".agents", "skulto", "skills")
+	require.NoError(t, os.MkdirAll(skultoDir, 0755))
+
+	database := testDB(t)
+
+	ds := models.DiscoveredSkill{
+		Platform: "claude",
+		Scope:    "global",
+		Path:     sourceDir,
+		Name:     "safe-skill",
+	}
+	ds.ID = ds.GenerateID()
+
+	svc := &IngestionService{
+		db:              database,
+		destDirOverride: skultoDir,
+	}
+	result, err := svc.IngestSkill(context.Background(), &ds, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Skill)
+
+	// Security status should be set (not PENDING)
+	assert.NotEqual(t, models.SecurityStatusPending, result.Skill.SecurityStatus)
+	assert.False(t, result.ScanHasWarning, "Clean skill should not have warnings")
+
+	// Verify persisted in DB
+	skill, err := database.GetSkill(result.Skill.ID)
+	require.NoError(t, err)
+	require.NotNil(t, skill)
+	assert.Equal(t, models.SecurityStatusClean, skill.SecurityStatus)
+}
+
 func TestLocalSkillIDFormat(t *testing.T) {
 	// Local skill IDs use "local-" + name format to match startup sync
 	// This ensures skills aren't duplicated after DB reset

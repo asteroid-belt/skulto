@@ -229,6 +229,28 @@ func executeInstall(ctx context.Context, service *installer.InstallService, slug
 	// Get current install locations for comparison
 	installedLocations, _ := service.GetInstallLocations(ctx, slug)
 
+	// Scan before install
+	scanInfo, _ := service.ScanSkill(slug)
+	if scanInfo != nil && scanInfo.HasWarning {
+		style := threatStyle(scanInfo.ThreatLevel)
+		fmt.Printf("  %s %s\n", style.Render(fmt.Sprintf("⚠ %-8s", scanInfo.ThreatLevel)), fmt.Sprintf("%s — %s", slug, scanInfo.ThreatSummary))
+
+		if !installYes {
+			if !isInteractive() {
+				return trackCLIError("install", fmt.Errorf("security threats detected. Use -y to install anyway"))
+			}
+			fmt.Print("  Install anyway? [y/N] ")
+			var answer string
+			_, _ = fmt.Scanln(&answer)
+			if answer != "y" && answer != "Y" {
+				fmt.Println("  Installation cancelled.")
+				return nil
+			}
+		}
+	} else if scanInfo != nil {
+		fmt.Printf("  %s %s\n", cleanStyle.Render("✓ CLEAN   "), slug)
+	}
+
 	fmt.Printf("Installing %s...\n", slug)
 	result, err := service.Install(ctx, slug, opts)
 	if err != nil {

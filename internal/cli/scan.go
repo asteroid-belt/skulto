@@ -160,6 +160,20 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// threatStyle returns the lipgloss style for a given threat level.
+func threatStyle(level models.ThreatLevel) lipgloss.Style {
+	switch level {
+	case models.ThreatLevelCritical:
+		return criticalStyle
+	case models.ThreatLevelHigh:
+		return highStyle
+	case models.ThreatLevelMedium:
+		return mediumStyle
+	default:
+		return lowStyle
+	}
+}
+
 func printScanResult(result *security.ScanResult, current, total int) {
 	prefix := fmt.Sprintf("[%d/%d]", current, total)
 

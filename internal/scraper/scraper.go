@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/security"
 )
 
 // LicenseInfo holds detected license information for a repository.
@@ -24,14 +26,15 @@ type RepositoryLicenseInfo struct {
 
 // ScrapeResult contains the results of a scraping operation.
 type ScrapeResult struct {
-	SourcesProcessed int
-	SourcesSkipped   int
-	SkillsFound      int
-	SkillsNew        int
-	SkillsUpdated    int
-	SkillsRemoved    int
-	Errors           []error
-	Duration         time.Duration
+	SourcesProcessed  int
+	SourcesSkipped    int
+	SkillsFound       int
+	SkillsNew         int
+	SkillsUpdated     int
+	SkillsRemoved     int
+	SkillsWithThreats int
+	Errors            []error
+	Duration          time.Duration
 }
 
 // ScraperStats contains scraper statistics.
@@ -66,22 +69,24 @@ type ScraperConfig struct {
 
 // Scraper orchestrates the GitHub scraping pipeline.
 type Scraper struct {
-	client       Client
-	gitClient    *GitClient // Keep reference for cleanup operations
-	parser       *SkillParser
-	db           *db.DB
-	config       ScraperConfig
-	dedupMutex   sync.Mutex        // Protects deduplication checks to prevent race conditions
-	claimedSlugs map[string]string // Maps slug -> skillID for pending inserts (not yet in DB)
+	client            Client
+	gitClient         *GitClient // Keep reference for cleanup operations
+	parser            *SkillParser
+	db                *db.DB
+	config            ScraperConfig
+	dedupMutex        sync.Mutex        // Protects deduplication checks to prevent race conditions
+	claimedSlugs      map[string]string // Maps slug -> skillID for pending inserts (not yet in DB)
+	claimedEmbeddings map[string]string // Maps skillID -> embeddingID for pending inserts
 }
 
 // NewScraperWithConfig creates a new scraper with full configuration support.
 func NewScraperWithConfig(cfg ScraperConfig, database *db.DB) *Scraper {
 	s := &Scraper{
-		parser:       NewSkillParser(),
-		db:           database,
-		config:       cfg,
-		claimedSlugs: make(map[string]string),
+		parser:            NewSkillParser(),
+		db:                database,
+		config:            cfg,
+		claimedSlugs:      make(map[string]string),
+		claimedEmbeddings: make(map[string]string),
 	}
 
 	// Clone directory is always DataDir/repositories
@@ -391,6 +396,11 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 	}
 	var skillBatch []skillData
 
+	// Sort skill files by path depth (shallowest first) so canonical paths win dedup
+	sort.Slice(skillFiles, func(i, j int) bool {
+		return strings.Count(skillFiles[i].Path, "/") < strings.Count(skillFiles[j].Path, "/")
+	})
+
 	// First pass: parse all skills
 	for _, sf := range skillFiles {
 		select {
@@ -443,6 +453,10 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 		// Extract tags from content with title/description boosting
 		tags := ExtractTagsWithContext(skill.Title, skill.Description, content)
 
+		// Scan for security threats before persisting
+		secScanner := security.NewScanner()
+		secScanner.ScanAndClassify(skill)
+
 		skillBatch = append(skillBatch, skillData{
 			skill:    skill,
 			tags:     tags,
@@ -463,12 +477,15 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 		if err != nil {
 			result.Errors = append(result.Errors, err)
 		} else {
-			// Count new vs updated
+			// Count new vs updated, and count threats
 			for _, sd := range skillBatch {
 				if sd.existing == nil {
 					result.SkillsNew++
 				} else {
 					result.SkillsUpdated++
+				}
+				if sd.skill.SecurityStatus == models.SecurityStatusQuarantined {
+					result.SkillsWithThreats++
 				}
 			}
 		}
@@ -620,7 +637,12 @@ func (s *Scraper) deduplicateSkill(skill *models.Skill) (bool, error) {
 	for {
 		// Check if slug is already claimed by another pending skill (not yet in DB)
 		if claimedByID, claimed := s.claimedSlugs[skill.Slug]; claimed && claimedByID != skill.ID {
-			// Slug is claimed by another skill - try next suffix
+			// Check if the claiming skill has identical content (same EmbeddingID)
+			if claimedEmbID, ok := s.claimedEmbeddings[claimedByID]; ok && claimedEmbID == skill.EmbeddingID {
+				// Identical content — skip this duplicate
+				return true, nil
+			}
+			// Different content — try next suffix
 			suffix++
 			skill.Slug = fmt.Sprintf("%s-%d", baseSlug, suffix)
 			if suffix > 100 {
@@ -637,6 +659,7 @@ func (s *Scraper) deduplicateSkill(skill *models.Skill) (bool, error) {
 		if existing == nil {
 			// No conflict - slug is unique, claim it
 			s.claimedSlugs[skill.Slug] = skill.ID
+			s.claimedEmbeddings[skill.ID] = skill.EmbeddingID
 			return false, nil
 		}
 
@@ -644,12 +667,17 @@ func (s *Scraper) deduplicateSkill(skill *models.Skill) (bool, error) {
 		if existing.ID == skill.ID {
 			// Same skill, just updating
 			s.claimedSlugs[skill.Slug] = skill.ID
+			s.claimedEmbeddings[skill.ID] = skill.EmbeddingID
 			return false, nil
 		}
 
 		// Different skill with same slug - check content
 		if existing.EmbeddingID == skill.EmbeddingID {
-			// Identical content - skip this duplicate
+			// Identical content — prefer the shallowest path (fewer slashes = more canonical)
+			if strings.Count(skill.FilePath, "/") < strings.Count(existing.FilePath, "/") {
+				existing.FilePath = skill.FilePath
+				_ = s.db.UpdateSkill(existing)
+			}
 			return true, nil
 		}
 

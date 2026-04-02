@@ -96,6 +96,9 @@ type InstallResult struct {
 	Paths             []string               `json:"paths,omitempty"`              // Symlink paths created
 	NeedsSelection    bool                   `json:"needs_selection,omitempty"`    // True when the LLM should ask the user to choose platforms
 	DetectedPlatforms []DetectedPlatformInfo `json:"detected_platforms,omitempty"` // Available platforms for selection
+	SecurityStatus    string                 `json:"security_status,omitempty"`    // "CLEAN" or "QUARANTINED"
+	ThreatLevel       string                 `json:"threat_level,omitempty"`       // "NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"
+	ThreatSummary     string                 `json:"threat_summary,omitempty"`     // Human-readable summary
 }
 
 // DetectedPlatformInfo describes a detected platform returned to the LLM for user selection.
@@ -486,9 +489,12 @@ func (s *Server) handleInstall(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	installResult := InstallResult{
-		Success: true,
-		Message: fmt.Sprintf("Skill '%s' installed to %d platform(s). Restart your agent for the skill to take effect.", result.Skill.Title, len(paths)),
-		Paths:   paths,
+		Success:        true,
+		Message:        fmt.Sprintf("Skill '%s' installed to %d platform(s). Restart your agent for the skill to take effect.", result.Skill.Title, len(paths)),
+		Paths:          paths,
+		SecurityStatus: string(result.Skill.SecurityStatus),
+		ThreatLevel:    string(result.Scan.ThreatLevel),
+		ThreatSummary:  result.Scan.ThreatSummary,
 	}
 
 	data, _ := json.Marshal(installResult)
