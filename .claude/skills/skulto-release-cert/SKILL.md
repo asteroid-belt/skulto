@@ -134,6 +134,19 @@ Test with stale DB (skills on disk but not in DB):
 | 3 | `skulto save` | Reconciles then saves |
 | 4 | Plain dirs in project | Silently skipped, no ingestion prompts |
 
+### 2e: Stale skill cleanup
+
+Test that `skulto pull` removes DB records for skills no longer in upstream repos:
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | Insert fake stale skill into DB | `sqlite3 ~/.agents/skulto/skulto.db "INSERT OR IGNORE INTO skills (id, slug, title, source_id, file_path) VALUES ('cert-stale-id', 'cert-stale-skill', 'Cert Stale', 'asteroid-belt/skills', 'skills/cert-stale-skill/SKILL.md');"` |
+| 2 | Verify in DB | `sqlite3 ~/.agents/skulto/skulto.db "SELECT slug FROM skills WHERE slug = 'cert-stale-skill';"` returns `cert-stale-skill` |
+| 3 | `skulto pull` | Output includes `Removed stale skill: cert-stale-skill` |
+| 4 | Verify gone from DB | Same query returns empty |
+
+This simulates a skill that was indexed then removed upstream. The pull detects the mismatch and cleans up.
+
 ## Pass 3: Security Audit
 
 Scan the codebase for vulnerabilities. Each category must be clean.
@@ -196,6 +209,7 @@ PASS 2: CLI Walkthrough
   Clean slate:    PASS / FAIL (N/N steps)
   Migration:      PASS / FAIL / SKIPPED
   Reconciliation: PASS / FAIL
+  Stale cleanup:  PASS / FAIL
 
 PASS 3: Security Audit
   Secrets scan:   CLEAN / FOUND

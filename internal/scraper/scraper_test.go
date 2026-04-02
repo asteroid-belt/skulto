@@ -1,13 +1,18 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResponseCache(t *testing.T) {
@@ -607,4 +612,102 @@ func TestDeduplicationIsThreadSafe(t *testing.T) {
 
 	// Verify that we got unique slugs (no duplicates)
 	t.Logf("Generated %d unique slugs from %d goroutines", len(slugs), numGoroutines)
+}
+
+// mockClient implements Client for testing stale skill cleanup.
+type mockClient struct {
+	repoInfo   *RepoInfo
+	skillFiles []*SkillFile
+	contents   map[string]string
+}
+
+func (m *mockClient) GetRepositoryInfo(_ context.Context, _, _ string) (*RepoInfo, error) {
+	return m.repoInfo, nil
+}
+func (m *mockClient) ListSkillFiles(_ context.Context, _, _, _ string) ([]*SkillFile, error) {
+	return m.skillFiles, nil
+}
+func (m *mockClient) GetFileContent(_ context.Context, _, _, path, _ string) (string, error) {
+	if c, ok := m.contents[path]; ok {
+		return c, nil
+	}
+	return "", fmt.Errorf("not found: %s", path)
+}
+func (m *mockClient) GetLicenseFile(_ context.Context, _, _, _ string) (string, string, string, error) {
+	return "", "", "", nil
+}
+func (m *mockClient) Stats() (int, int, int) { return 0, 0, 0 }
+func (m *mockClient) ResetStats()            {}
+func (m *mockClient) ClearCache()            {}
+
+func TestScrapeRepository_CleansUpStaleSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	database, err := db.New(db.DefaultConfig(dbPath))
+	require.NoError(t, err)
+	defer func() { _ = database.Close() }()
+
+	sourceID := "test-owner/test-repo"
+	source := &models.Source{
+		ID: sourceID, Owner: "test-owner", Repo: "test-repo", FullName: sourceID,
+	}
+	require.NoError(t, database.UpsertSource(source))
+
+	// Pre-populate DB with a stale skill (will NOT appear in mock skill files)
+	staleSkill := &models.Skill{
+		ID: "stale-id", Slug: "stale-skill", Title: "Stale",
+		SourceID: &sourceID, FilePath: "skills/stale-skill/SKILL.md",
+	}
+	require.NoError(t, database.UpsertSkill(staleSkill))
+
+	// Create symlink + installation for stale skill
+	symlinkDir := filepath.Join(tmpDir, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(symlinkDir, 0755))
+	staleSymlink := filepath.Join(symlinkDir, "stale-skill")
+	require.NoError(t, os.Symlink(tmpDir, staleSymlink))
+	require.NoError(t, database.AddInstallation(&models.SkillInstallation{
+		SkillID: staleSkill.ID, Platform: "claude", Scope: "global",
+		BasePath: tmpDir, SymlinkPath: staleSymlink,
+	}))
+
+	// Mock returns only keep-skill (stale-skill is NOT listed)
+	keepID := generateSkillID("test-repo", "skills/keep-skill/SKILL.md")
+	mock := &mockClient{
+		repoInfo: &RepoInfo{
+			FullName:      "test-owner/test-repo",
+			DefaultBranch: "main",
+			CommitSHA:     "new-sha",
+		},
+		skillFiles: []*SkillFile{
+			{ID: keepID, Path: "skills/keep-skill/SKILL.md", RepoName: "test-repo", Owner: "test-owner", Repo: "test-repo"},
+		},
+		contents: map[string]string{
+			"skills/keep-skill/SKILL.md": "---\nname: keep-skill\ndescription: A kept skill\n---\n# Keep Skill\nThis skill stays.",
+		},
+	}
+
+	scraper := &Scraper{
+		client: mock, parser: NewSkillParser(), db: database,
+		config: ScraperConfig{DataDir: tmpDir}, claimedSlugs: make(map[string]string),
+	}
+
+	// Run real ScrapeRepository — exercises full production code path
+	result, err := scraper.ScrapeRepository(context.Background(), "test-owner", "test-repo")
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.SkillsRemoved, "should remove 1 stale skill")
+
+	// Stale skill gone from DB
+	staleCheck, err := database.GetSkill(staleSkill.ID)
+	require.NoError(t, err)
+	assert.Nil(t, staleCheck, "stale skill should be deleted from DB")
+
+	// Symlink removed
+	_, err = os.Lstat(staleSymlink)
+	assert.True(t, os.IsNotExist(err), "stale symlink should be removed")
+
+	// Installation records gone
+	installs, err := database.GetInstallations(staleSkill.ID)
+	require.NoError(t, err)
+	assert.Empty(t, installs, "installation records should be removed")
 }

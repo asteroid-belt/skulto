@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -28,6 +29,7 @@ type ScrapeResult struct {
 	SkillsFound      int
 	SkillsNew        int
 	SkillsUpdated    int
+	SkillsRemoved    int
 	Errors           []error
 	Duration         time.Duration
 }
@@ -241,6 +243,7 @@ func (s *Scraper) ScrapeSeedsWithOptions(ctx context.Context, opts ScrapeSeedsOp
 			result.SkillsFound += res.result.SkillsFound
 			result.SkillsNew += res.result.SkillsNew
 			result.SkillsUpdated += res.result.SkillsUpdated
+			result.SkillsRemoved += res.result.SkillsRemoved
 		}
 	}
 
@@ -313,7 +316,8 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 		return nil, fmt.Errorf("get source: %w", err)
 	}
 
-	// If source exists and commit hasn't changed, skip scraping (unless force=true)
+	// If source exists and commit hasn't changed, skip full re-scraping (unless force=true)
+	// Still check for stale skills that may have been manually added to DB
 	if !force && existingSource != nil && existingSource.LastCommitSHA == repoInfo.CommitSHA && repoInfo.CommitSHA != "" {
 		result.SourcesSkipped = 1
 		// Still update the metadata
@@ -324,6 +328,34 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 		if err := s.db.UpsertSource(source); err != nil {
 			return nil, fmt.Errorf("update source metadata: %w", err)
 		}
+
+		// Still clean up stale skills even when skipping re-scrape
+		skillPath := ""
+		for _, seed := range OfficialSeeds {
+			if seed.Owner == owner && seed.Repo == repo {
+				skillPath = seed.SkillPath
+				break
+			}
+		}
+		for _, seed := range CuratedSeeds {
+			if seed.Owner == owner && seed.Repo == repo {
+				skillPath = seed.SkillPath
+				break
+			}
+		}
+		if skillFiles, err := s.client.ListSkillFiles(ctx, owner, repo, skillPath); err == nil {
+			foundIDs := make(map[string]bool, len(skillFiles))
+			for _, sf := range skillFiles {
+				foundIDs[sf.ID] = true
+			}
+			s.cleanupStaleSkills(source.ID, foundIDs, owner, repo, result)
+		}
+
+		// Update skill count after potential cleanup
+		if result.SkillsRemoved > 0 {
+			_ = s.db.UpdateSourceSkillCount(source.ID)
+		}
+
 		result.Duration = time.Since(repoStart)
 		return result, nil
 	}
@@ -442,7 +474,16 @@ func (s *Scraper) scrapeRepositoryWithOptions(ctx context.Context, owner, repo s
 		}
 	}
 
-	// Update source skill count
+	// Clean up stale skills: DB records for skills no longer in this repo.
+	// Use skillFiles (all found on disk) not skillBatch (parsed only) to
+	// avoid false stale detection on parse errors.
+	foundIDs := make(map[string]bool, len(skillFiles))
+	for _, sf := range skillFiles {
+		foundIDs[sf.ID] = true
+	}
+	s.cleanupStaleSkills(source.ID, foundIDs, owner, repo, result)
+
+	// Update source skill count (after cleanup so count reflects deletions)
 	if err := s.db.UpdateSourceSkillCount(source.ID); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("update skill count: %w", err))
 	}
@@ -507,6 +548,7 @@ func (s *Scraper) ScrapeSearch(ctx context.Context) (*ScrapeResult, error) {
 			result.SkillsFound += res.SkillsFound
 			result.SkillsNew += res.SkillsNew
 			result.SkillsUpdated += res.SkillsUpdated
+			result.SkillsRemoved += res.SkillsRemoved
 		}
 	}
 
@@ -530,6 +572,7 @@ func (s *Scraper) Sync(ctx context.Context) (*ScrapeResult, error) {
 	result.SkillsFound += seedResult.SkillsFound
 	result.SkillsNew += seedResult.SkillsNew
 	result.SkillsUpdated += seedResult.SkillsUpdated
+	result.SkillsRemoved += seedResult.SkillsRemoved
 	result.Errors = append(result.Errors, seedResult.Errors...)
 
 	// Then run search discovery (if we have API quota left)
@@ -543,6 +586,7 @@ func (s *Scraper) Sync(ctx context.Context) (*ScrapeResult, error) {
 			result.SkillsFound += searchResult.SkillsFound
 			result.SkillsNew += searchResult.SkillsNew
 			result.SkillsUpdated += searchResult.SkillsUpdated
+			result.SkillsRemoved += searchResult.SkillsRemoved
 			result.Errors = append(result.Errors, searchResult.Errors...)
 		}
 	}
@@ -985,4 +1029,48 @@ func (s *Scraper) collectDirectoryFilesRecursively(ctx context.Context, owner, r
 	}
 
 	return nil
+}
+
+// cleanupStaleSkills removes DB records for skills that no longer exist in a repository.
+// foundIDs contains the skill IDs currently in the repo. Any DB skill for this source
+// not in foundIDs is stale and gets cleaned up: symlinks, installations, tags, then skill record.
+func (s *Scraper) cleanupStaleSkills(sourceID string, foundIDs map[string]bool, owner, repo string, result *ScrapeResult) {
+	existingSkills, err := s.db.GetSkillsBySourceID(sourceID)
+	if err != nil {
+		return
+	}
+
+	for _, existing := range existingSkills {
+		if foundIDs[existing.ID] {
+			continue
+		}
+
+		// Stale skill — remove symlinks first, then DB records.
+		installations, instErr := s.db.GetInstallations(existing.ID)
+		if instErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("get installations for stale skill %s: %w", existing.Slug, instErr))
+		}
+		for _, inst := range installations {
+			if inst.SymlinkPath != "" {
+				if info, lErr := os.Lstat(inst.SymlinkPath); lErr == nil && (info.Mode()&os.ModeSymlink != 0) {
+					if rmErr := os.Remove(inst.SymlinkPath); rmErr != nil {
+						result.Errors = append(result.Errors, fmt.Errorf("remove symlink for stale skill %s: %w", existing.Slug, rmErr))
+					}
+				}
+			}
+		}
+
+		if rmErr := s.db.RemoveAllInstallations(existing.ID); rmErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("remove installations for stale skill %s: %w", existing.Slug, rmErr))
+		}
+		if tagErr := s.db.Exec("DELETE FROM skill_tags WHERE skill_id = ?", existing.ID).Error; tagErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("remove tags for stale skill %s: %w", existing.Slug, tagErr))
+		}
+		if delErr := s.db.HardDeleteSkill(existing.ID); delErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("delete stale skill %s: %w", existing.Slug, delErr))
+		} else {
+			result.SkillsRemoved++
+			fmt.Printf("   Removed stale skill: %s (no longer in %s/%s)\n", existing.Slug, owner, repo)
+		}
+	}
 }
