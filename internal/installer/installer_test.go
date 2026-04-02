@@ -375,7 +375,7 @@ func TestInstallerSourceNotFound(t *testing.T) {
 
 	err := inst.Install(context.Background(), skill, source)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "skill directory not found")
+	assert.Contains(t, err.Error(), "skulto pull")
 }
 
 // TestReInstall tests reinstalling a skill.

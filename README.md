@@ -209,6 +209,27 @@ teach                  claude (global + project)
 2 skill(s) installed
 ```
 
+### Auto-Reconciliation
+
+Both `skulto save` and `skulto check` automatically detect skills that exist on disk (as symlinks in your project's platform dirs) but are missing from the database. This happens after migrations, database resets, or when a teammate installs skills outside of Skulto.
+
+```bash
+$ skulto check
+
+RECONCILED 2 project skill(s)
+  brainstorming  claude
+  modern-python  codex
+
+SKILL                  INSTALLED LOCATIONS
+─────────────────────────────────────────────────────────────
+brainstorming          claude (project)
+modern-python          codex (project)
+
+2 skill(s) installed
+```
+
+Plain directories in your project (skills committed directly to the repo) are left alone — they don't need Skulto management.
+
 ## Usage
 
 ### TUI Mode (Default)
@@ -380,8 +401,8 @@ Scan skills for security threats:
 # Scan all skills
 skulto scan --all
 
-# Scan specific skill
-skulto scan --skill abc123
+# Scan specific skill by slug or ID
+skulto scan --skill teach
 
 # Scan skills from a source
 skulto scan --source asteroid-belt/skills

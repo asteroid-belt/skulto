@@ -126,9 +126,9 @@ func TestCharacterization_Install_SourcePathNotFound(t *testing.T) {
 
 	err = inst.Install(context.Background(), skill, source)
 
-	// Current behavior: returns error with "skill directory not found"
+	// Current behavior: returns error suggesting skulto pull
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "skill directory not found")
+	assert.Contains(t, err.Error(), "skulto pull")
 }
 
 // TestCharacterization_Uninstall_NilSkill captures behavior when skill is nil.

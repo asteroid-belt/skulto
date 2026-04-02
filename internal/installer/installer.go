@@ -219,7 +219,11 @@ func (i *Installer) InstallTo(ctx context.Context, skill *models.Skill, source *
 
 	// Verify source path exists
 	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		return fmt.Errorf("skill directory not found: %s", sourcePath)
+		repoDir := filepath.Join(i.cfg.BaseDir, "repositories", source.Owner, source.Repo)
+		if _, repoErr := os.Stat(repoDir); os.IsNotExist(repoErr) {
+			return fmt.Errorf("repository not cloned: %s/%s — run 'skulto pull' to sync", source.Owner, source.Repo)
+		}
+		return fmt.Errorf("skill directory not found: %s — the repository may be outdated, run 'skulto pull' to sync", sourcePath)
 	}
 
 	return i.installToLocationsInternal(skill, sourcePath, locations)
