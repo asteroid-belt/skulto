@@ -10,6 +10,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
 	"github.com/asteroid-belt/skulto/internal/models"
+	"github.com/asteroid-belt/skulto/internal/security"
 	"github.com/asteroid-belt/skulto/internal/telemetry"
 )
 
@@ -20,11 +21,21 @@ type InstallOptions struct {
 	Confirm   bool           // true = skip prompts (for non-interactive mode)
 }
 
+// ScanInfo captures security scan metadata for a single skill.
+// Callers use this to render scan results in their own way (CLI prints, MCP returns JSON, TUI emits tea.Msg).
+type ScanInfo struct {
+	Scanned       bool               // true if scan ran
+	HasWarning    bool               // true if any threats found
+	ThreatLevel   models.ThreatLevel // highest threat level
+	ThreatSummary string             // human-readable summary
+}
+
 // InstallResult captures the outcome of an installation.
 type InstallResult struct {
 	Skill     *models.Skill
 	Locations []InstallLocation
 	Errors    []error
+	Scan      ScanInfo // Security scan metadata (callers render this)
 }
 
 // DetectedPlatform describes a platform with its installation status.
@@ -144,6 +155,18 @@ func (s *InstallService) Install(ctx context.Context, slug string, opts InstallO
 		return nil, fmt.Errorf("skill not found: %s", slug)
 	}
 
+	// Scan skill for security threats (informational — does not block)
+	scanner := security.NewScanner()
+	scanResult := scanner.ScanAndClassify(skill)
+	scanInfo := ScanInfo{
+		Scanned:       true,
+		HasWarning:    scanResult.HasWarning,
+		ThreatLevel:   scanResult.ThreatLevel,
+		ThreatSummary: scanResult.ThreatSummary,
+	}
+	// Persist scan fields; ignore DB error (scan is informational)
+	_ = s.db.UpdateSkillSecurity(skill)
+
 	// Get source if skill has one
 	var source *models.Source
 	if skill.SourceID != nil {
@@ -192,12 +215,12 @@ func (s *InstallService) Install(ctx context.Context, slug string, opts InstallO
 	if skill.IsLocal {
 		// Local skill - use InstallLocalSkillTo
 		if err := s.installer.InstallLocalSkillTo(ctx, skill, skill.FilePath, locations); err != nil {
-			return &InstallResult{Skill: skill, Errors: []error{err}}, err
+			return &InstallResult{Skill: skill, Errors: []error{err}, Scan: scanInfo}, err
 		}
 	} else if source != nil {
 		// Remote skill with source - use InstallTo
 		if err := s.installer.InstallTo(ctx, skill, source, locations); err != nil {
-			return &InstallResult{Skill: skill, Errors: []error{err}}, err
+			return &InstallResult{Skill: skill, Errors: []error{err}, Scan: scanInfo}, err
 		}
 	} else {
 		return nil, fmt.Errorf("cannot install skill without source: %s", slug)
@@ -214,6 +237,7 @@ func (s *InstallService) Install(ctx context.Context, slug string, opts InstallO
 	return &InstallResult{
 		Skill:     skill,
 		Locations: installed,
+		Scan:      scanInfo,
 	}, nil
 }
 
