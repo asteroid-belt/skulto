@@ -116,6 +116,15 @@ func (sv *SearchView) Init(tc telemetry.Client) {
 	sv.loadAllTags()
 }
 
+// IsAcceptingTextInput reports whether this view routes printable characters
+// to a text input. Always true for SearchView: every navigation state
+// (search bar focused, tag grid focused, results list focused) routes
+// printable characters to the search bar via the existing default branches.
+// The global q/p shortcuts must therefore be suppressed throughout the view.
+func (sv *SearchView) IsAcceptingTextInput() bool {
+	return true
+}
+
 // loadAllTags fetches all tags from the database.
 func (sv *SearchView) loadAllTags() {
 	tags, err := sv.db.ListTags("")
@@ -192,7 +201,7 @@ func (sv *SearchView) updateTagGrid(key string) (bool, bool, tea.Cmd) {
 		sv.tagGrid.MoveRight()
 		return false, false, nil
 
-	case "up", "k":
+	case "up":
 		atTop := sv.tagGrid.MoveUp()
 		if atTop {
 			// Move focus back to search bar
@@ -202,7 +211,7 @@ func (sv *SearchView) updateTagGrid(key string) (bool, bool, tea.Cmd) {
 		}
 		return false, false, nil
 
-	case "down", "j":
+	case "down":
 		sv.tagGrid.MoveDown()
 		return false, false, nil
 
@@ -264,11 +273,11 @@ func (sv *SearchView) updateSearchMode(key string) (bool, bool, tea.Cmd) {
 	}
 
 	switch key {
-	case "up", "k":
+	case "up":
 		sv.navigateUp()
 		return false, false, nil
 
-	case "down", "j":
+	case "down":
 		sv.navigateDown()
 		return false, false, nil
 
