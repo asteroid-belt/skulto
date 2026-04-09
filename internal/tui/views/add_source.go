@@ -51,6 +51,12 @@ func (asv *AddSourceView) Init() {
 	asv.error = ""
 }
 
+// IsAcceptingTextInput reports whether the URL input is currently accepting
+// keystrokes.
+func (asv *AddSourceView) IsAcceptingTextInput() bool {
+	return asv.input.Focused()
+}
+
 // SetSize sets the width and height of the view.
 func (asv *AddSourceView) SetSize(width, height int) {
 	asv.width = width

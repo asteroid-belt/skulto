@@ -68,6 +68,14 @@ func (tv *TagView) Init() {
 	tv.searchBar.Clear()
 }
 
+// IsAcceptingTextInput reports whether the search bar is currently accepting
+// keystrokes. Returns true while searchActive even when navigating filtered
+// results, because any printable key the user types is meant to extend the
+// search query.
+func (tv *TagView) IsAcceptingTextInput() bool {
+	return tv.searchActive
+}
+
 // SetTag sets the tag and loads skills asynchronously
 func (tv *TagView) SetTag(tag *models.Tag) tea.Cmd {
 	tv.tag = tag
@@ -162,14 +170,14 @@ func (tv *TagView) Update(key string) (bool, bool) {
 // updateSearch handles input while search is active
 func (tv *TagView) updateSearch(key string) (bool, bool) {
 	switch key {
-	case "up", "k":
+	case "up":
 		if tv.selectedIdx > 0 {
 			tv.selectedIdx--
 			tv.adjustScroll()
 		}
 		return false, false
 
-	case "down", "j":
+	case "down":
 		if tv.selectedIdx < len(tv.filteredSkills)-1 {
 			tv.selectedIdx++
 			tv.adjustScroll()

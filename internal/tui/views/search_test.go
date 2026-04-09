@@ -401,3 +401,104 @@ func TestSearchView_ShowsLocalBadge(t *testing.T) {
 	// The remote skill should also be present but not show [local]
 	assert.Contains(t, view, "Remote Skill")
 }
+
+func TestSearchView_IsAcceptingTextInput_alwaysTrue(t *testing.T) {
+	database := setupSearchTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	sv := NewSearchView(database, &config.Config{}, nil)
+	sv.SetSize(80, 24)
+	sv.Init(noopTelemetry())
+
+	// Search bar focused, empty query (tag mode)
+	assert.True(t, sv.IsAcceptingTextInput())
+
+	// Move focus to tag grid (search bar blurred)
+	sv.Update("tab")
+	assert.True(t, sv.IsAcceptingTextInput(),
+		"tag grid focused: still accepts text because default branch refocuses bar")
+
+	// Type characters to enter search mode (query >= 3)
+	sv.Update("g")
+	sv.Update("o")
+	sv.Update("l")
+	assert.True(t, sv.IsAcceptingTextInput())
+}
+
+func TestSearchView_updateTagGrid_jkAreTypable(t *testing.T) {
+	database := setupSearchTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Insert at least one tag so the grid has content
+	tag := models.Tag{ID: "java", Name: "java", Slug: "java", Count: 1, Category: "language"}
+	err := database.CreateTag(&tag)
+	assert.NoError(t, err)
+
+	sv := NewSearchView(database, &config.Config{}, nil)
+	sv.SetSize(80, 24)
+	sv.Init(noopTelemetry())
+
+	// Move focus to tag grid via tab
+	sv.Update("tab")
+	assert.Equal(t, FocusTagGrid, sv.focusArea)
+
+	// Type "j" — should refocus search bar and append to query
+	sv.Update("j")
+
+	assert.Equal(t, FocusSearchBar, sv.focusArea,
+		"typing j should refocus the search bar (was: navigated grid)")
+	assert.Contains(t, sv.query, "j",
+		"j should land in the search query")
+}
+
+func TestSearchView_updateTagGrid_arrowsStillNavigate(t *testing.T) {
+	database := setupSearchTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	// Insert multiple tags so the grid can navigate
+	for _, slug := range []string{"go", "python", "rust"} {
+		err := database.CreateTag(&models.Tag{
+			ID: slug, Name: slug, Slug: slug, Count: 1, Category: "language",
+		})
+		assert.NoError(t, err)
+	}
+
+	sv := NewSearchView(database, &config.Config{}, nil)
+	sv.SetSize(80, 24)
+	sv.Init(noopTelemetry())
+
+	sv.Update("tab")
+	assert.Equal(t, FocusTagGrid, sv.focusArea)
+
+	// Down arrow should still navigate (regression check)
+	sv.Update("down")
+	assert.Equal(t, FocusTagGrid, sv.focusArea,
+		"down arrow should not refocus the search bar")
+}
+
+func TestSearchView_updateSearchMode_jkAreTypable(t *testing.T) {
+	database := setupSearchTestDB(t)
+	defer func() { _ = database.Close() }()
+
+	sv := NewSearchView(database, &config.Config{}, nil)
+	sv.SetSize(80, 24)
+	sv.Init(noopTelemetry())
+
+	// Type a 3+ char query to enter search mode
+	sv.Update("g")
+	sv.Update("o")
+	sv.Update("l")
+	assert.GreaterOrEqual(t, len(sv.query), MinSearchChars,
+		"should be in search mode (query >= 3)")
+
+	// Blur the search bar to simulate user pressing down to navigate results
+	sv.searchBar.Blur()
+
+	// Type "j" — should refocus and append (was: navigated results)
+	sv.Update("j")
+
+	assert.True(t, sv.searchBar.Focused(),
+		"typing j should refocus the search bar")
+	assert.Contains(t, sv.query, "j",
+		"j should be appended to query")
+}

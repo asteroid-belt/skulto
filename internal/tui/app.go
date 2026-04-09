@@ -510,6 +510,23 @@ func (m *Model) syncInstallState() {
 	_ = m.installer.SyncInstallState(ctx) // Ignore errors - sync is best-effort
 }
 
+// currentViewIsAcceptingTextInput reports whether the active view will route
+// printable characters to a text input. Used to suppress single-character
+// global shortcuts (q, p) that would otherwise be eaten before reaching the
+// input.
+func (m *Model) currentViewIsAcceptingTextInput() bool {
+	switch m.currentView {
+	case ViewSearch:
+		return m.searchView.IsAcceptingTextInput()
+	case ViewTag:
+		return m.tagView.IsAcceptingTextInput()
+	case ViewAddSource:
+		return m.addSourceView.IsAcceptingTextInput()
+	default:
+		return false
+	}
+}
+
 // getCurrentViewCommands returns the keyboard commands for the current view.
 func (m *Model) getCurrentViewCommands() views.ViewCommands {
 	switch m.currentView {
@@ -694,7 +711,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		}
-		if key == "q" {
+		if key == "q" && !m.currentViewIsAcceptingTextInput() {
 			m.showingQuitConfirm = true
 			return m, nil
 		}
@@ -717,7 +734,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Handle pull key (only on home view)
-		if key == "p" && m.currentView == ViewHome && !m.homeView.IsPulling() {
+		if key == "p" && m.currentView == ViewHome && !m.homeView.IsPulling() && !m.currentViewIsAcceptingTextInput() {
 			m.homeView.SetPulling(true)
 			return m, tea.Batch(
 				m.syncCmd(m.cfg.GitHub.Token),
