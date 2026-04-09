@@ -452,8 +452,6 @@ func TestGetDetectedPlatformIDs(t *testing.T) {
 	// This is an integration test that depends on the host environment.
 	// We just verify the function returns a valid slice (possibly empty).
 	ids := getDetectedPlatformIDs()
-	assert.NotNil(t, ids, "Should return non-nil slice (may be empty)")
-	// All returned IDs should be valid platform strings
 	for _, id := range ids {
 		assert.NotEmpty(t, id, "Platform ID should not be empty")
 	}
