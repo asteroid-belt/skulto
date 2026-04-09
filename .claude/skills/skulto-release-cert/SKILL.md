@@ -312,6 +312,84 @@ Verify all CLI commands use plain text, not emoji characters:
 | 2 | `skulto pull` | No emoji in output (no rotating arrows, magnifying glass, lightning) |
 | 3 | `skulto install teach -p claude -y` | No emoji in scan/install output |
 
+### 2o: Remember install locations — DB persistence
+
+Verify the remember flag persists to the database and defaults correctly:
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | Check default state | `sqlite3 ~/.agents/skulto/skulto.db "SELECT remember_install_locations FROM user_state WHERE id = 'default';"` returns `0` |
+| 2 | Set flag | `sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 1 WHERE id = 'default';"` |
+| 3 | Verify persisted | `sqlite3 ~/.agents/skulto/skulto.db "SELECT remember_install_locations FROM user_state WHERE id = 'default';"` returns `1` |
+| 4 | Run any command | `skulto check` — no errors, flag survives app startup |
+| 5 | Verify still set | Same query returns `1` |
+
+**Cleanup (REQUIRED):**
+```bash
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 0 WHERE id = 'default';"
+```
+
+### 2p: Remember install locations — CLI -y with remembered scopes
+
+Verify `skulto install <slug> -y` (no -p) uses remembered platform-scope pairs:
+
+**Setup:**
+```bash
+# Enable remember flag
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 1 WHERE id = 'default';"
+# Set claude with global scope as a saved preference
+sqlite3 ~/.agents/skulto/skulto.db "INSERT OR REPLACE INTO agent_preferences (agent_id, enabled, preferred_scope) VALUES ('claude', 1, 'global');"
+```
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | `skulto install teach -y` (no -p flag) | Installs to claude (global) using remembered pair — no "No platforms selected" abort |
+| 2 | `skulto check` | Shows teach installed to claude (global) |
+
+**Cleanup (REQUIRED):**
+```bash
+skulto uninstall teach -y
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 0 WHERE id = 'default';"
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0, preferred_scope = 'global' WHERE agent_id = 'claude';"
+```
+
+### 2q: Remember install locations — CLI -y fallback to detected
+
+Verify `skulto install <slug> -y` (no -p) falls back to detected platforms when remember is off:
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | Ensure remember is off | `sqlite3 ~/.agents/skulto/skulto.db "SELECT remember_install_locations FROM user_state WHERE id = 'default';"` returns `0` |
+| 2 | `skulto install teach -y` (no -p flag) | Falls back to detected platforms with global scope — does NOT abort with "No platforms selected" |
+| 3 | `skulto check` | Shows teach installed to detected platform(s) |
+
+**Cleanup (REQUIRED):**
+```bash
+skulto uninstall teach -y
+```
+
+### 2r: Remember install locations — explicit -p overrides
+
+Verify explicit `-p` flag overrides remembered locations:
+
+**Setup:**
+```bash
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 1 WHERE id = 'default';"
+sqlite3 ~/.agents/skulto/skulto.db "INSERT OR REPLACE INTO agent_preferences (agent_id, enabled, preferred_scope) VALUES ('cursor', 1, 'project');"
+```
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | `skulto install teach -p claude -y` | Installs to claude (not cursor), -p overrides remembered |
+| 2 | `skulto check` | Shows teach on claude, NOT cursor |
+
+**Cleanup (REQUIRED):**
+```bash
+skulto uninstall teach -y
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 0 WHERE id = 'default';"
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0 WHERE agent_id = 'cursor';"
+```
+
 ### State Restore (REQUIRED after all Pass 2 tests)
 
 Verify the environment matches the pre-cert snapshot. Run these AFTER all Pass 2 sections:
@@ -417,6 +495,10 @@ PASS 2: CLI Walkthrough
   Scan save (ingestion):   PASS / FAIL
   MCP security metadata:   PASS / FAIL
   No emojis in CLI:        PASS / FAIL
+  Remember locations (DB): PASS / FAIL
+  Remember locations (CLI -y remembered): PASS / FAIL
+  Remember locations (CLI -y fallback):   PASS / FAIL
+  Remember locations (-p override):       PASS / FAIL
 
 PASS 3: Security Audit
   Secrets scan:   CLEAN / FOUND
