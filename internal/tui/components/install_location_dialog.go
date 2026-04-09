@@ -380,6 +380,11 @@ func (d *InstallLocationDialog) ShouldRememberLocations() bool {
 	return d.rememberLocations
 }
 
+// SetRememberLocations sets the remember checkbox state.
+func (d *InstallLocationDialog) SetRememberLocations(enabled bool) {
+	d.rememberLocations = enabled
+}
+
 // Reset clears the dialog state for reuse.
 func (d *InstallLocationDialog) Reset() {
 	d.currentIndex = 0

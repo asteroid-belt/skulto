@@ -863,7 +863,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 							return m, m.installCmd(skill)
 						}
+						rememberEnabled, _ := m.db.GetRememberInstallLocations()
 						m.locationDialog = components.NewInstallLocationDialog(platforms)
+						if rememberEnabled {
+							m.locationDialog.SetRememberLocations(true)
+						}
 					} else {
 						// Get last install locations for above-the-fold grouping
 						var lastInstall []components.LastInstallChoice
@@ -1264,6 +1268,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case views.ClearCachedLocationsMsg:
 		// Clear cached install locations so user sees the dialog again
 		m.cachedLocations = nil
+		if err := m.db.SetRememberInstallLocations(false); err != nil {
+			log.DebugLog("settings", "failed to clear remember flag: %v", err)
+		}
+		if err := m.db.ClearAgentPreferences(); err != nil {
+			log.DebugLog("settings", "failed to clear agent preferences: %v", err)
+		}
 
 	case views.NewSkillSavedMsg:
 		if msg.Err != nil {

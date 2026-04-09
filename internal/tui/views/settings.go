@@ -465,7 +465,7 @@ func (sv *SettingsView) renderFooter() string {
 	// Help text (varies by section)
 	helpStr := "j/k:scroll  d/u:page  g/G:jump  tab:switch  q:quit"
 	if sv.section == SectionCache {
-		helpStr = "j/k:scroll  c:clear cached locations  tab:switch  q:quit"
+		helpStr = "j/k:scroll  c:clear remembered locations  tab:switch  q:quit"
 	}
 
 	// Telemetry status lines

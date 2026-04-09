@@ -224,3 +224,36 @@ func TestMigrateFromAITools_EmptyAITools(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, prefs)
 }
+
+func TestClearAgentPreferences_ResetsAllToDisabled(t *testing.T) {
+	db := testDB(t)
+
+	// Set up some enabled preferences
+	err := db.EnableAgentsWithScopes(map[string]string{
+		"claude": "global",
+		"cursor": "project",
+	})
+	require.NoError(t, err)
+
+	// Verify they're enabled
+	scopes, err := db.GetEnabledAgentScopes()
+	require.NoError(t, err)
+	assert.Len(t, scopes, 2)
+
+	// Clear all
+	err = db.ClearAgentPreferences()
+	require.NoError(t, err)
+
+	// Verify all disabled
+	scopes, err = db.GetEnabledAgentScopes()
+	require.NoError(t, err)
+	assert.Empty(t, scopes, "all agents should be disabled after clear")
+
+	// Verify preferred_scope reset to global
+	prefs, err := db.GetAgentPreferences()
+	require.NoError(t, err)
+	for _, p := range prefs {
+		assert.Equal(t, "global", p.PreferredScope, "scope should reset to global for %s", p.AgentID)
+		assert.False(t, p.Enabled, "agent %s should be disabled", p.AgentID)
+	}
+}

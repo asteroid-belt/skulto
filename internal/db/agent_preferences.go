@@ -195,6 +195,18 @@ func (db *DB) CleanupScopedAgentIDs() error {
 	return db.Where("agent_id LIKE '%:%'").Delete(&models.AgentPreference{}).Error
 }
 
+// ClearAgentPreferences disables all agent preferences and resets their
+// preferred scopes to global, so the next install dialog starts fresh.
+func (db *DB) ClearAgentPreferences() error {
+	return db.Model(&models.AgentPreference{}).
+		Where("1 = 1").
+		Updates(map[string]any{
+			"enabled":         false,
+			"preferred_scope": "global",
+			"selected_at":     nil,
+		}).Error
+}
+
 // splitAgentID splits "platform:scope" into ["platform", "scope"].
 func splitAgentID(id string) []string {
 	for i, c := range id {
