@@ -115,3 +115,26 @@ func (db *DB) SetSkipUninstallConfirm(skip bool) error {
 		DoUpdates: clause.AssignmentColumns([]string{"skip_uninstall_confirm", "updated_at"}),
 	}).Create(&state).Error
 }
+
+// GetRememberInstallLocations returns whether the user wants install locations
+// remembered across sessions. Returns false on any error or missing state.
+func (db *DB) GetRememberInstallLocations() (bool, error) {
+	state, err := db.GetUserState()
+	if err != nil {
+		return false, err
+	}
+	return state.RememberInstallLocations, nil
+}
+
+// SetRememberInstallLocations persists whether the user wants install
+// locations remembered across sessions.
+func (db *DB) SetRememberInstallLocations(enabled bool) error {
+	state := models.UserState{
+		ID:                       "default",
+		RememberInstallLocations: enabled,
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"remember_install_locations", "updated_at"}),
+	}).Create(&state).Error
+}

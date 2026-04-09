@@ -73,6 +73,11 @@ func NewInstallService(database *db.DB, cfg *config.Config, tel telemetry.Client
 	}
 }
 
+// DB returns the underlying database handle.
+func (s *InstallService) DB() *db.DB {
+	return s.db
+}
+
 // DetectPlatforms returns all known platforms with their detection status.
 // Detection is done by checking if platform commands exist in PATH or
 // if platform directories exist.

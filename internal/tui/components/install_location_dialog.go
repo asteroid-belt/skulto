@@ -547,7 +547,7 @@ func (d *InstallLocationDialog) View() string {
 			}
 
 			rememberLine := rememberCheckbox + " " + rememberNameStyle.Render("Remember these locations")
-			rememberDesc := "    " + rememberDescStyle.Render("Skip this dialog for future installs")
+			rememberDesc := "    " + rememberDescStyle.Render("Pre-select these locations for future installs")
 
 			rememberContent := lipgloss.JoinVertical(lipgloss.Left, rememberLine, rememberDesc)
 
@@ -605,7 +605,16 @@ func (d *InstallLocationDialog) View() string {
 
 	footerLine1 := "↑/↓: navigate  •  Space: toggle  •  Enter: confirm"
 	footerLine2 := "a: all  •  n: none  •  g: global  •  p: project  •  r: remember"
-	footer := footerStyle.Render(footerLine1 + "\n" + footerLine2)
+	footerText := footerLine1 + "\n" + footerLine2
+	if d.rememberLocations {
+		hintStyle := lipgloss.NewStyle().
+			Foreground(theme.Current.Success).
+			Width(contentWidth).
+			Align(lipgloss.Center).
+			Italic(true)
+		footerText += "\n" + hintStyle.Render("Enter: use remembered  |  r: toggle remember")
+	}
+	footer := footerStyle.Render(footerText)
 
 	// Dialog container
 	dialogStyle := lipgloss.NewStyle().
@@ -650,7 +659,7 @@ type LastInstallChoice struct {
 // Group 1 = only the platforms from lastInstall (pre-selected with their scopes).
 // Group 2 = all other platforms (collapsed).
 // If lastInstall is empty, falls back to saved+detected for Group 1.
-func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScopes map[string]string, detectionResults []detect.DetectionResult, lastInstall []LastInstallChoice) *InstallLocationDialog {
+func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScopes map[string]string, detectionResults []detect.DetectionResult, lastInstall []LastInstallChoice, rememberEnabled bool) *InstallLocationDialog {
 	// Build the set of "last install" platforms for Group 1
 	lastInstallPlatforms := make(map[string]string) // platform → scope
 	for _, li := range lastInstall {
@@ -740,6 +749,10 @@ func NewInstallLocationDialogWithPrefs(platforms []installer.Platform, savedScop
 				dialog.options[i].Selected = false
 			}
 		}
+	}
+
+	if rememberEnabled {
+		dialog.rememberLocations = true
 	}
 
 	dialog.buildDisplayItems()

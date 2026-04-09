@@ -628,6 +628,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.locationDialog.ShouldRememberLocations() {
 					m.cachedLocations = selectedLocations
 				}
+				if err := m.db.SetRememberInstallLocations(m.locationDialog.ShouldRememberLocations()); err != nil {
+					log.DebugLog("install-dialog", "failed to persist remember flag: %v", err)
+				}
 				m.showLocationDialog = false
 
 				// Persist newly selected platforms with scope to agent_preferences
@@ -872,8 +875,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								})
 							}
 						}
+						rememberEnabled, _ := m.db.GetRememberInstallLocations()
 						m.locationDialog = components.NewInstallLocationDialogWithPrefs(
-							allPlatforms, savedScopes, detectionResults, lastInstall,
+							allPlatforms, savedScopes, detectionResults, lastInstall, rememberEnabled,
 						)
 					}
 					m.locationDialog.SetWidth(m.width)

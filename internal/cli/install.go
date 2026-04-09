@@ -10,6 +10,7 @@ import (
 	"github.com/asteroid-belt/skulto/internal/cli/prompts"
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
+	"github.com/asteroid-belt/skulto/internal/detect"
 	"github.com/asteroid-belt/skulto/internal/installer"
 	"github.com/asteroid-belt/skulto/internal/models"
 	"github.com/asteroid-belt/skulto/internal/scraper"
@@ -213,6 +214,11 @@ func selectPlatformsAndScope(service *installer.InstallService, ctx context.Cont
 }
 
 func runInstallBySlug(ctx context.Context, service *installer.InstallService, slug string) error {
+	// When -y is set with no explicit -p flags, try remembered locations or detected platforms
+	if installYes && len(installPlatforms) == 0 {
+		return runInstallBySlugNonInteractive(ctx, service, slug)
+	}
+
 	opts, err := selectPlatformsAndScope(service, ctx, slug)
 	if err != nil {
 		return trackCLIError("install", err)
@@ -222,6 +228,86 @@ func runInstallBySlug(ctx context.Context, service *installer.InstallService, sl
 	}
 
 	return executeInstall(ctx, service, slug, *opts)
+}
+
+// runInstallBySlugNonInteractive handles the -y path when no -p flags are given.
+// It checks remembered install locations first, then falls back to detected platforms.
+func runInstallBySlugNonInteractive(ctx context.Context, service *installer.InstallService, slug string) error {
+	database := service.DB()
+
+	// Check if user has opted into remembered locations
+	remember, _ := database.GetRememberInstallLocations()
+	if remember {
+		savedScopes, err := database.GetEnabledAgentScopes()
+		if err == nil && len(savedScopes) > 0 {
+			return installToRememberedLocations(ctx, service, slug, savedScopes)
+		}
+	}
+
+	// Fallback: use detected platforms with global scope
+	detectedPlatforms := getDetectedPlatformIDs()
+	if len(detectedPlatforms) == 0 {
+		fmt.Println("No platforms detected. Nothing to install.")
+		return nil
+	}
+
+	scope := installer.ScopeGlobal
+	if installScope != "" {
+		scope = installer.InstallScope(installScope)
+	}
+
+	opts := installer.InstallOptions{
+		Platforms: detectedPlatforms,
+		Scopes:    []installer.InstallScope{scope},
+		Confirm:   true,
+	}
+	return executeInstall(ctx, service, slug, opts)
+}
+
+// installToRememberedLocations installs a skill using saved platform-scope pairs.
+// Each pair is installed individually to handle mixed scopes correctly
+// (e.g., claude=global + cursor=project).
+func installToRememberedLocations(ctx context.Context, service *installer.InstallService, slug string, savedScopes map[string]string) error {
+	var lastErr error
+	installed := 0
+
+	for platformID, scopeStr := range savedScopes {
+		scope := installer.InstallScope(scopeStr)
+		if !scope.IsValid() {
+			scope = installer.ScopeGlobal
+		}
+
+		opts := installer.InstallOptions{
+			Platforms: []string{platformID},
+			Scopes:    []installer.InstallScope{scope},
+			Confirm:   true,
+		}
+
+		if err := executeInstall(ctx, service, slug, opts); err != nil {
+			lastErr = err
+			fmt.Printf("Warning: failed to install to %s (%s): %v\n", platformID, scopeStr, err)
+		} else {
+			installed++
+		}
+	}
+
+	if installed == 0 && lastErr != nil {
+		return trackCLIError("install", fmt.Errorf("all remembered installations failed: %w", lastErr))
+	}
+
+	return nil
+}
+
+// getDetectedPlatformIDs returns IDs of platforms detected on the system.
+func getDetectedPlatformIDs() []string {
+	results := detect.DetectAll()
+	var ids []string
+	for _, r := range results {
+		if r.Detected {
+			ids = append(ids, string(r.Platform))
+		}
+	}
+	return ids
 }
 
 // executeInstall performs the actual installation with pre-resolved options.

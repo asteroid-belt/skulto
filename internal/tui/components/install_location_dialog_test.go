@@ -84,7 +84,7 @@ func TestNewInstallLocationDialogWithPrefs_PreSelection(t *testing.T) {
 		{Platform: installer.PlatformRooCode, Detected: true},
 	}
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	// Should have options for all platforms (global + project each)
@@ -103,7 +103,7 @@ func TestNewInstallLocationDialogWithPrefs_SavedAndDetectedPreSelected(t *testin
 		{Platform: installer.PlatformCline, Detected: true},
 	}
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	// Both saved and detected platforms should have global selected
@@ -126,7 +126,7 @@ func TestNewInstallLocationDialogWithPrefs_ScopeAware(t *testing.T) {
 	saved := map[string]string{"claude": "project", "cursor": "global"}
 	var detected []detect.DetectionResult
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	selected := dialog.GetSelectedLocations()
@@ -153,7 +153,7 @@ func TestNewInstallLocationDialogWithPrefs_DefaultsToGlobal(t *testing.T) {
 	saved := map[string]string{"claude": "global"}
 	var detected []detect.DetectionResult
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	selected := dialog.GetSelectedLocations()
@@ -173,7 +173,7 @@ func TestInstallLocationDialog_CollapsibleGroups(t *testing.T) {
 		{Platform: installer.PlatformCline, Detected: true},
 	}
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	// Group 2 should start collapsed
@@ -206,7 +206,7 @@ func TestInstallLocationDialog_ToggleExpandsGroup2(t *testing.T) {
 	saved := map[string]string{"claude": "global"}
 	detected := []detect.DetectionResult{}
 
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, detected, nil, false)
 	require.NotNil(t, dialog)
 
 	collapsedCount := len(dialog.displayItems)
@@ -291,7 +291,7 @@ func TestInstallLocationDialog_ResetCollapsesGroup2(t *testing.T) {
 	}
 
 	saved := map[string]string{"claude": "global"}
-	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, nil, nil)
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, nil, nil, false)
 
 	// Expand group 2
 	dialog.group2Expanded = true
@@ -303,4 +303,28 @@ func TestInstallLocationDialog_ResetCollapsesGroup2(t *testing.T) {
 
 	assert.False(t, dialog.group2Expanded, "reset should collapse group 2")
 	assert.Less(t, len(dialog.displayItems), expandedCount, "reset should reduce display items")
+}
+
+func TestNewInstallLocationDialogWithPrefs_RememberEnabledTrue(t *testing.T) {
+	platforms := []installer.Platform{
+		installer.PlatformClaude,
+	}
+
+	saved := map[string]string{"claude": "global"}
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, nil, nil, true)
+	require.NotNil(t, dialog)
+
+	assert.True(t, dialog.ShouldRememberLocations(), "ShouldRememberLocations should return true when constructed with rememberEnabled=true")
+}
+
+func TestNewInstallLocationDialogWithPrefs_RememberEnabledFalse(t *testing.T) {
+	platforms := []installer.Platform{
+		installer.PlatformClaude,
+	}
+
+	saved := map[string]string{"claude": "global"}
+	dialog := NewInstallLocationDialogWithPrefs(platforms, saved, nil, nil, false)
+	require.NotNil(t, dialog)
+
+	assert.False(t, dialog.ShouldRememberLocations(), "ShouldRememberLocations should return false when constructed with rememberEnabled=false")
 }
