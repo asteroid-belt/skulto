@@ -287,11 +287,15 @@ func (dv *DetailView) Update(key string) (back bool, cmd tea.Cmd) {
 		dv.scrollOffset = max(0, dv.scrollOffset-1)
 	case "down", "j":
 		dv.scrollOffset = min(dv.maxScroll, dv.scrollOffset+1)
-	case "t":
-		// Go to top
+	case "pgup":
+		pageSize := max(1, dv.viewportHeight()-3)
+		dv.scrollOffset = max(0, dv.scrollOffset-pageSize)
+	case "pgdown":
+		pageSize := max(1, dv.viewportHeight()-3)
+		dv.scrollOffset = min(dv.maxScroll, dv.scrollOffset+pageSize)
+	case "home":
 		dv.scrollOffset = 0
-	case "b":
-		// Go to bottom
+	case "end":
 		dv.scrollOffset = dv.maxScroll
 	case "i":
 		// Toggle install - set installing state and return command to perform installation
@@ -722,11 +726,7 @@ func (dv *DetailView) renderContent() string {
 		return ""
 	}
 
-	hh := dv.headerHeight()
-	viewportHeight := dv.height - hh - 3 // 3 for spacing and scroll indicator
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
+	viewportHeight := dv.viewportHeight()
 
 	// Get visible lines
 	startIdx := dv.scrollOffset
@@ -750,6 +750,16 @@ func (dv *DetailView) renderContent() string {
 	return styledContent
 }
 
+// viewportHeight returns the number of visible content lines.
+func (dv *DetailView) viewportHeight() int {
+	hh := dv.headerHeight()
+	vh := dv.height - hh - 3
+	if vh < 5 {
+		vh = 5
+	}
+	return vh
+}
+
 // renderScrollIndicator renders the scroll indicator with action hints.
 func (dv *DetailView) renderScrollIndicator() string {
 	if dv.skill == nil {
@@ -764,11 +774,7 @@ func (dv *DetailView) renderScrollIndicator() string {
 		return scanStyle.Render("🔒 Scanning skill for security threats...")
 	}
 
-	hh := dv.headerHeight()
-	viewportHeight := dv.height - hh - 3
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
+	viewportHeight := dv.viewportHeight()
 
 	totalLines := len(dv.renderedContent)
 	endLine := min(totalLines, dv.scrollOffset+viewportHeight)
@@ -776,11 +782,11 @@ func (dv *DetailView) renderScrollIndicator() string {
 	var indicators []string
 
 	if dv.scrollOffset > 0 {
-		indicators = append(indicators, "↑ (scroll up)")
+		indicators = append(indicators, "↑/PgUp")
 	}
 
 	if dv.scrollOffset < dv.maxScroll {
-		indicators = append(indicators, "↓ (scroll down)")
+		indicators = append(indicators, "↓/PgDn")
 	}
 
 	lineInfo := fmt.Sprintf("Line %d-%d of %d", dv.scrollOffset+1, endLine, totalLines)
@@ -869,8 +875,8 @@ func (dv *DetailView) HandleMouse(msg tea.MouseMsg) {
 func (dv *DetailView) GetKeyboardCommands() ViewCommands {
 	commands := []Command{
 		{Key: "↑↓, k/j", Description: "Scroll content up/down"},
-		{Key: "t", Description: "Jump to top of content"},
-		{Key: "b", Description: "Jump to bottom of content"},
+		{Key: "PgUp/PgDn", Description: "Scroll one page up/down"},
+		{Key: "Home/End", Description: "Jump to top/bottom of content"},
 	}
 
 	// Show install and scan commands for all skills (local and remote)
