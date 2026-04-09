@@ -390,6 +390,35 @@ sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locat
 sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0 WHERE agent_id = 'cursor';"
 ```
 
+### 2s: Remember install locations — no stale preference leakage
+
+Verify that checking "Remember" only saves the current selection, not stale preferences from prior installs:
+
+**Setup:**
+```bash
+# Simulate prior installs that left stale preferences
+sqlite3 ~/.agents/skulto/skulto.db "INSERT OR REPLACE INTO agent_preferences (agent_id, enabled, preferred_scope) VALUES ('claude', 1, 'global');"
+sqlite3 ~/.agents/skulto/skulto.db "INSERT OR REPLACE INTO agent_preferences (agent_id, enabled, preferred_scope) VALUES ('continue', 1, 'project');"
+sqlite3 ~/.agents/skulto/skulto.db "INSERT OR REPLACE INTO agent_preferences (agent_id, enabled, preferred_scope) VALUES ('cursor', 1, 'global');"
+# Enable remember flag
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 1 WHERE id = 'default';"
+```
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | Verify 3 agents enabled | `sqlite3 ~/.agents/skulto/skulto.db "SELECT count(*) FROM agent_preferences WHERE enabled = 1;"` returns `3` |
+| 2 | Simulate "Remember" confirm: clear then re-enable only claude | `sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0, preferred_scope = 'global', selected_at = NULL;"` then `sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 1, preferred_scope = 'project' WHERE agent_id = 'claude';"` |
+| 3 | Verify only claude enabled | `sqlite3 ~/.agents/skulto/skulto.db "SELECT agent_id FROM agent_preferences WHERE enabled = 1;"` returns only `claude` |
+| 4 | `skulto install teach -y` (no -p) | Installs to claude (project) ONLY — not continue or cursor |
+| 5 | `skulto check` | Shows teach on claude (project), NOT continue or cursor |
+
+**Cleanup (REQUIRED):**
+```bash
+skulto uninstall teach -y
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locations = 0 WHERE id = 'default';"
+sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0, preferred_scope = 'global' WHERE agent_id IN ('claude', 'continue', 'cursor');"
+```
+
 ### State Restore (REQUIRED after all Pass 2 tests)
 
 Verify the environment matches the pre-cert snapshot. Run these AFTER all Pass 2 sections:
@@ -499,6 +528,7 @@ PASS 2: CLI Walkthrough
   Remember locations (CLI -y remembered): PASS / FAIL
   Remember locations (CLI -y fallback):   PASS / FAIL
   Remember locations (-p override):       PASS / FAIL
+  Remember locations (no stale leakage):  PASS / FAIL
 
 PASS 3: Security Audit
   Secrets scan:   CLEAN / FOUND

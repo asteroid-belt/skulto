@@ -628,7 +628,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.showLocationDialog = false
 
-				// Persist newly selected platforms with scope to agent_preferences
+				// Persist newly selected platforms with scope to agent_preferences.
+				// When "Remember" is checked, clear old preferences first so only
+				// the current selection is remembered (not the union of all past installs).
+				if m.locationDialog.ShouldRememberLocations() {
+					_ = m.db.ClearAgentPreferences()
+				}
 				agentScopes := make(map[string]string)
 				for _, loc := range selectedLocations {
 					agentScopes[string(loc.Platform)] = string(loc.Scope)

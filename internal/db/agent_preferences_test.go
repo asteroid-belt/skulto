@@ -257,3 +257,44 @@ func TestClearAgentPreferences_ResetsAllToDisabled(t *testing.T) {
 		assert.False(t, p.Enabled, "agent %s should be disabled", p.AgentID)
 	}
 }
+
+// TestRememberClearThenEnable_OnlyNewSelectionsRemembered verifies that when
+// a user checks "Remember" and confirms, clearing old preferences before
+// enabling new ones ensures only the current selection is remembered —
+// not the union of all past installs.
+func TestRememberClearThenEnable_OnlyNewSelectionsRemembered(t *testing.T) {
+	db := testDB(t)
+
+	// Simulate prior installs that saved preferences (without "Remember")
+	err := db.EnableAgentsWithScopes(map[string]string{
+		"claude":   "global",
+		"continue": "project",
+		"cursor":   "global",
+	})
+	require.NoError(t, err)
+
+	// Verify all 3 are enabled
+	scopes, err := db.GetEnabledAgentScopes()
+	require.NoError(t, err)
+	assert.Len(t, scopes, 3)
+
+	// Now simulate user checking "Remember" and selecting only claude+project.
+	// The correct flow: clear old preferences, then enable only the new selection.
+	err = db.ClearAgentPreferences()
+	require.NoError(t, err)
+
+	err = db.EnableAgentsWithScopes(map[string]string{
+		"claude": "project",
+	})
+	require.NoError(t, err)
+
+	// Only claude should be remembered — continue and cursor must NOT leak through
+	scopes, err = db.GetEnabledAgentScopes()
+	require.NoError(t, err)
+	assert.Len(t, scopes, 1, "only the newly selected platform should be enabled")
+	assert.Equal(t, "project", scopes["claude"])
+	_, hasContinue := scopes["continue"]
+	assert.False(t, hasContinue, "stale 'continue' preference must not leak into remembered set")
+	_, hasCursor := scopes["cursor"]
+	assert.False(t, hasCursor, "stale 'cursor' preference must not leak into remembered set")
+}
