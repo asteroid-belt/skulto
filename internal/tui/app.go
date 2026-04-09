@@ -111,7 +111,6 @@ type Model struct {
 
 	// Install location dialog
 	locationDialog       *components.InstallLocationDialog
-	cachedLocations      []installer.InstallLocation
 	showLocationDialog   bool
 	pendingInstallSkill  *models.Skill
 	pendingInstallSource *models.Source
@@ -624,10 +623,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.locationDialog.IsConfirmed() {
 				selectedLocations := m.locationDialog.GetSelectedLocations()
-				// Only cache if user explicitly checked "Remember these locations"
-				if m.locationDialog.ShouldRememberLocations() {
-					m.cachedLocations = selectedLocations
-				}
 				if err := m.db.SetRememberInstallLocations(m.locationDialog.ShouldRememberLocations()); err != nil {
 					log.DebugLog("install-dialog", "failed to persist remember flag: %v", err)
 				}
@@ -1266,8 +1261,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.manageView.RefreshSkills()
 
 	case views.ClearCachedLocationsMsg:
-		// Clear cached install locations so user sees the dialog again
-		m.cachedLocations = nil
+		// Clear remembered install locations and agent preferences
 		if err := m.db.SetRememberInstallLocations(false); err != nil {
 			log.DebugLog("settings", "failed to clear remember flag: %v", err)
 		}
