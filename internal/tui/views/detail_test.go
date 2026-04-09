@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -325,5 +326,159 @@ func TestDetailView_RemoteSkillNoLocalIndicator(t *testing.T) {
 	// Should still show the skill title
 	if !strings.Contains(output, "Test Skill Title") {
 		t.Errorf("Detail view should show the skill title\nGot: %s", output)
+	}
+}
+
+// setupLoadedDetailView creates a DetailView with a skill containing the given
+// number of content lines, fully loaded and ready for scroll testing.
+func setupLoadedDetailView(t *testing.T, lines int) *DetailView {
+	t.Helper()
+
+	database := setupTestDB(t)
+	t.Cleanup(func() { _ = database.Close() })
+
+	// Build content with enough lines
+	var sb strings.Builder
+	for i := 0; i < lines; i++ {
+		fmt.Fprintf(&sb, "Line %d of content\n", i+1)
+	}
+
+	longSkill := &models.Skill{
+		ID:      "long-skill-id",
+		Title:   "Long Skill",
+		Content: sb.String(),
+		Slug:    "long-skill",
+	}
+	if err := database.CreateSkill(longSkill); err != nil {
+		t.Fatalf("failed to create long skill: %v", err)
+	}
+
+	cfg := &config.Config{}
+	view := NewDetailView(database, cfg, nil)
+	view.Init(telemetry.New(nil))
+	view.SetSize(80, 30)
+
+	cmd := view.SetSkill("long-skill-id")
+	msg := cmd().(SkillLoadedMsg)
+	view.HandleSkillLoaded(msg)
+
+	return view
+}
+
+func TestDetailView_ScrollNavigation(t *testing.T) {
+	t.Run("pgdown scrolls by page minus overlap", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		pageSize := max(1, view.viewportHeight()-3)
+
+		view.Update("pgdown")
+
+		if view.scrollOffset != pageSize {
+			t.Errorf("pgdown: expected scrollOffset=%d, got %d", pageSize, view.scrollOffset)
+		}
+	})
+
+	t.Run("pgup scrolls by page minus overlap", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		pageSize := max(1, view.viewportHeight()-3)
+
+		// Scroll down enough to have room to page up
+		startOffset := pageSize * 3
+		view.scrollOffset = startOffset
+		view.Update("pgup")
+
+		expected := startOffset - pageSize
+		if view.scrollOffset != expected {
+			t.Errorf("pgup: expected scrollOffset=%d, got %d", expected, view.scrollOffset)
+		}
+	})
+
+	t.Run("home jumps to top", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		view.scrollOffset = 50
+
+		view.Update("home")
+
+		if view.scrollOffset != 0 {
+			t.Errorf("home: expected scrollOffset=0, got %d", view.scrollOffset)
+		}
+	})
+
+	t.Run("end jumps to bottom", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+
+		view.Update("end")
+
+		if view.scrollOffset != view.maxScroll {
+			t.Errorf("end: expected scrollOffset=%d (maxScroll), got %d", view.maxScroll, view.scrollOffset)
+		}
+	})
+
+	t.Run("pgdown clamps to maxScroll", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		view.scrollOffset = view.maxScroll - 2
+
+		view.Update("pgdown")
+
+		if view.scrollOffset != view.maxScroll {
+			t.Errorf("pgdown clamp: expected scrollOffset=%d (maxScroll), got %d", view.maxScroll, view.scrollOffset)
+		}
+	})
+
+	t.Run("pgup clamps to zero", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		view.scrollOffset = 2
+
+		view.Update("pgup")
+
+		if view.scrollOffset != 0 {
+			t.Errorf("pgup clamp: expected scrollOffset=0, got %d", view.scrollOffset)
+		}
+	})
+
+	t.Run("t key no longer scrolls", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+		view.scrollOffset = 50
+
+		view.Update("t")
+
+		if view.scrollOffset != 50 {
+			t.Errorf("t key: expected scrollOffset=50 (unchanged), got %d", view.scrollOffset)
+		}
+	})
+
+	t.Run("b key no longer scrolls", func(t *testing.T) {
+		view := setupLoadedDetailView(t, 500)
+
+		view.Update("b")
+
+		if view.scrollOffset != 0 {
+			t.Errorf("b key: expected scrollOffset=0 (unchanged), got %d", view.scrollOffset)
+		}
+	})
+}
+
+func TestDetailView_KeyboardCommandLabels(t *testing.T) {
+	view := setupLoadedDetailView(t, 20)
+	cmds := view.GetKeyboardCommands()
+
+	var keys []string
+	for _, cmd := range cmds.Commands {
+		keys = append(keys, cmd.Key)
+	}
+	joined := strings.Join(keys, " | ")
+
+	// Should include new keys
+	if !strings.Contains(joined, "PgUp/PgDn") {
+		t.Errorf("expected PgUp/PgDn in keyboard commands, got: %s", joined)
+	}
+	if !strings.Contains(joined, "Home/End") {
+		t.Errorf("expected Home/End in keyboard commands, got: %s", joined)
+	}
+
+	// Should NOT include old keys
+	for _, cmd := range cmds.Commands {
+		if cmd.Key == "t" || cmd.Key == "b" {
+			t.Errorf("found dead key %q in keyboard commands", cmd.Key)
+		}
 	}
 }
