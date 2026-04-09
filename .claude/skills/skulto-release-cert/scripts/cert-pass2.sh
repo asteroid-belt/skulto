@@ -394,6 +394,46 @@ pass "2n: no emojis in install output"
 echo ""
 
 # ========================================
+# 2t: TUI detail view navigation
+# ========================================
+echo "--- 2t: TUI navigation ---"
+
+# Run the specific scroll navigation unit tests
+nav_output=$(cd "$REPO_ROOT" && go test ./internal/tui/views/ -run "TestDetailView_ScrollNavigation|TestDetailView_KeyboardCommandLabels" -v 2>&1)
+if echo "$nav_output" | grep -q "^ok"; then
+  pass "2t: scroll navigation unit tests"
+else
+  fail "2t: scroll navigation unit tests" "$(echo "$nav_output" | grep -E "FAIL|Error" | head -3)"
+fi
+
+# Verify pgup/pgdown/home/end key handlers exist in detail view source
+detail_src="$REPO_ROOT/internal/tui/views/detail.go"
+for key in '"pgup"' '"pgdown"' '"home"' '"end"'; do
+  if grep -q "case $key" "$detail_src"; then
+    pass "2t: $key handler exists"
+  else
+    fail "2t: $key handler" "case $key not found in detail.go"
+  fi
+done
+
+# Verify dead t/b key handlers are removed
+for key in '"t"' '"b"'; do
+  if grep -q "case $key:" "$detail_src"; then
+    fail "2t: dead key $key" "case $key still in detail.go (should be removed)"
+  fi
+done
+pass "2t: dead t/b handlers removed"
+
+# Verify help labels include new keys
+if grep -q "PgUp/PgDn" "$detail_src" && grep -q "Home/End" "$detail_src"; then
+  pass "2t: help labels updated"
+else
+  fail "2t: help labels" "Missing PgUp/PgDn or Home/End in help text"
+fi
+
+echo ""
+
+# ========================================
 # Summary
 # ========================================
 echo "========================================"

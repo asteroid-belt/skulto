@@ -419,6 +419,18 @@ sqlite3 ~/.agents/skulto/skulto.db "UPDATE user_state SET remember_install_locat
 sqlite3 ~/.agents/skulto/skulto.db "UPDATE agent_preferences SET enabled = 0, preferred_scope = 'global' WHERE agent_id IN ('claude', 'continue', 'cursor');"
 ```
 
+### 2t: TUI detail view navigation
+
+Verify detail view keybindings are correctly implemented:
+
+| # | Step | Verify |
+|---|------|--------|
+| 1 | Run scroll navigation unit tests | `go test ./internal/tui/views/ -run TestDetailView_ScrollNavigation -v` passes |
+| 2 | Run keyboard label tests | `go test ./internal/tui/views/ -run TestDetailView_KeyboardCommandLabels -v` passes |
+| 3 | Verify key handlers in source | `detail.go` contains `case "pgup"`, `case "pgdown"`, `case "home"`, `case "end"` |
+| 4 | Verify dead keys removed | `detail.go` does NOT contain `case "t":` or `case "b":` |
+| 5 | Verify help labels | `detail.go` contains `PgUp/PgDn` and `Home/End` in help text |
+
 ### State Restore (REQUIRED after all Pass 2 tests)
 
 Verify the environment matches the pre-cert snapshot. Run these AFTER all Pass 2 sections:
@@ -529,6 +541,7 @@ PASS 2: CLI Walkthrough
   Remember locations (CLI -y fallback):   PASS / FAIL
   Remember locations (-p override):       PASS / FAIL
   Remember locations (no stale leakage):  PASS / FAIL
+  TUI navigation:    PASS / FAIL
 
 PASS 3: Security Audit
   Secrets scan:   CLEAN / FOUND
