@@ -263,6 +263,9 @@ func runSingleIngest(database *db.DB, cfg *config.Config, ingestionSvc *discover
 	}
 
 	telemetryClient.TrackSkillIngested(skill.Name, skill.Scope)
+	if result.ScanHasWarning {
+		fmt.Printf("  ⚠ %-8s %s\n", result.ScanThreatLevel, result.Name)
+	}
 	fmt.Printf("Imported: %s -> %s\n", result.Name, result.DestPath)
 	fmt.Println("Original location now points to skulto-managed skill via symlink.")
 	return nil

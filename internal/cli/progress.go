@@ -55,7 +55,7 @@ func (p *ProgressBar) Render() string {
 	countStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B6B6B"))
 
-	return progressStyle.Render("⚡ ") +
+	return progressStyle.Render("> ") +
 		barStyle.Render("["+bar+"]") +
 		countStyle.Render(fmt.Sprintf(" %d/%d ", p.completed, p.total)) +
 		progressStyle.Render(p.label)
@@ -83,7 +83,7 @@ func (p *ProgressBar) RenderScan() string {
 	countStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B6B6B"))
 
-	return scanStyle.Render("🔒 ") +
+	return scanStyle.Render("> ") +
 		barStyle.Render("["+bar+"]") +
 		countStyle.Render(fmt.Sprintf(" %d/%d ", p.completed, p.total)) +
 		scanStyle.Render(p.label)

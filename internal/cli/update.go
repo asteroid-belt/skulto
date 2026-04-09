@@ -90,7 +90,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	result := &UpdateResult{}
 
 	// Phase 1: Pull repositories
-	fmt.Println("🔄 [1/3] Pulling skill repositories...")
+	fmt.Println("[1/3] Pulling skill repositories...")
 	fmt.Println()
 
 	if err := runUpdatePull(ctx, cfg, database, result); err != nil {
@@ -99,7 +99,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// Phase 2: Security scan
 	fmt.Println()
-	fmt.Println("🔒 [2/3] Scanning for security threats...")
+	fmt.Println("[2/3] Scanning for security threats...")
 	fmt.Println()
 
 	if err := runUpdateScan(ctx, database, result); err != nil {
@@ -108,7 +108,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// Phase 3: Report
 	fmt.Println()
-	fmt.Println("📋 [3/3] Update Summary")
+	fmt.Println("[3/3] Update Summary")
 	fmt.Println()
 
 	printUpdateReport(result)
@@ -123,7 +123,7 @@ func runUpdatePull(ctx context.Context, cfg *config.Config, database *db.DB, res
 	}
 
 	if len(sources) == 0 {
-		fmt.Println("   📦 No repositories configured. Use 'skulto add <repo>' to add one.")
+		fmt.Println("   No repositories configured. Use 'skulto add <repo>' to add one.")
 		return nil
 	}
 
@@ -159,7 +159,7 @@ func runUpdatePull(ctx context.Context, cfg *config.Config, database *db.DB, res
 
 		if err != nil {
 			ClearLine()
-			fmt.Printf("   ❌ %s: %v\n", repoName, err)
+			fmt.Printf("   x %s: %v\n", repoName, err)
 			result.ReposErrored++
 			continue
 		}
@@ -177,10 +177,10 @@ func runUpdatePull(ctx context.Context, cfg *config.Config, database *db.DB, res
 	fmt.Println("   ✓ Pull complete")
 
 	// Sync install state
-	fmt.Println("   🔍 Reconciling install state...")
+	fmt.Println("   Reconciling install state...")
 	inst := installer.New(database, cfg)
 	if err := inst.SyncInstallState(ctx); err != nil {
-		fmt.Printf("   ⚠️  Warning: %v\n", err)
+		fmt.Printf("   ⚠ Warning: %v\n", err)
 	} else {
 		fmt.Println("   ✓ Install state reconciled")
 	}
@@ -243,7 +243,7 @@ func runUpdateScan(_ context.Context, database *db.DB, result *UpdateResult) err
 
 		if err := database.UpdateSkillSecurity(skill); err != nil {
 			ClearLine()
-			fmt.Printf("   ❌ Error updating %s: %v\n", skill.Slug, err)
+			fmt.Printf("   x Error updating %s: %v\n", skill.Slug, err)
 			continue
 		}
 
