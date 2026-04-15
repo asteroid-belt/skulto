@@ -182,8 +182,16 @@ func selectPlatformsAndScope(service *installer.InstallService, ctx context.Cont
 		selectedPlatforms = result.Selected
 	}
 
-	// No fallback — if the user selected nothing in the chooser, abort.
-	// The -y flag path handles non-interactive defaults separately above.
+	// -y with no explicit -p: fall back to detected platforms (mirrors the slug
+	// non-interactive path used by runInstallBySlugNonInteractive). Without this
+	// fallback, `skulto install <owner/repo> -y` aborts with "No platforms
+	// selected" immediately after the scan report, which is confusing.
+	if installYes && len(selectedPlatforms) == 0 {
+		selectedPlatforms = getDetectedPlatformIDs()
+	}
+
+	// If still empty, the user asked to select-nothing in the chooser (or no
+	// platforms are detected). Abort cleanly.
 	if len(selectedPlatforms) == 0 {
 		fmt.Println("No platforms selected. Nothing to install.")
 		return nil, nil

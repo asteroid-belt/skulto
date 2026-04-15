@@ -130,7 +130,7 @@ func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath s
 		targetDir := filepath.Dir(targetPath)
 		dirExisted := exists(targetDir)
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			log.Printf("skulto: mkdir failed for %s: %v", targetDir, err)
+			log.Errorf("skulto: mkdir failed for %s: %v", targetDir, err)
 			lastErr = err
 			continue
 		}
@@ -142,7 +142,7 @@ func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath s
 		// directory can never be recursively deleted by this code path.
 		if exists(targetPath) {
 			if err := os.Remove(targetPath); err != nil {
-				log.Printf("skulto: remove existing target failed %s: %v", targetPath, err)
+				log.Errorf("skulto: remove existing target failed %s: %v", targetPath, err)
 				lastErr = err
 				continue
 			}
@@ -150,7 +150,7 @@ func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath s
 
 		// Create symlink: targetPath -> sourcePath
 		if err := os.Symlink(sourcePath, targetPath); err != nil {
-			log.Printf("skulto: symlink failed %s → %s: %v", sourcePath, targetPath, err)
+			log.Errorf("skulto: symlink failed %s → %s: %v", sourcePath, targetPath, err)
 			lastErr = err
 			continue
 		}
@@ -165,7 +165,7 @@ func (i *Installer) installToLocationsInternal(skill *models.Skill, sourcePath s
 		}
 		if err := i.db.AddInstallation(&install); err != nil {
 			// Rollback symlink
-			log.Printf("skulto: AddInstallation failed for %s, rolling back symlink: %v", targetPath, err)
+			log.Errorf("skulto: AddInstallation failed for %s, rolling back symlink: %v", targetPath, err)
 			_ = os.Remove(targetPath)
 			lastErr = err
 			continue

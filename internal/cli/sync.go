@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var syncYes bool
+
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Install skills from skulto.json",
@@ -30,9 +32,14 @@ This is equivalent to running 'skulto install' with no arguments.
 
 Examples:
   skulto sync
+  skulto sync -y        # non-interactive: detected platforms, global scope
   skulto install`,
 	Args: cobra.NoArgs,
 	RunE: runSync,
+}
+
+func init() {
+	syncCmd.Flags().BoolVarP(&syncYes, "yes", "y", false, "Skip interactive prompts; use detected platforms with global scope")
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
@@ -80,7 +87,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	reader := bufio.NewReader(os.Stdin)
 
-	skippedSources, err := syncEnsureSources(ctx, mf, database, cfg, reader)
+	skippedSources, err := syncEnsureSources(ctx, mf, database, cfg, reader, syncYes)
 	if err != nil {
 		return trackCLIError("sync", err)
 	}
@@ -97,7 +104,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n%d skill(s) to install. Select where to install them:\n\n", len(skillsToInstall))
 
-	opts, err := selectSyncPlatformsAndScope(ctx, service)
+	opts, err := selectSyncPlatformsAndScope(ctx, service, syncYes)
 	if err != nil {
 		return trackCLIError("sync", err)
 	}
@@ -106,7 +113,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader, cwd)
+	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader, cwd, syncYes)
 
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
@@ -132,6 +139,7 @@ func syncEnsureSources(
 	database *db.DB,
 	cfg *config.Config,
 	reader *bufio.Reader,
+	yes bool,
 ) (map[string]bool, error) {
 	sourceSkills := make(map[string][]string)
 	for slug, source := range mf.Skills {
@@ -143,7 +151,7 @@ func syncEnsureSources(
 	for sourceName := range sourceSkills {
 		source, err := database.GetSource(sourceName)
 		if err != nil || source == nil {
-			skipped, err := syncPromptAddSource(ctx, sourceName, database, cfg, reader)
+			skipped, err := syncPromptAddSource(ctx, sourceName, database, cfg, reader, yes)
 			if err != nil {
 				return nil, err
 			}
@@ -164,16 +172,20 @@ func syncPromptAddSource(
 	database *db.DB,
 	cfg *config.Config,
 	reader *bufio.Reader,
+	yes bool,
 ) (bool, error) {
 	fmt.Printf("\nSource '%s' not found in your database.\n", sourceName)
-	fmt.Print("Add it? [y/N] ")
 
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-
-	if answer != "y" && answer != "yes" {
-		fmt.Printf("  Skipping all skills from %s\n", sourceName)
-		return true, nil
+	if !yes {
+		fmt.Print("Add it? [y/N] ")
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Printf("  Skipping all skills from %s\n", sourceName)
+			return true, nil
+		}
+	} else {
+		fmt.Println("Auto-adding (via --yes)")
 	}
 
 	fmt.Printf("Adding %s...\n", sourceName)
@@ -250,6 +262,7 @@ func syncInstallSkills(
 	opts *installer.InstallOptions,
 	reader *bufio.Reader,
 	cwd string,
+	yes bool,
 ) (installed, skipped, errored int) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
@@ -275,6 +288,19 @@ func syncInstallSkills(
 		relevantLocations := syncFilterRelevantLocations(locations, cwd)
 
 		if len(relevantLocations) > 0 && !skipAll {
+			if yes {
+				// Non-interactive: default to installing to selected locations
+				// regardless of existing partial installs. User asked for -y.
+				_, err := service.Install(ctx, skill.Slug, *opts)
+				if err != nil {
+					fmt.Printf("  %s %s: %v\n", errorStyle.Render("x"), skill.Slug, err)
+					errored++
+					continue
+				}
+				fmt.Printf("  %s %s\n", successStyle.Render("v"), skill.Slug)
+				installed++
+				continue
+			}
 			fmt.Printf("\n  '%s' is already installed at some locations.\n", skill.Slug)
 			fmt.Print("  Also install to your selected locations? [y/N/s(kip all)] ")
 
@@ -309,13 +335,15 @@ func syncInstallSkills(
 }
 
 // selectSyncPlatformsAndScope runs the platform and scope selection prompts for sync.
-func selectSyncPlatformsAndScope(ctx context.Context, service *installer.InstallService) (*installer.InstallOptions, error) {
+// When yes is true, skip interactive prompts and fall back to detected platforms
+// with global scope (same behaviour as the non-interactive path).
+func selectSyncPlatformsAndScope(ctx context.Context, service *installer.InstallService, yes bool) (*installer.InstallOptions, error) {
 	platforms, err := service.DetectPlatforms(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect platforms: %w", err)
 	}
 
-	if !isInteractive() {
+	if yes || !isInteractive() {
 		// Non-interactive: use detected platforms with global scope
 		var selected []string
 		for _, p := range platforms {

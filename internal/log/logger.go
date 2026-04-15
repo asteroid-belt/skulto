@@ -91,20 +91,29 @@ func Init(logDir string) error {
 }
 
 // Printf uses the global logger to print formatted output.
+//
+// When the global logger is not initialized (e.g. in skulto-mcp or any CLI
+// subcommand that does not run the TUI splash), the fallback writes to stderr
+// rather than stdout. Writing to stdout would corrupt the MCP JSON-RPC stream
+// and pollute CLI stdout with diagnostic messages.
 func Printf(format string, args ...interface{}) {
 	if globalLogger != nil {
 		globalLogger.Printf(format, args...)
 	} else {
-		fmt.Printf(format, args...)
+		fmt.Fprintf(os.Stderr, format, args...)
 	}
 }
 
 // Println uses the global logger to print output with newline.
+//
+// When the global logger is not initialized, the fallback writes to stderr
+// for the same reason as Printf — stdout must remain reserved for structured
+// output (MCP JSON-RPC responses, CLI command results).
 func Println(args ...interface{}) {
 	if globalLogger != nil {
 		globalLogger.Println(args...)
 	} else {
-		fmt.Println(args...)
+		fmt.Fprintln(os.Stderr, args...)
 	}
 }
 
