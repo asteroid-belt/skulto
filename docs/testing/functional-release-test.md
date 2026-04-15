@@ -436,6 +436,57 @@ rm -f skulto.json
 cp /tmp/skulto-manual-test/skulto.json.bak skulto.json 2>/dev/null || true
 ```
 
+### 6.4 `save` warns about unsaved global-scope skills
+
+Regression gate for commit `99f5670`. `skulto.json` is a project manifest
+and only saves project-scope installs for the current directory; anything
+installed globally must trigger a loud `NOTE` explaining why it was left
+out, so the user doesn't think `save` silently dropped their skills.
+
+Install a known-clean skill at global scope to trigger the warning:
+
+```bash
+./build/skulto install supercharge -p claude -y
+./build/skulto save
+```
+
+- [ ] Output includes an orange `NOTE N global-scope skill(s) not saved to
+      skulto.json:` header
+- [ ] `supercharge` appears as a bullet under the NOTE header
+- [ ] Output explains `skulto.json is a project manifest; only project-scope
+      installs for the current directory are saved`
+- [ ] Output shows the fix hint `skulto install <slug> -s project -y`
+      followed by `skulto save`
+
+Verify the warning fires on all three `save` code paths:
+
+```bash
+./build/skulto save                    # path 1: manifest unchanged → NOTE appears
+./build/skulto install supercharge -p claude -s project -y
+./build/skulto save                    # path 2: manifest updated → supercharge
+                                       #         now gone from NOTE list
+./build/skulto uninstall supercharge -y
+cd /tmp && /path/to/skulto/build/skulto save  # path 3: no project-scope
+                                               #         skills → NOTE still appears
+cd -
+```
+
+- [ ] Path 1 (no changes): NOTE still lists `supercharge`
+- [ ] Path 2 (manifest updated): `supercharge` is no longer in the NOTE
+      (it's now being saved at project scope)
+- [ ] Path 3 (no project-scope skills at all): NOTE still fires with any
+      remaining global skills
+
+Cleanup:
+
+```bash
+./build/skulto uninstall supercharge -y
+rm -f skulto.json
+cp /tmp/skulto-manual-test/skulto.json.bak skulto.json 2>/dev/null || true
+```
+
+- [ ] Working copy `skulto.json` matches pre-test backup (or is absent)
+
 ---
 
 ## 7. CLI — source repository management

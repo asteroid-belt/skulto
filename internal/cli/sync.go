@@ -104,16 +104,16 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n%d skill(s) to install. Select where to install them:\n\n", len(skillsToInstall))
 
-	opts, err := selectSyncPlatformsAndScope(ctx, service, syncYes)
+	plan, err := buildSyncPlan(ctx, service, database, syncYes)
 	if err != nil {
 		return trackCLIError("sync", err)
 	}
-	if opts == nil {
+	if len(plan) == 0 {
 		fmt.Println("Cancelled.")
 		return nil
 	}
 
-	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, opts, reader, cwd, syncYes)
+	installed, skipped, errored := syncInstallSkills(ctx, skillsToInstall, service, plan, reader, cwd, syncYes)
 
 	fmt.Println()
 	fmt.Println(strings.Repeat("\u2500", 50))
@@ -253,13 +253,14 @@ func syncResolveSkills(
 	return skillsToInstall, skippedSkills
 }
 
-// syncInstallSkills installs the resolved skills, prompting for confirmation when a skill is
-// already partially installed. Returns counts of installed, skipped, and errored skills.
+// syncInstallSkills installs the resolved skills against every entry in the plan.
+// Each plan entry is a (platforms, scope) InstallOptions; multi-entry plans occur
+// when the user has remembered heterogeneous pairs (e.g. claude=project + cursor=global).
 func syncInstallSkills(
 	ctx context.Context,
 	skills []*models.Skill,
 	service *installer.InstallService,
-	opts *installer.InstallOptions,
+	plan []installer.InstallOptions,
 	reader *bufio.Reader,
 	cwd string,
 	yes bool,
@@ -275,32 +276,15 @@ func syncInstallSkills(
 
 	for _, skill := range skills {
 		locations, _ := service.GetInstallLocations(ctx, skill.Slug)
-		allInstalled := syncIsInstalledAtAll(locations, opts.Platforms, opts.Scopes, cwd)
-
-		if allInstalled {
+		if syncPlanFullyInstalled(locations, plan, cwd) {
 			fmt.Printf("  %s %s (already installed)\n", skipStyle.Render("o"), skill.Slug)
 			skipped++
 			continue
 		}
 
-		// Filter locations to only those relevant to the current context
-		// so the "already installed at some locations" prompt is accurate
 		relevantLocations := syncFilterRelevantLocations(locations, cwd)
 
-		if len(relevantLocations) > 0 && !skipAll {
-			if yes {
-				// Non-interactive: default to installing to selected locations
-				// regardless of existing partial installs. User asked for -y.
-				_, err := service.Install(ctx, skill.Slug, *opts)
-				if err != nil {
-					fmt.Printf("  %s %s: %v\n", errorStyle.Render("x"), skill.Slug, err)
-					errored++
-					continue
-				}
-				fmt.Printf("  %s %s\n", successStyle.Render("v"), skill.Slug)
-				installed++
-				continue
-			}
+		if len(relevantLocations) > 0 && !skipAll && !yes {
 			fmt.Printf("\n  '%s' is already installed at some locations.\n", skill.Slug)
 			fmt.Print("  Also install to your selected locations? [y/N/s(kip all)] ")
 
@@ -320,9 +304,18 @@ func syncInstallSkills(
 			}
 		}
 
-		_, err := service.Install(ctx, skill.Slug, *opts)
-		if err != nil {
-			fmt.Printf("  %s %s: %v\n", errorStyle.Render("x"), skill.Slug, err)
+		var lastErr error
+		entryOK := 0
+		for _, opts := range plan {
+			if _, err := service.Install(ctx, skill.Slug, opts); err != nil {
+				lastErr = err
+				continue
+			}
+			entryOK++
+		}
+
+		if entryOK == 0 {
+			fmt.Printf("  %s %s: %v\n", errorStyle.Render("x"), skill.Slug, lastErr)
 			errored++
 			continue
 		}
@@ -334,17 +327,42 @@ func syncInstallSkills(
 	return installed, skipped, errored
 }
 
-// selectSyncPlatformsAndScope runs the platform and scope selection prompts for sync.
-// When yes is true, skip interactive prompts and fall back to detected platforms
-// with global scope (same behaviour as the non-interactive path).
-func selectSyncPlatformsAndScope(ctx context.Context, service *installer.InstallService, yes bool) (*installer.InstallOptions, error) {
+// buildSyncPlan decides where the manifest's skills should be installed.
+//
+// Non-interactive (--yes or piped stdin):
+//  1. If the user has opted into remembered install locations, honor each
+//     enabled (platform, scope) pair individually. This mirrors `install -y`.
+//  2. Otherwise fall back to detected platforms at **project scope**, because
+//     skulto.json is a project manifest by design (see cert 2u).
+//
+// Interactive: prompt for platforms and scopes as before, returning a single
+// combined plan entry.
+func buildSyncPlan(ctx context.Context, service *installer.InstallService, database *db.DB, yes bool) ([]installer.InstallOptions, error) {
 	platforms, err := service.DetectPlatforms(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect platforms: %w", err)
 	}
 
 	if yes || !isInteractive() {
-		// Non-interactive: use detected platforms with global scope
+		if remember, _ := database.GetRememberInstallLocations(); remember {
+			saved, err := database.GetEnabledAgentScopes()
+			if err == nil && len(saved) > 0 {
+				var plan []installer.InstallOptions
+				for platformID, scopeStr := range saved {
+					scope := installer.InstallScope(scopeStr)
+					if !scope.IsValid() {
+						scope = installer.ScopeProject
+					}
+					plan = append(plan, installer.InstallOptions{
+						Platforms: []string{platformID},
+						Scopes:    []installer.InstallScope{scope},
+						Confirm:   true,
+					})
+				}
+				return plan, nil
+			}
+		}
+
 		var selected []string
 		for _, p := range platforms {
 			if p.Detected {
@@ -354,11 +372,11 @@ func selectSyncPlatformsAndScope(ctx context.Context, service *installer.Install
 		if len(selected) == 0 {
 			return nil, fmt.Errorf("no platforms detected, use interactive mode")
 		}
-		return &installer.InstallOptions{
+		return []installer.InstallOptions{{
 			Platforms: selected,
-			Scopes:    []installer.InstallScope{installer.ScopeGlobal},
+			Scopes:    []installer.InstallScope{installer.ScopeProject},
 			Confirm:   true,
-		}, nil
+		}}, nil
 	}
 
 	result, err := prompts.RunGroupedPlatformSelector(platforms, nil, nil)
@@ -376,43 +394,40 @@ func selectSyncPlatformsAndScope(ctx context.Context, service *installer.Install
 	}
 	scopes := prompts.ParseScopeStrings(scopeStrs)
 	if len(scopes) == 0 {
-		scopes = []installer.InstallScope{installer.ScopeGlobal}
+		scopes = []installer.InstallScope{installer.ScopeProject}
 	}
 
-	return &installer.InstallOptions{
+	return []installer.InstallOptions{{
 		Platforms: result.Selected,
 		Scopes:    scopes,
 		Confirm:   true,
-	}, nil
+	}}, nil
 }
 
-// syncIsInstalledAtAll checks if a skill is installed at all selected platform+scope combinations
-// for the current working directory. Project-scoped installations only match if their BasePath
-// equals cwd; global-scoped installations match if their BasePath equals the user's home directory.
-func syncIsInstalledAtAll(
-	existing []installer.InstallLocation,
-	platforms []string,
-	scopes []installer.InstallScope,
-	cwd string,
-) bool {
+// syncPlanFullyInstalled returns true when the skill is already present at
+// every (platform, scope) pair the plan would install to. Project-scoped
+// installs match cwd; global-scoped installs match the user's home dir.
+func syncPlanFullyInstalled(existing []installer.InstallLocation, plan []installer.InstallOptions, cwd string) bool {
 	home, _ := os.UserHomeDir()
 
-	for _, p := range platforms {
-		for _, s := range scopes {
-			expectedBase := home
-			if s == installer.ScopeProject {
-				expectedBase = cwd
-			}
-
-			found := false
-			for _, loc := range existing {
-				if string(loc.Platform) == p && loc.Scope == s && loc.BasePath == expectedBase {
-					found = true
-					break
+	for _, opts := range plan {
+		for _, p := range opts.Platforms {
+			for _, s := range opts.Scopes {
+				expectedBase := home
+				if s == installer.ScopeProject {
+					expectedBase = cwd
 				}
-			}
-			if !found {
-				return false
+
+				found := false
+				for _, loc := range existing {
+					if string(loc.Platform) == p && loc.Scope == s && loc.BasePath == expectedBase {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return false
+				}
 			}
 		}
 	}

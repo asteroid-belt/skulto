@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/asteroid-belt/skulto/internal/config"
@@ -72,11 +73,23 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return trackCLIError("save", fmt.Errorf("query installations: %w", err))
 	}
 
+	// Compute the set of skill IDs being saved so we can diff against the
+	// user's global installs and warn about anything that won't land in the
+	// manifest.
+	savedSkillIDs := make(map[string]bool)
+	for _, inst := range installations {
+		savedSkillIDs[inst.SkillID] = true
+	}
+	unsavedGlobal := collectGlobalSkillsNotInProject(database, savedSkillIDs)
+
 	if len(installations) == 0 {
 		fmt.Println("No project-scope skills installed for this directory.")
 		fmt.Println()
 		fmt.Println("Install skills with project scope first:")
 		fmt.Println("  skulto install <slug> -s project")
+		if len(unsavedGlobal) > 0 {
+			printGlobalSkillsNotSavedWarning(unsavedGlobal)
+		}
 		return nil
 	}
 
@@ -152,6 +165,9 @@ func runSave(cmd *cobra.Command, args []string) error {
 	if existing != nil && manifest.ManifestEqual(existing, mf) {
 		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 		fmt.Printf("%s (version %d)\n", infoStyle.Render("No changes to skulto.json"), existing.Version)
+		if len(unsavedGlobal) > 0 {
+			printGlobalSkillsNotSavedWarning(unsavedGlobal)
+		}
 		return nil
 	}
 
@@ -183,9 +199,72 @@ func runSave(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
+	if len(unsavedGlobal) > 0 {
+		printGlobalSkillsNotSavedWarning(unsavedGlobal)
+	}
+
 	telemetryClient.TrackManifestSaved(mf.SkillCount(), "cli")
 
 	return nil
+}
+
+// collectGlobalSkillsNotInProject returns the sorted, deduplicated slugs of
+// skills that are installed at global scope but are NOT already being saved
+// via a project-scope install in the current directory. These are the skills
+// that would surprise a user who ran `skulto check` and expected everything
+// to land in the manifest.
+func collectGlobalSkillsNotInProject(database *db.DB, savedSkillIDs map[string]bool) []string {
+	all, err := database.GetAllInstallations()
+	if err != nil {
+		return nil
+	}
+	seenGlobal := make(map[string]bool)
+	var slugs []string
+	for _, inst := range all {
+		if inst.Scope != "global" {
+			continue
+		}
+		if savedSkillIDs[inst.SkillID] {
+			continue
+		}
+		if seenGlobal[inst.SkillID] {
+			continue
+		}
+		seenGlobal[inst.SkillID] = true
+		skill, err := database.GetSkill(inst.SkillID)
+		if err != nil || skill == nil {
+			continue
+		}
+		slugs = append(slugs, skill.Slug)
+	}
+	sort.Strings(slugs)
+	return slugs
+}
+
+// printGlobalSkillsNotSavedWarning explains why global-scope installs are
+// absent from skulto.json and tells the user how to include them if they
+// want to. The manifest is intentionally project-scoped, but running
+// `skulto check` then `skulto save` looks like a lossy operation unless we
+// say so out loud.
+func printGlobalSkillsNotSavedWarning(slugs []string) {
+	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	slugStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+
+	fmt.Println()
+	fmt.Printf("%s %d global-scope skill(s) not saved to skulto.json:\n",
+		warnStyle.Render("NOTE"), len(slugs))
+	for _, slug := range slugs {
+		fmt.Printf("  %s %s\n", dimStyle.Render("-"), slugStyle.Render(slug))
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  skulto.json is a project manifest; only project-scope installs for"))
+	fmt.Println(dimStyle.Render("  the current directory are saved. Global installs are personal to"))
+	fmt.Println(dimStyle.Render("  your machine and stay out of version control."))
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  To include any of these, reinstall at project scope and re-save:"))
+	fmt.Println(dimStyle.Render("    skulto install <slug> -s project -y"))
+	fmt.Println(dimStyle.Render("    skulto save"))
 }
 
 // filterIgnored removes entries whose Name appears in the manifest's ignored list.

@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "skills": {
+    "adversarial-plan-review": "refactornator/adversarial-plan-review",
+    "supercharge": "asteroid-belt/skills",
+    "superdocs": "asteroid-belt/skills"
+  }
+}
