@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/google/go-github/v66 v66.0.0
@@ -58,7 +59,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/glebarez/go-sqlite v1.21.2 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect

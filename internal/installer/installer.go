@@ -500,7 +500,10 @@ func (i *Installer) scanPlatformScope(ctx context.Context, platform Platform, sc
 		return err
 	}
 
-	skillsDir := filepath.Join(basePath, info.SkillsPath)
+	skillsDir := resolveSkillsBasePath(platform, scope, basePath)
+	if skillsDir == "" {
+		return nil
+	}
 
 	// Check if directory exists
 	if !exists(skillsDir) {

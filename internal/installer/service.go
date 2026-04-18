@@ -78,6 +78,12 @@ func (s *InstallService) DB() *db.DB {
 	return s.db
 }
 
+// EnsurePathPolicy enforces configured installer path policies for this run.
+func (s *InstallService) EnsurePathPolicy(ctx context.Context, cwd string) error {
+	_, err := s.installer.EnsurePathPolicy(ctx, cwd)
+	return err
+}
+
 // DetectPlatforms returns all known platforms with their detection status.
 // Detection is done by checking if platform commands exist in PATH or
 // if platform directories exist.

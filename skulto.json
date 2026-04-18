@@ -3,6 +3,9 @@
   "skills": {
     "adversarial-plan-review": "refactornator/adversarial-plan-review",
     "supercharge": "asteroid-belt/skills",
-    "superdocs": "asteroid-belt/skills"
+    "superdocs": "asteroid-belt/skills",
+    "autobuild": "asteroid-belt/skills",
+    "golang-cli-review": "asteroid-belt/skills",
+    "teach": "asteroid-belt/skills"
   }
 }

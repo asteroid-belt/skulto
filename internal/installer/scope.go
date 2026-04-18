@@ -60,21 +60,24 @@ func NewInstallLocation(platform Platform, scope InstallScope) (InstallLocation,
 // GetSkillPath returns the full path to a skill directory for this location.
 // Example: ~/.claude/skills/{slug}/ or ./.claude/skills/{slug}/
 func (loc InstallLocation) GetSkillPath(skillSlug string) string {
-	info := loc.Platform.Info()
-	if info.SkillsPath == "" {
+	baseSkillsPath := resolveSkillsBasePath(loc.Platform, loc.Scope, loc.BasePath)
+	if baseSkillsPath == "" {
 		return ""
 	}
-	return filepath.Join(loc.BasePath, info.SkillsPath, skillSlug)
+	return filepath.Join(baseSkillsPath, skillSlug)
 }
 
 // GetBaseSkillsPath returns the skills directory without the skill slug.
 // Example: ~/.claude/skills/ or ./.claude/skills/
 func (loc InstallLocation) GetBaseSkillsPath() string {
-	info := loc.Platform.Info()
-	if info.SkillsPath == "" {
-		return ""
-	}
-	return filepath.Join(loc.BasePath, info.SkillsPath)
+	return resolveSkillsBasePath(loc.Platform, loc.Scope, loc.BasePath)
+}
+
+// resolveSkillsBasePath returns the base skills directory for a platform/scope pair.
+// Most platforms resolve to <basePath>/<SkillsPath>, while OpenCode global scope
+// resolves to XDG at <basePath>/.config/opencode/skills.
+func resolveSkillsBasePath(platform Platform, scope InstallScope, basePath string) string {
+	return resolveCanonicalSkillsBasePath(platform, scope, basePath)
 }
 
 // String returns a string representation for display.

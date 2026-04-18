@@ -119,6 +119,13 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		log.Println("\nTelemetry: OFF")
 	}
 
+	// Enforce installer path policy migrations before discovery scans.
+	installService := installer.NewInstallService(database, cfg, telemetryClient)
+	cwd, _ := os.Getwd()
+	if err := installService.EnsurePathPolicy(context.Background(), cwd); err != nil {
+		log.Printf("\nPath policy migration skipped: %v\n", err)
+	}
+
 	// Scan for unmanaged skills before showing notification
 	scanDiscoveredSkills(database, cfg)
 

@@ -340,3 +340,12 @@ func TestInstallService_GetInstalledSkillsSummary(t *testing.T) {
 		assert.Contains(t, scopes, ScopeProject)
 	})
 }
+
+func TestInstallService_EnsurePathPolicy(t *testing.T) {
+	service, _ := setupTestService(t)
+	ctx := context.Background()
+
+	cwd := t.TempDir()
+	err := service.EnsurePathPolicy(ctx, cwd)
+	require.NoError(t, err)
+}

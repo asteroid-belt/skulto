@@ -66,6 +66,18 @@ func (db *DB) GetProjectInstallations(basePath string) ([]models.SkillInstallati
 	return installations, err
 }
 
+// UpdateInstallationSymlinkPath updates symlink_path for records at a location.
+// It targets a specific platform/scope/basePath and old symlink path to avoid
+// mutating unrelated installation records.
+func (db *DB) UpdateInstallationSymlinkPath(platform, scope, basePath, oldSymlinkPath, newSymlinkPath string) error {
+	return db.Model(&models.SkillInstallation{}).
+		Where(
+			"platform = ? AND scope = ? AND base_path = ? AND symlink_path = ?",
+			platform, scope, basePath, oldSymlinkPath,
+		).
+		Update("symlink_path", newSymlinkPath).Error
+}
+
 // GetLastInstallLocations returns the platform+scope pairs from the most recent
 // install event. An "install event" is a group of installations sharing the same
 // installed_at timestamp (i.e. all locations chosen in one dialog confirmation).

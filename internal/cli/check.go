@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -64,6 +65,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Reconcile project skills before listing
 	cwd, _ := os.Getwd()
+	svc := installer.NewInstallService(database, cfg, telemetryClient)
+	_ = svc.EnsurePathPolicy(context.Background(), cwd)
 	inst := installer.New(database, cfg)
 	if reconcileResult, err := inst.ReconcileProjectSkills(cwd); err == nil && len(reconcileResult.Reconciled) > 0 {
 		reconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true)
@@ -75,9 +78,6 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 	}
-
-	// Create install service
-	svc := installer.NewInstallService(database, cfg, telemetryClient)
 
 	// Get installed skills summary
 	skills, err := svc.GetInstalledSkillsSummary(cmd.Context())
