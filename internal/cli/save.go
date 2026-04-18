@@ -54,6 +54,9 @@ func runSave(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = database.Close() }()
 
+	service := installer.NewInstallService(database, cfg, telemetryClient)
+	_ = service.EnsurePathPolicy(context.Background(), cwd)
+
 	// Reconcile project skills before querying installations
 	inst := installer.New(database, cfg)
 	reconcileResult, _ := inst.ReconcileProjectSkills(cwd)

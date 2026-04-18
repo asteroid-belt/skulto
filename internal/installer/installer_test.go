@@ -93,7 +93,7 @@ func TestPlatformGetSkillPath(t *testing.T) {
 			name:     "OpenCode",
 			platform: PlatformOpenCode,
 			slug:     "test-skill",
-			expected: filepath.Join(home, ".opencode", "skills", "test-skill"),
+			expected: filepath.Join(home, ".config", "opencode", "skills", "test-skill"),
 		},
 	}
 
@@ -104,6 +104,48 @@ func TestPlatformGetSkillPath(t *testing.T) {
 			assert.Equal(t, tt.expected, path)
 		})
 	}
+}
+
+func TestPlatformGetSkillPath_OpenCodeGlobalUsesXDG(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	path, err := PlatformOpenCode.GetSkillPath("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".config", "opencode", "skills", "test-skill"), path)
+}
+
+func TestInstallLocation_GetSkillPath_OpenCodeByScope(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	locGlobal := InstallLocation{
+		Platform: PlatformOpenCode,
+		Scope:    ScopeGlobal,
+		BasePath: home,
+	}
+	assert.Equal(t,
+		filepath.Join(home, ".config", "opencode", "skills", "my-skill"),
+		locGlobal.GetSkillPath("my-skill"),
+	)
+	assert.Equal(t,
+		filepath.Join(home, ".config", "opencode", "skills"),
+		locGlobal.GetBaseSkillsPath(),
+	)
+
+	locProject := InstallLocation{
+		Platform: PlatformOpenCode,
+		Scope:    ScopeProject,
+		BasePath: "/tmp/project",
+	}
+	assert.Equal(t,
+		filepath.Join("/tmp/project", ".opencode", "skills", "my-skill"),
+		locProject.GetSkillPath("my-skill"),
+	)
+	assert.Equal(t,
+		filepath.Join("/tmp/project", ".opencode", "skills"),
+		locProject.GetBaseSkillsPath(),
+	)
 }
 
 // TestPlatformFromString tests platform string conversion.

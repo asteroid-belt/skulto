@@ -50,7 +50,7 @@ type PlatformInfo struct {
 | `cursor` | Cursor | `.cursor/skills` | `cursor` | `~/.cursor/skills/` |
 | `copilot` | GitHub Copilot | `.github/skills` | - | `~/.copilot/skills/` |
 | `codex` | OpenAI Codex | `.codex/skills` | `codex` | `~/.codex/skills/` |
-| `opencode` | OpenCode | `.opencode/skills` | `opencode` | `~/.config/opencode/skills/` |
+| `opencode` | OpenCode | Project: `.opencode/skills` (Global canonical: `~/.config/opencode/skills/`) | `opencode` | `~/.config/opencode/skills/` |
 | `windsurf` | Windsurf | `.windsurf/skills` | `windsurf` | `~/.codeium/windsurf/skills/` |
 
 ### Extended Platforms
@@ -160,6 +160,19 @@ func resolveBasePath(scope InstallScope) (string, error) {
     }
 }
 ```
+
+### Path Policy Migration Framework
+
+Skulto now supports policy-driven path evolution for platform install directories.
+
+- **Canonical path**: current official install location.
+- **Deprecated path(s)**: legacy paths that are still recognized for migration.
+- **Behavior**: on startup and selected CLI flows, Skulto migrates eligible
+  deprecated symlink installs to canonical paths and syncs `skill_installations`.
+
+Initial policy:
+- OpenCode global canonical: `~/.config/opencode/skills/`
+- OpenCode global deprecated: `~/.opencode/skills/`
 
 ### Example Installation Paths
 

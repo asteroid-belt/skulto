@@ -362,17 +362,16 @@ func (p Platform) GetSkillPath(skillSlug string) (string, error) {
 // GetSkillPathForScope returns the full path to a skill directory for this platform and scope.
 // Example: ~/.claude/skills/{slug}/ for global, ./.claude/skills/{slug}/ for project
 func (p Platform) GetSkillPathForScope(skillSlug string, scope InstallScope) (string, error) {
-	info := p.Info()
-	if info.SkillsPath == "" {
-		return "", nil
-	}
-
 	basePath, err := resolveBasePath(scope)
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(basePath, info.SkillsPath, skillSlug), nil
+	baseSkillsPath := resolveSkillsBasePath(p, scope, basePath)
+	if baseSkillsPath == "" {
+		return "", nil
+	}
+	return filepath.Join(baseSkillsPath, skillSlug), nil
 }
 
 // PlatformFromString converts a string to a Platform.
