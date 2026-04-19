@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/asteroid-belt/skulto/internal/config"
 	"github.com/asteroid-belt/skulto/internal/db"
@@ -65,6 +67,22 @@ func (asv *AddSourceView) SetSize(width, height int) {
 
 // Update handles key input. Returns (shouldGoBack, wasSuccessful).
 func (asv *AddSourceView) Update(key string) (bool, bool) {
+	// Keep string-based update for compatibility with existing call sites.
+	return asv.UpdateKey(asv.stringToKeyMsg(key))
+}
+
+// UpdateKey handles raw key messages. Returns (shouldGoBack, wasSuccessful).
+func (asv *AddSourceView) UpdateKey(msg tea.KeyMsg) (bool, bool) {
+	if msg.Type == tea.KeyRunes && msg.Paste {
+		if err := asv.handleBracketedPaste(string(msg.Runes)); err != nil {
+			asv.error = fmt.Sprintf("Invalid pasted URL: %v", err)
+			return false, false
+		}
+		asv.error = ""
+		return false, false
+	}
+
+	key := msg.String()
 	switch key {
 	case "esc":
 		return true, false
@@ -87,11 +105,8 @@ func (asv *AddSourceView) Update(key string) (bool, bool) {
 		return true, true
 
 	default:
-		// Convert string key to tea.KeyMsg for textinput
-		keyMsg := asv.stringToKeyMsg(key)
-
 		// Pass to textinput for proper cursor handling
-		asv.input, _ = asv.input.Update(keyMsg)
+		asv.input, _ = asv.input.Update(msg)
 
 		// Clear error when user starts typing
 		if asv.error != "" {
@@ -99,6 +114,45 @@ func (asv *AddSourceView) Update(key string) (bool, bool) {
 		}
 		return false, false
 	}
+}
+
+func (asv *AddSourceView) handleBracketedPaste(raw string) error {
+	normalized, err := normalizePastedRepositoryURL(raw)
+	if err != nil {
+		return err
+	}
+	asv.input.SetValue(normalized)
+	return nil
+}
+
+func normalizePastedRepositoryURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.Trim(trimmed, "\"'`<>")
+	if trimmed == "" {
+		return "", fmt.Errorf("empty input")
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("unable to parse URL")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("expected absolute URL")
+	}
+
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(segments) < 2 || segments[0] == "" || segments[1] == "" {
+		return "", fmt.Errorf("expected host/org/repo path")
+	}
+
+	parsed.Scheme = "https"
+	parsed.Path = "/" + segments[0] + "/" + segments[1]
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	parsed.ForceQuery = false
+
+	return parsed.String(), nil
 }
 
 // stringToKeyMsg converts a string key representation to a tea.KeyMsg.

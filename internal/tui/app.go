@@ -933,7 +933,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case ViewAddSource:
-			back, wasSuccessful := m.addSourceView.Update(key)
+			back, wasSuccessful := m.addSourceView.UpdateKey(msg)
 			if back {
 				if wasSuccessful {
 					// Get the repository URL
