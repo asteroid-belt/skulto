@@ -1,0 +1,119 @@
+# Walkthrough Hub — GitHub Pages deploy
+#
+# DESIGN NOTE (how this builds without the skill's own scripts):
+# ----------------------------------------------------------------
+# This workflow lives inside the TARGET repo and cannot reference the
+# walkthrough skill's scripts (they are not vendored into the repo). Rather
+# than copy build-hub.mjs in and risk version drift, this workflow INLINES
+# the few filesystem steps that build-hub.mjs performs:
+#
+#   1. Copy .walkthrough/walkthrough.config.json -> .walkthrough/hub/public/
+#   2. Copy .walkthrough/content/             -> .walkthrough/hub/public/content/
+#   3. `npm ci` + `WT_BASE=<base> npm run build` inside .walkthrough/hub/
+#   4. Upload .walkthrough/dist as the Pages artifact.
+#
+# The Vite build writes to .walkthrough/hub/dist; we then sync it to
+# .walkthrough/dist so the published path matches the layout contract.
+#
+# WT_BASE: GitHub Pages project sites serve under /<repo-name>/. We derive that
+# automatically from the repository name, so no manual base config is needed.
+# (For a user/org root site served at "/", set WT_BASE to "/" below.)
+
+name: Deploy Walkthrough Hub
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - ".walkthrough/**"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Optional: mermaid-cli enables lightweight pre-rendered diagrams in the
+      # route build engine. It is only needed if your route sources use Mermaid
+      # and you want server-side rendering. Uncomment to enable.
+      # - name: Install mermaid-cli (optional, for pre-rendered diagrams)
+      #   run: npm install -g @mermaid-js/mermaid-cli
+
+      # TODO (route engine): If your repo stores walkthrough DSL/source files
+      # that must be (re)compiled into .walkthrough/content/routes/*.html, run
+      # the route build engine here BEFORE building the hub. The route engine
+      # and its source layout are engine-defined; wire up the invocation that
+      # matches your setup, e.g.:
+      #
+      #   - name: Build routes from sources
+      #     run: node path/to/build-walkthrough.mjs --src <sources> --out .walkthrough/content/routes
+      #
+      # If routes are committed directly as HTML (no DSL sources), skip this.
+
+      - name: Compute base path
+        id: base
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          echo "wt_base=/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
+
+      - name: Stage hub content (inlined build-hub.mjs copy steps)
+        run: |
+          set -euo pipefail
+          mkdir -p .walkthrough/hub/public
+          cp .walkthrough/walkthrough.config.json .walkthrough/hub/public/walkthrough.config.json
+          rm -rf .walkthrough/hub/public/content
+          if [ -d .walkthrough/content ]; then
+            cp -R .walkthrough/content .walkthrough/hub/public/content
+          fi
+
+      - name: Install hub dependencies
+        working-directory: .walkthrough/hub
+        run: npm ci || npm install
+
+      - name: Build hub
+        working-directory: .walkthrough/hub
+        env:
+          WT_BASE: ${{ steps.base.outputs.wt_base }}
+        run: npm run build
+
+      - name: Sync build output to .walkthrough/dist
+        run: |
+          set -euo pipefail
+          rm -rf .walkthrough/dist
+          mkdir -p .walkthrough/dist
+          cp -R .walkthrough/hub/dist/. .walkthrough/dist/
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .walkthrough/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

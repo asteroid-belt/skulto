@@ -1,0 +1,18 @@
+{
+  "title": "Skulto Onboarding Hub",
+  "description": "Learning hub for Skulto — the cross-platform AI-skills manager that scans for prompt injection before you install.",
+  "base": "/skulto/",
+  "theme": "auto",
+  "routes": [
+    {
+      "title": "Skulto — The Ultimate Onboarding Guide",
+      "slug": "onboarding",
+      "file": "content/routes/onboarding.html",
+      "audience": "new contributors & power users",
+      "summary": "Zero to productive: the problem Skulto solves, the one-codebase-three-faces architecture (CLI/TUI/MCP), build & run, the golden-path workflow, the security scanner, installer, data layer, telemetry, and how to ship a first change.",
+      "tags": ["onboarding", "architecture", "go", "cli", "tui", "mcp", "security"],
+      "source": "repo"
+    }
+  ],
+  "plans": []
+}
