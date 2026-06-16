@@ -23,7 +23,7 @@ name: Deploy Walkthrough Hub
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, walkthrough-intro]
     paths:
       - ".walkthrough/**"
   workflow_dispatch:
