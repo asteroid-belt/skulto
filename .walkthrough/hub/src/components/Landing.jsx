@@ -63,8 +63,6 @@ function RouteCard({ route }) {
       id={id}
       className="card"
       href={routeUrl(route)}
-      target="_blank"
-      rel="noopener noreferrer"
     >
       <div className="card-top">
         {route.audience && <span className="badge">{route.audience}</span>}

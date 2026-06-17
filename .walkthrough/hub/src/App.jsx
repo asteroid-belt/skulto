@@ -5,9 +5,16 @@ import Sidebar from './components/Sidebar.jsx';
 import Landing from './components/Landing.jsx';
 import PlanView from './components/PlanView.jsx';
 
+// Below this width the sidebar becomes an overlay drawer and auto-collapses.
+const NARROW = '(max-width: 860px)';
+const isNarrow = () =>
+  typeof window !== 'undefined' && window.matchMedia(NARROW).matches;
+
 export default function App() {
   const [config, setConfig] = useState(null);
   const [query, setQuery] = useState('');
+  // Open on wide screens, collapsed on narrow ones (resolved again on mount).
+  const [navOpen, setNavOpen] = useState(() => !isNarrow());
 
   useEffect(() => {
     let alive = true;
@@ -19,6 +26,16 @@ export default function App() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // Auto-collapse when the viewport is narrow; auto-open when it widens again.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(NARROW);
+    const apply = () => setNavOpen(!mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
 
   const filtered = useMemo(() => {
@@ -47,13 +64,34 @@ export default function App() {
     );
   }
 
+  // On narrow screens, picking an item should close the overlay drawer.
+  const closeIfNarrow = () => {
+    if (isNarrow()) setNavOpen(false);
+  };
+
   return (
-    <div className="app-shell">
+    <div className={'app-shell' + (navOpen ? '' : ' nav-collapsed')}>
       <Sidebar
         config={config}
         filtered={filtered}
         query={query}
         onQueryChange={setQuery}
+        onToggle={() => setNavOpen((v) => !v)}
+        onNavigate={closeIfNarrow}
+      />
+      <button
+        type="button"
+        className="nav-open-btn"
+        onClick={() => setNavOpen(true)}
+        aria-label="Open navigation"
+        title="Open navigation"
+      >
+        ☰
+      </button>
+      <div
+        className="nav-scrim"
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
       />
       <main className="content">
         <Routes>

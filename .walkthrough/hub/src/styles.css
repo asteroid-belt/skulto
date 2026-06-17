@@ -99,8 +99,12 @@ a:hover {
 /* ---------- Shell ---------- */
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 0.22s ease;
+}
+.app-shell.nav-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 /* ---------- Sidebar ---------- */
@@ -108,12 +112,24 @@ a:hover {
   position: sticky;
   top: 0;
   height: 100vh;
+  min-width: 0; /* let the grid track shrink to 0 when collapsed */
   display: flex;
   flex-direction: column;
   background: var(--bg-elev);
   border-right: 1px solid var(--border);
   padding: 20px 16px;
-  overflow-y: auto;
+  overflow: hidden auto; /* clip horizontally while collapsing, scroll vertically */
+  transition: padding 0.22s ease, border-color 0.22s ease;
+}
+.app-shell.nav-collapsed .sidebar {
+  padding-left: 0;
+  padding-right: 0;
+  border-right-color: transparent;
+  pointer-events: none;
+}
+.app-shell.nav-collapsed .sidebar > * {
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
 .sidebar-head {
   display: flex;
@@ -122,7 +138,15 @@ a:hover {
   gap: 10px;
   margin-bottom: 18px;
 }
-.theme-toggle {
+.sidebar-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* Shared icon button (theme toggle, collapse, open) */
+.icon-btn {
   flex: none;
   width: 32px;
   height: 32px;
@@ -139,9 +163,59 @@ a:hover {
   border: 1px solid var(--border);
   transition: border-color 0.12s ease, color 0.12s ease;
 }
-.theme-toggle:hover {
+.icon-btn:hover {
   border-color: var(--accent-2);
   color: var(--accent-2);
+}
+.nav-collapse-btn {
+  border-radius: 8px;
+  font-size: 17px;
+  color: var(--text-dim);
+}
+
+/* Floating "open" button — only visible when the sidebar is collapsed */
+.nav-open-btn {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 30;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s ease, border-color 0.12s ease,
+    color 0.12s ease;
+}
+.nav-open-btn:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+.app-shell.nav-collapsed .nav-open-btn {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Backdrop for the mobile overlay drawer — hidden except on narrow + open */
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(2, 8, 20, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 .brand {
   display: flex;
@@ -508,20 +582,42 @@ a:hover {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 860px) {
-  .app-shell {
-    grid-template-columns: 1fr;
+  /* Single content column; the sidebar becomes an overlay drawer. */
+  .app-shell,
+  .app-shell.nav-collapsed {
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
-    position: static;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    width: min(86vw, 320px);
+    height: 100vh;
+    padding: 20px 16px;
+    border-right: 1px solid var(--border);
+    transform: translateX(0);
+    transition: transform 0.22s ease;
+  }
+  /* On mobile we slide the whole panel instead of squeezing it. */
+  .app-shell.nav-collapsed .sidebar {
+    transform: translateX(-100%);
+    padding: 20px 16px;
+    border-right-color: var(--border);
+  }
+  .app-shell.nav-collapsed .sidebar > * {
+    opacity: 1;
+  }
+  .app-shell:not(.nav-collapsed) .nav-scrim {
+    opacity: 1;
+    visibility: visible;
   }
   .nav {
     margin-top: 16px;
   }
   .content {
-    padding: 32px 22px 72px;
+    /* extra top padding clears the fixed hamburger button */
+    padding: 64px 22px 72px;
   }
   .landing-hero h1 {
     font-size: 26px;

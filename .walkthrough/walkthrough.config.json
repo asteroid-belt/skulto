@@ -1,16 +1,70 @@
 {
   "title": "Skulto Onboarding Hub",
-  "description": "Learning hub for Skulto — the cross-platform AI-skills manager that scans for prompt injection before you install.",
+  "description": "A seven-part onboarding course for Skulto — the cross-platform AI-skills manager that scans for prompt injection before you install. Every fact verified against source.",
   "base": "/skulto/",
   "theme": "auto",
   "routes": [
     {
-      "title": "Skulto — The Ultimate Onboarding Guide",
-      "slug": "onboarding",
-      "file": "content/routes/onboarding.html",
+      "title": "1 · Overview & Mental Model",
+      "slug": "01-overview",
+      "file": "content/routes/01-overview.html",
       "audience": "new contributors & power users",
-      "summary": "Zero to productive: the problem Skulto solves, the one-codebase-three-faces architecture (CLI/TUI/MCP), build & run, the golden-path workflow, the security scanner, installer, data layer, telemetry, and how to ship a first change.",
-      "tags": ["onboarding", "architecture", "go", "cli", "tui", "mcp", "security"],
+      "summary": "What Skulto is, the two problems it solves (prompt-injection risk + 33-tool fragmentation), and the one idea behind the codebase: three interfaces over one shared service layer. Includes the repo tour and a where-to-change map.",
+      "tags": ["overview", "architecture", "mental-model"],
+      "source": "repo"
+    },
+    {
+      "title": "2 · Build & First Run",
+      "slug": "02-build-run",
+      "file": "content/routes/02-build-run.html",
+      "audience": "new contributors",
+      "summary": "Clone, make deps, build both binaries, and walk the five-step first-run onboarding. Demystifies the ~/.agents/skulto data directory and every environment variable.",
+      "tags": ["build", "setup", "getting-started"],
+      "source": "repo"
+    },
+    {
+      "title": "3 · The CLI",
+      "slug": "03-cli",
+      "file": "content/routes/03-cli.html",
+      "audience": "new contributors & power users",
+      "summary": "The golden-path workflow (add → install → check), the complete command reference (including the often-missed list, discover, and ingest), and how save/sync make a project's skills reproducible via skulto.json.",
+      "tags": ["cli", "workflow", "commands"],
+      "source": "repo"
+    },
+    {
+      "title": "4 · The TUI",
+      "slug": "04-tui",
+      "file": "content/routes/04-tui.html",
+      "audience": "new contributors & power users",
+      "summary": "The default front door: its views, the real per-view keybindings (not the misleading keys.go keymap), and the core flows — search, install with the platform/scope dialog, manage/uninstall, and favorites.",
+      "tags": ["tui", "bubbletea", "keybindings"],
+      "source": "repo"
+    },
+    {
+      "title": "5 · The MCP Server",
+      "slug": "05-mcp",
+      "file": "content/routes/05-mcp.html",
+      "audience": "new contributors & AI-agent authors",
+      "summary": "Wire Skulto into an AI agent over stdio: the full 12-tool surface, the two skill resources, a real client config, the install selection handshake, and proof it's a thin adapter over the same services as CLI/TUI.",
+      "tags": ["mcp", "agents", "tools"],
+      "source": "repo"
+    },
+    {
+      "title": "6 · Security Scanner",
+      "slug": "06-security",
+      "file": "content/routes/06-security.html",
+      "audience": "new contributors & power users",
+      "summary": "The corrected, code-grounded model: 9 categories (not 4), per-pattern severity, score = base minus context mitigation, the warning threshold, and the truth about scan-before-install (implemented but non-blocking today).",
+      "tags": ["security", "scanner", "prompt-injection"],
+      "source": "repo"
+    },
+    {
+      "title": "7 · Data, Search & Contributing",
+      "slug": "07-internals-contributing",
+      "file": "content/routes/07-internals-contributing.html",
+      "audience": "new contributors",
+      "summary": "How storage (SQLite/GORM/FTS5/BM25) and hybrid search work, the OPENAI_API_KEY gating chain, the telemetry four-step rule, the CI gates, and a worked first change framed around capability-vs-presentation.",
+      "tags": ["database", "search", "telemetry", "contributing"],
       "source": "repo"
     }
   ],

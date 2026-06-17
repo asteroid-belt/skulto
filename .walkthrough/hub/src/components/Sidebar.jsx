@@ -19,7 +19,7 @@ function ThemeToggle() {
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className="icon-btn theme-toggle"
       onClick={toggle}
       aria-label="Toggle light or dark theme"
       title="Toggle light/dark"
@@ -29,17 +29,28 @@ function ThemeToggle() {
   );
 }
 
-export default function Sidebar({ config, filtered, query, onQueryChange }) {
+export default function Sidebar({ config, filtered, query, onQueryChange, onToggle, onNavigate }) {
   const location = useLocation();
 
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <Link to="/" className="brand">
+        <Link to="/" className="brand" onClick={onNavigate}>
           <span className="brand-mark" aria-hidden="true">◆</span>
           <span className="brand-text">{config.title || 'Walkthroughs'}</span>
         </Link>
-        <ThemeToggle />
+        <div className="sidebar-head-actions">
+          <ThemeToggle />
+          <button
+            type="button"
+            className="icon-btn nav-collapse-btn"
+            onClick={onToggle}
+            aria-label="Collapse navigation"
+            title="Collapse sidebar"
+          >
+            «
+          </button>
+        </div>
       </div>
 
       <div className="search">
@@ -68,6 +79,7 @@ export default function Sidebar({ config, filtered, query, onQueryChange }) {
                   );
                   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
+                onNavigate?.();
               }}
             >
               {route.title || route.slug}
@@ -87,6 +99,7 @@ export default function Sidebar({ config, filtered, query, onQueryChange }) {
                   (location.pathname === `/plans/${name}` ? ' active' : '')
                 }
                 to={`/plans/${name}`}
+                onClick={onNavigate}
               >
                 {plan.title || name}
               </Link>
