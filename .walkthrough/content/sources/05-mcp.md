@@ -92,7 +92,7 @@ handled in `handlers.go`.
 | `skulto_add` | Add a repo and sync its skills (5-min timeout) | `url` *(req)* |
 
 :::callout note
-Two gotchas worth flagging, both verified against source:
+Two gotchas worth flagging:
 **(1)** The binary's own `--help` text lists only 10 tools — it omits `skulto_check` and
 `skulto_add`. The authoritative set is the **12** registered in `server.go`.
 **(2)** `skulto_add`'s parameter is `url`. The `context/mcp-server.md` doc calls it
@@ -145,5 +145,4 @@ Every handler wraps itself in `trackToolCall(...)`, emitting the MCP-exclusive
 source (e.g. `TrackSearchPerformed(query, n, "mcp")`), so the same action is comparable
 across all three interfaces. Anonymous, opt-out as everywhere.
 
-Next: **Part 6 · Security scanner** — the corrected, real threat model that justifies the
-whole tool.
+Next: **Part 6 · Security scanner** — the real threat model that justifies the whole tool.

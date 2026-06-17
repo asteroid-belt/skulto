@@ -125,7 +125,10 @@ The rule of thumb for "where do I change X":
 | Where data lives on disk | `internal/config/paths.go` |
 
 :::callout note
-A quick myth-check, because two stale docs trip people up: `context/mcp-server.md` and parts of `context/security.md` contain *illustrative* snippets that have drifted from the code (old param names, an outdated 4-category scanner model). Throughout this course the facts are taken from the **source**, not those docs — and the Security part (Part 6) corrects the 4-category myth directly.
+Heads-up for when you read the repo's own docs: `context/mcp-server.md` and parts of
+`context/security.md` carry illustrative snippets that have fallen behind the code (old
+parameter names, an out-of-date view of the scanner's categories). When a doc and the code
+disagree, the code wins — Part 5 and Part 6 point out the specific mismatches you'll hit.
 :::
 
 ## Where to go next
@@ -134,5 +137,5 @@ A quick myth-check, because two stale docs trip people up: `context/mcp-server.m
 - **Part 3 · The CLI** — the golden path and the full command reference.
 - **Part 4 · The TUI** — the default front door most users actually see.
 - **Part 5 · The MCP server** — wiring Skulto into an AI agent.
-- **Part 6 · Security scanner** — the corrected, real model.
+- **Part 6 · Security scanner** — how threat detection really works.
 - **Part 7 · Data, search & contributing** — internals and how to ship a change.

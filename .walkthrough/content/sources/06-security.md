@@ -1,7 +1,7 @@
 ---
 title: 6 · Security Scanner
 audience: new contributors & power users
-summary: The real, code-grounded model — 9 categories, per-pattern severity, score-with-context-mitigation, the warning threshold, and the truth about "scan before install" (implemented, but non-blocking today).
+summary: How the scanner really works — 9 categories, per-pattern severity, score-with-context-mitigation, the warning threshold, and what "scan before install" does today (runs at install, informational and non-blocking).
 tags: [onboarding, security, scanner, prompt-injection]
 source: repo
 id: 06-security
@@ -10,14 +10,13 @@ id: 06-security
 # Security Scanner
 
 This is Skulto's reason to exist, so it's worth getting exactly right. The scanner lives in
-`internal/security/`. Everything below is taken from the source — and corrects a few claims
-in `context/security.md` and earlier drafts that had drifted.
+`internal/security/`, and everything below describes what that code actually does.
 
 :::callout warning
-**Myth correction.** An older model described "4 categories with a severity per category."
-That's wrong. The real design is **9 categories**, and **severity is assigned per *pattern*,
-not per category.** A single category (e.g. dangerous scripts) contains patterns ranging
-from MEDIUM to CRITICAL. Don't teach the 4-category version.
+A natural assumption is that each category has a single severity. It doesn't — **severity
+is assigned per *pattern*, not per category.** One category (e.g. dangerous scripts)
+contains patterns ranging from MEDIUM all the way to CRITICAL. Keep the unit of severity in
+mind: it's the individual pattern, not the bucket it sits in.
 :::
 
 ## The nine categories
@@ -130,7 +129,7 @@ flowchart LR
 No — but read it precisely. The scan genuinely runs *before* the symlink is created, so you
 are *informed* before install. What's not yet wired is **blocking**: refusing to install a
 high-threat skill. That's the gap the `plans/006-security-scan-before-install` work targets.
-Teach it as "scanned at install, informational today; blocking is the roadmap."
+In one line: scanned at install and reported today; blocking is on the roadmap.
 :::
 
 ## Using it directly

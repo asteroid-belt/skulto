@@ -359,7 +359,7 @@ handled in <code>handlers.go</code>.</p>
 <td><code>url</code> <em>(req)</em></td>
 </tr>
 </tbody></table>
-<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p>Two gotchas worth flagging, both verified against source:
+<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p>Two gotchas worth flagging:
 <strong>(1)</strong> The binary&#39;s own <code>--help</code> text lists only 10 tools — it omits <code>skulto_check</code> and
 <code>skulto_add</code>. The authoritative set is the <strong>12</strong> registered in <code>server.go</code>.
 <strong>(2)</strong> <code>skulto_add</code>&#39;s parameter is <code>url</code>. The <code>context/mcp-server.md</code> doc calls it
@@ -408,8 +408,7 @@ installs from an agent, pass <code>&quot;scope&quot;: &quot;global&quot;</code> 
 <code>internal/telemetry/events.go</code>. Handlers also emit shared events tagged with an <code>&quot;mcp&quot;</code>
 source (e.g. <code>TrackSearchPerformed(query, n, &quot;mcp&quot;)</code>), so the same action is comparable
 across all three interfaces. Anonymous, opt-out as everywhere.</p>
-<p>Next: <strong>Part 6 · Security scanner</strong> — the corrected, real threat model that justifies the
-whole tool.</p>
+<p>Next: <strong>Part 6 · Security scanner</strong> — the real threat model that justifies the whole tool.</p>
 
     </article>
     <footer class="wt-footer">
