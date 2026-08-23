@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>7 · Data, Search &amp; Contributing</title>
+<meta name="description" content="How storage (SQLite/GORM/FTS5/BM25) and hybrid search work, the telemetry four-step rule, the CI gates, and a worked first change — capability vs. presentation.">
+<script>!function(){try{var t=localStorage.getItem("wt-theme");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}}();</script>
+<style>/* walkthrough route theme — inlined into every self-contained walkthrough.html.
+   Ships BOTH palettes: light by default, dark via [data-theme="dark"] on <html>
+   (set by a persisted toggle). Readable, responsive, print-friendly. */
+:root {
+  /* Light palette (default) */
+  --wt-bg: #ffffff;
+  --wt-surface: #f6f8fa;
+  --wt-surface-2: #eceff3;
+  --wt-border: #d6dde4;
+  --wt-text: #1f2328;
+  --wt-muted: #5b6975;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #2563eb;
+  --wt-ok: #1a8f4c;
+  --wt-bad: #d23b3b;
+  --wt-warn: #b07d00;
+  --wt-diagram-bg: #ffffff;
+  --wt-radius: 10px;
+  --wt-maxw: 820px;
+}
+html[data-theme="dark"] {
+  /* Dark "night-owl"-adjacent palette */
+  --wt-bg: #011627;
+  --wt-surface: #0b2942;
+  --wt-surface-2: #0e3251;
+  --wt-border: #1d3b53;
+  --wt-text: #d6deeb;
+  --wt-muted: #8badc1;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #82aaff;
+  --wt-ok: #22da6e;
+  --wt-bad: #ef5350;
+  --wt-warn: #ffca28;
+  --wt-diagram-bg: #ffffff;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wt-bg);
+  color: var(--wt-text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--wt-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Progress bar (top, fixed) */
+#wt-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: linear-gradient(90deg, var(--wt-accent), var(--wt-accent-2)); z-index: 50; transition: width .15s ease; }
+
+/* Theme toggle (top-right, fixed) */
+.wt-theme-toggle {
+  position: fixed; top: 14px; right: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-text); border: 1px solid var(--wt-border);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.wt-theme-toggle:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-theme-toggle .ic-moon { display: none; }
+.wt-theme-toggle .ic-sun { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-moon { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-sun { display: none; }
+
+/* Sidebar toggles (open = floating, shown when collapsed; collapse = inside panel) */
+.wt-nav-open {
+  position: fixed; top: 14px; left: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  opacity: 0; visibility: hidden;
+  transition: opacity .18s ease, visibility .18s ease, border-color .12s, color .12s;
+}
+.wt-nav-open:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-shell.nav-collapsed .wt-nav-open { opacity: 1; visibility: visible; }
+.wt-sidebar-top { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+.wt-nav-collapse {
+  width: 28px; height: 28px; padding: 0; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-bg); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  transition: border-color .12s, color .12s;
+}
+.wt-nav-collapse:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+
+/* Backdrop for the mobile overlay drawer */
+.wt-nav-scrim {
+  position: fixed; inset: 0; z-index: 54; background: rgba(2,8,20,.45);
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease;
+}
+
+/* Layout */
+.wt-shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .22s ease; }
+.wt-shell.nav-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.wt-sidebar {
+  position: sticky; top: 0; align-self: start; height: 100vh; min-width: 0;
+  overflow: hidden auto;
+  background: var(--wt-surface); border-right: 1px solid var(--wt-border);
+  padding: 24px 18px;
+  transition: padding .22s ease, border-color .22s ease;
+}
+.wt-shell.nav-collapsed .wt-sidebar { padding-left: 0; padding-right: 0; border-right-color: transparent; pointer-events: none; }
+.wt-shell.nav-collapsed .wt-sidebar > * { opacity: 0; transition: opacity .12s ease; }
+.wt-sidebar .wt-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--wt-muted); margin: 0 0 6px; }
+.wt-sidebar h1 { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
+.wt-meta-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 18px; }
+.wt-badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--wt-surface-2); color: var(--wt-muted); border: 1px solid var(--wt-border); }
+.wt-badge.audience { color: var(--wt-accent-2); border-color: var(--wt-accent-2); }
+.wt-toc { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.wt-toc li { margin: 2px 0; }
+.wt-toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--wt-muted); border-left: 2px solid transparent; }
+.wt-toc a:hover { color: var(--wt-text); background: var(--wt-surface-2); text-decoration: none; }
+.wt-toc a.active { color: var(--wt-text); border-left-color: var(--wt-accent-2); background: var(--wt-surface-2); }
+.wt-toc .lvl-3 a { padding-left: 22px; font-size: 13px; }
+
+.wt-main { padding: 48px max(24px, 4vw); }
+.wt-content { max-width: var(--wt-maxw); margin: 0 auto; }
+.wt-content h1, .wt-content h2, .wt-content h3 { line-height: 1.25; scroll-margin-top: 20px; }
+.wt-content h1 { font-size: 2rem; margin: 0 0 .6em; }
+.wt-content h2 { font-size: 1.5rem; margin: 2em 0 .6em; padding-bottom: .3em; border-bottom: 1px solid var(--wt-border); }
+.wt-content h3 { font-size: 1.2rem; margin: 1.6em 0 .5em; }
+.wt-content p { margin: 0 0 1em; }
+.wt-content ul, .wt-content ol { margin: 0 0 1em; padding-left: 1.4em; }
+.wt-content li { margin: .3em 0; }
+.wt-content blockquote { margin: 0 0 1em; padding: .6em 1em; border-left: 3px solid var(--wt-accent); background: var(--wt-surface); border-radius: 0 var(--wt-radius) var(--wt-radius) 0; color: var(--wt-muted); }
+.wt-content table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 14px; }
+.wt-content th, .wt-content td { border: 1px solid var(--wt-border); padding: 8px 12px; text-align: left; }
+.wt-content th { background: var(--wt-surface); }
+.wt-content :not(pre) > code { background: var(--wt-surface-2); padding: .15em .4em; border-radius: 5px; font-size: .9em; font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+.wt-content pre { border-radius: var(--wt-radius); padding: 16px 18px; overflow-x: auto; margin: 0 0 1em; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--wt-border); }
+.wt-content pre code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+
+/* Shiki dual-theme: tokens carry --shiki-light/--shiki-dark (pre carries the -bg
+   variants). Light is the default; [data-theme="dark"] switches the whole block. */
+.wt-content pre.shiki,
+.wt-content pre.shiki span { color: var(--shiki-light); }
+.wt-content pre.shiki { background-color: var(--shiki-light-bg) !important; }
+html[data-theme="dark"] .wt-content pre.shiki,
+html[data-theme="dark"] .wt-content pre.shiki span { color: var(--shiki-dark); }
+html[data-theme="dark"] .wt-content pre.shiki { background-color: var(--shiki-dark-bg) !important; }
+
+/* Diagrams */
+.wt-diagram { margin: 0 0 1.4em; padding: 18px; background: var(--wt-diagram-bg); border-radius: var(--wt-radius); border: 1px solid var(--wt-border); overflow-x: auto; text-align: center; }
+.wt-diagram svg { max-width: 100%; height: auto; }
+.wt-diagram.fallback { background: var(--wt-surface); }
+.wt-diagram-note { font-size: 12px; color: var(--wt-muted); margin-top: 8px; }
+pre.mermaid { background: #fff; color: #111; }
+
+/* Callouts */
+.wt-callout { display: flex; gap: 12px; margin: 0 0 1.2em; padding: 14px 16px; border-radius: var(--wt-radius); border: 1px solid var(--wt-border); background: var(--wt-surface); }
+.wt-callout .ic { font-size: 18px; line-height: 1.4; }
+.wt-callout .body > :last-child { margin-bottom: 0; }
+.wt-callout.note { border-left: 3px solid var(--wt-accent-2); }
+.wt-callout.tip { border-left: 3px solid var(--wt-ok); }
+.wt-callout.warning { border-left: 3px solid var(--wt-warn); }
+.wt-callout.info { border-left: 3px solid var(--wt-muted); }
+
+/* Reveal (try-then-show) */
+.wt-reveal { margin: 0 0 1.2em; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); overflow: hidden; }
+.wt-reveal > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none; }
+.wt-reveal > summary::-webkit-details-marker { display: none; }
+.wt-reveal > summary::before { content: "▶"; font-size: 11px; color: var(--wt-accent-2); transition: transform .15s; }
+.wt-reveal[open] > summary::before { transform: rotate(90deg); }
+.wt-reveal > summary .hint { font-weight: 400; color: var(--wt-muted); font-size: 13px; }
+.wt-reveal .reveal-body { padding: 0 16px 12px; border-top: 1px solid var(--wt-border); }
+.wt-reveal .reveal-body > :first-child { margin-top: 12px; }
+.wt-reveal .reveal-body > :last-child { margin-bottom: 0; }
+
+/* Quiz (non-gating) */
+.wt-quiz { margin: 0 0 1.4em; padding: 18px 20px; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); }
+.wt-quiz .q { font-weight: 600; margin-bottom: 12px; }
+.wt-quiz .q::before { content: "Self-check"; display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--wt-accent); font-weight: 700; margin-bottom: 6px; }
+.wt-quiz .opts { display: flex; flex-direction: column; gap: 8px; }
+.wt-quiz .opt {
+  text-align: left; cursor: pointer; padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--wt-border); background: var(--wt-surface-2); color: var(--wt-text);
+  font: inherit; transition: border-color .12s, background .12s; display: flex; gap: 10px; align-items: center;
+}
+.wt-quiz .opt:hover { border-color: var(--wt-accent-2); }
+.wt-quiz .opt .mark { width: 18px; display: inline-block; text-align: center; opacity: 0; }
+.wt-quiz .opt.correct { border-color: var(--wt-ok); background: rgba(34,218,110,.12); }
+.wt-quiz .opt.correct .mark { opacity: 1; color: var(--wt-ok); }
+.wt-quiz .opt.wrong { border-color: var(--wt-bad); background: rgba(239,83,80,.12); }
+.wt-quiz .opt.wrong .mark { opacity: 1; color: var(--wt-bad); }
+.wt-quiz .explain { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--wt-surface-2); border: 1px dashed var(--wt-border); color: var(--wt-muted); display: none; }
+.wt-quiz .explain.show { display: block; }
+.wt-quiz .explain > :last-child { margin-bottom: 0; }
+
+/* Footer */
+.wt-footer { max-width: var(--wt-maxw); margin: 48px auto 0; padding-top: 18px; border-top: 1px solid var(--wt-border); color: var(--wt-muted); font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wt-reset { background: none; border: 1px solid var(--wt-border); color: var(--wt-muted); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.wt-reset:hover { color: var(--wt-text); border-color: var(--wt-muted); }
+
+/* Mobile — the sidebar becomes an overlay drawer */
+@media (max-width: 860px) {
+  .wt-shell, .wt-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .wt-sidebar {
+    position: fixed; top: 0; left: 0; z-index: 55;
+    width: min(86vw, 320px); height: 100vh; padding: 24px 18px;
+    border-right: 1px solid var(--wt-border);
+    transform: translateX(0); transition: transform .22s ease;
+  }
+  .wt-shell.nav-collapsed .wt-sidebar { transform: translateX(-100%); padding: 24px 18px; border-right-color: var(--wt-border); }
+  .wt-shell.nav-collapsed .wt-sidebar > * { opacity: 1; }
+  .wt-shell:not(.nav-collapsed) .wt-nav-scrim { opacity: 1; visibility: visible; }
+  .wt-main { padding-top: 64px; } /* clear the fixed open button */
+}
+
+/* Print — always print the light palette regardless of the active theme. */
+@media print {
+  .wt-sidebar, #wt-progress, .wt-reset, .wt-theme-toggle, .wt-nav-open, .wt-nav-scrim { display: none; }
+  .wt-shell { display: block; }
+  body { background: #fff; color: #111; }
+  .wt-reveal[open] .reveal-body, .wt-reveal .reveal-body { display: block !important; }
+  pre.shiki, pre.shiki span { color: var(--shiki-light) !important; }
+  pre.shiki { background-color: var(--shiki-light-bg) !important; }
+}
+</style>
+</head>
+<body data-wt-id="07-internals-contributing">
+<div id="wt-progress"></div>
+<button class="wt-theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light/dark"><span class="ic-sun" aria-hidden="true">☀</span><span class="ic-moon" aria-hidden="true">☾</span></button>
+<button class="wt-nav-open" type="button" aria-label="Open contents" title="Contents">☰</button>
+<div class="wt-nav-scrim" aria-hidden="true"></div>
+<div class="wt-shell">
+  <aside class="wt-sidebar">
+    <div class="wt-sidebar-top"><button class="wt-nav-collapse" type="button" aria-label="Collapse contents" title="Collapse">«</button></div>
+    <p class="wt-eyebrow">repo walkthrough</p>
+    <h1>7 · Data, Search &amp; Contributing</h1>
+    <p style="color:var(--wt-muted);font-size:13px;margin:.2em 0 0">How storage (SQLite/GORM/FTS5/BM25) and hybrid search work, the telemetry four-step rule, the CI gates, and a worked first change — capability vs. presentation.</p>
+    <div class="wt-meta-badges"><span class="wt-badge audience">new contributors</span><span class="wt-badge">onboarding</span><span class="wt-badge">database</span><span class="wt-badge">search</span><span class="wt-badge">telemetry</span><span class="wt-badge">contributing</span></div>
+    <a class="wt-resume" href="javascript:void 0" style="display:none;font-size:12px;color:var(--wt-accent-2)"></a>
+    <ul class="wt-toc"><li class="lvl-1"><a href="#data-search-contributing">Data, Search &amp; Contributing</a></li>
+<li class="lvl-2"><a href="#storage-sqlite-gorm-fts5">Storage: SQLite + GORM + FTS5</a></li>
+<li class="lvl-3"><a href="#bm25-ranking-with-column-weights">BM25 ranking with column weights</a></li>
+<li class="lvl-2"><a href="#hybrid-search">Hybrid search</a></li>
+<li class="lvl-2"><a href="#telemetry-the-four-step-rule">Telemetry: the four-step rule</a></li>
+<li class="lvl-2"><a href="#contributing-without-tripping-a-gate">Contributing without tripping a gate</a></li>
+<li class="lvl-2"><a href="#a-worked-first-change">A worked first change</a></li>
+<li class="lvl-2"><a href="#where-to-go-deeper">Where to go deeper</a></li></ul>
+  </aside>
+  <main class="wt-main">
+    <article class="wt-content">
+      <h1 id="data-search-amp-contributing">Data, Search &amp; Contributing</h1>
+<p>The last part: the storage engine, how search ranks, the telemetry contract you must honor,
+and how to land a change that passes CI on the first try.</p>
+<h2 id="storage-sqlite-gorm-fts5">Storage: SQLite + GORM + FTS5</h2>
+<p>Persistence is <strong>SQLite via GORM</strong>, using the <strong>pure-Go</strong> driver <code>glebarez/sqlite</code> (no cgo —
+that&#39;s why cross-compiles are clean). Core models live in <code>internal/models/</code> (<code>Skill</code>,
+<code>Tag</code>, <code>Source</code>, <code>SecurityResult</code>, <code>SkillInstallation</code>, <code>UserState</code>, …); data access is in
+<code>internal/db/</code>.</p>
+<p>Full-text search uses an <strong>FTS5</strong> virtual table, <code>skills_fts</code>, kept in sync with the skills
+table via triggers (<code>internal/db/db.go</code> <code>setupFTS()</code>).</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 872.938px; background-color: transparent;" viewBox="0 0 872.9375 174" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M140.047,35L144.214,35C148.38,35,156.714,35,164.38,35C172.047,35,179.047,35,182.547,35L186.047,35" id="my-svg-L_W_T_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_W_T_0" data-points="W3sieCI6MTQwLjA0Njg3NSwieSI6MzV9LHsieCI6MTY1LjA0Njg3NSwieSI6MzV9LHsieCI6MTkwLjA0Njg3NSwieSI6MzV9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M305.844,35L310.01,35C314.177,35,322.51,35,330.389,38.984C338.268,42.967,345.692,50.934,349.405,54.918L353.117,58.902" id="my-svg-L_T_FTS_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_T_FTS_0" data-points="W3sieCI6MzA1Ljg0Mzc1LCJ5IjozNX0seyJ4IjozMzAuODQzNzUsInkiOjM1fSx7IngiOjM1NS44NDM3NSwieSI6NjEuODI3OTc5ODg5MzA4Mzc0fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M299.141,139L304.424,139C309.708,139,320.276,139,329.272,135.016C338.268,131.033,345.692,123.066,349.405,119.082L353.117,115.098" id="my-svg-L_Q_FTS_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_Q_FTS_0" data-points="W3sieCI6Mjk5LjE0MDYyNSwieSI6MTM5fSx7IngiOjMzMC44NDM3NSwieSI6MTM5fSx7IngiOjM1NS44NDM3NSwieSI6MTEyLjE3MjAyMDExMDY5MTYyfV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M498.203,87L502.37,87C506.536,87,514.87,87,522.536,87C530.203,87,537.203,87,540.703,87L544.203,87" id="my-svg-L_FTS_RANK_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_FTS_RANK_0" data-points="W3sieCI6NDk4LjIwMzEyNSwieSI6ODd9LHsieCI6NTIzLjIwMzEyNSwieSI6ODd9LHsieCI6NTQ4LjIwMzEyNSwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M704.781,87L708.948,87C713.115,87,721.448,87,729.115,87C736.781,87,743.781,87,747.281,87L750.781,87" id="my-svg-L_RANK_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_RANK_R_0" data-points="W3sieCI6NzA0Ljc4MTI1LCJ5Ijo4N30seyJ4Ijo3MjkuNzgxMjUsInkiOjg3fSx7IngiOjc1NC43ODEyNSwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_W_T_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_T_FTS_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_Q_FTS_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_FTS_RANK_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_RANK_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-W-0" data-look="classic" transform="translate(74.0234375, 35)"><rect class="basic label-container" style="" x="-66.0234375" y="-27" width="132.046875" height="54"/><g class="label" style="" transform="translate(-36.0234375, -12)"><rect/><foreignObject width="72.046875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Write skill</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-T-1" data-look="classic" transform="translate(247.9453125, 35)"><rect class="basic label-container" style="" x="-57.8984375" y="-27" width="115.796875" height="54"/><g class="label" style="" transform="translate(-27.8984375, -12)"><rect/><foreignObject width="55.796875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Triggers</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-FTS-2" data-look="classic" transform="translate(427.0234375, 87)"><path d="M0,13.311612413067616 a71.1796875,13.311612413067616 0,0,0 142.359375,0 a71.1796875,13.311612413067616 0,0,0 -142.359375,0 l0,76.31161241306762 a71.1796875,13.311612413067616 0,0,0 142.359375,0 l0,-76.31161241306762" class="basic label-container outer-path" style="" transform="translate(-71.1796875, -51.467418619601425)"/><g class="label" style="" transform="translate(-63.6796875, -14)"><rect/><foreignObject width="127.359375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>skills_fts<br />FTS5 virtual table</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-Q-3" data-look="classic" transform="translate(247.9453125, 139)"><rect class="basic label-container" style="" x="-51.1953125" y="-27" width="102.390625" height="54"/><g class="label" style="" transform="translate(-21.1953125, -12)"><rect/><foreignObject width="42.390625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Query</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-RANK-5" data-look="classic" transform="translate(626.4921875, 87)"><rect class="basic label-container" style="" x="-78.2890625" y="-27" width="156.578125" height="54"/><g class="label" style="" transform="translate(-48.2890625, -12)"><rect/><foreignObject width="96.578125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>bm25 ranking</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-R-6" data-look="classic" transform="translate(809.859375, 87)"><rect class="basic label-container" style="" x="-55.078125" y="-27" width="110.15625" height="54"/><g class="label" style="" transform="translate(-25.078125, -12)"><rect/><foreignObject width="50.15625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Results</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><h3 id="bm25-ranking-with-column-weights">BM25 ranking with column weights</h3>
+<p>FTS5 queries rank with <strong>BM25</strong> and explicit per-column weights
+(<code>internal/db/skills.go</code>) — so a query hit in the title matters far more than one in the
+body:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Weight</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>title</td>
+<td>10</td>
+</tr>
+<tr>
+<td>description</td>
+<td>5</td>
+</tr>
+<tr>
+<td>author</td>
+<td>2</td>
+</tr>
+<tr>
+<td>tags</td>
+<td>3</td>
+</tr>
+<tr>
+<td>content</td>
+<td>1</td>
+</tr>
+</tbody></table>
+<p>Queries <code>ORDER BY rank</code> where <code>rank = bm25(skills_fts, …)</code>.</p>
+<h2 id="hybrid-search">Hybrid search</h2>
+<p><code>SearchService</code> (<code>internal/search/service.go</code>) runs <strong>two</strong> strategies and degrades
+gracefully:</p>
+<ul>
+<li><strong>FTS5 keyword</strong> — always available, fully offline. This is the baseline.</li>
+<li><strong>Semantic / vector</strong> — <em>optional</em>. It&#39;s enabled only when a vector store exists, and the
+store is created only when an embedding API key is present.</li>
+</ul>
+<p>The gating chain is worth memorizing:</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span>OPENAI_API_KEY set</span></span>
+<span class="line"><span>  → cfg.Embedding.APIKey != ""        (config.go)</span></span>
+<span class="line"><span>  → vector store constructed          (tui.go)</span></span>
+<span class="line"><span>  → HasVectorStore() == true</span></span>
+<span class="line"><span>  → opts.IncludeSemantic &#x26;&#x26; store != nil  (service.go)</span></span></code></pre><figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 974.891px; background-color: transparent;" viewBox="0 0 974.890625 222" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M110.391,111L114.557,111C118.724,111,127.057,111,134.724,111C142.391,111,149.391,111,152.891,111L156.391,111" id="my-svg-L_Q_H_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_Q_H_0" data-points="W3sieCI6MTEwLjM5MDYyNSwieSI6MTExfSx7IngiOjEzNS4zOTA2MjUsInkiOjExMX0seyJ4IjoxNjAuMzkwNjI1LCJ5IjoxMTF9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M312.567,84L329.12,77.833C345.672,71.667,378.778,59.333,411.867,53.167C444.956,47,478.029,47,494.565,47L511.102,47" id="my-svg-L_H_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_H_F_0" data-points="W3sieCI6MzEyLjU2NzI2MDc0MjE4NzUsInkiOjg0fSx7IngiOjQxMS44ODI4MTI1LCJ5Ijo0N30seyJ4Ijo1MTUuMTAxNTYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M312.567,138L329.12,144.167C345.672,150.333,378.778,162.667,410.011,168.833C441.245,175,470.607,175,485.288,175L499.969,175" id="my-svg-L_H_V_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_H_V_0" data-points="W3sieCI6MzEyLjU2NzI2MDc0MjE4NzUsInkiOjEzOH0seyJ4Ijo0MTEuODgyODEyNSwieSI6MTc1fSx7IngiOjUwMy45Njg3NSwieSI6MTc1fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M681.492,47L687.514,47C693.536,47,705.581,47,724.212,52.885C742.843,58.769,768.062,70.539,780.671,76.424L793.28,82.308" id="my-svg-L_F_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_F_R_0" data-points="W3sieCI6NjgxLjQ5MjE4NzUsInkiOjQ3fSx7IngiOjcxNy42MjUsInkiOjQ3fSx7IngiOjc5Ni45MDQ5MDcyMjY1NjI1LCJ5Ijo4NH1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M692.625,175L696.792,175C700.958,175,709.292,175,726.068,169.115C742.843,163.231,768.062,151.461,780.671,145.576L793.28,139.692" id="my-svg-L_V_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_V_R_0" data-points="W3sieCI6NjkyLjYyNSwieSI6MTc1fSx7IngiOjcxNy42MjUsInkiOjE3NX0seyJ4Ijo3OTYuOTA0OTA3MjI2NTYyNSwieSI6MTM4fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_Q_H_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_H_F_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(411.8828125, 175)"><g class="label" data-id="L_H_V_0" transform="translate(-67.0859375, -12)"><foreignObject width="134.171875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>if OPENAI_API_KEY</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_F_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_V_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-Q-0" data-look="classic" transform="translate(59.1953125, 111)"><rect class="basic label-container" style="" x="-51.1953125" y="-27" width="102.390625" height="54"/><g class="label" style="" transform="translate(-21.1953125, -12)"><rect/><foreignObject width="42.390625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Query</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-H-1" data-look="classic" transform="translate(240.09375, 111)"><rect class="basic label-container" style="" x="-79.703125" y="-27" width="159.40625" height="54"/><g class="label" style="" transform="translate(-49.703125, -12)"><rect/><foreignObject width="99.40625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>SearchService</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-F-3" data-look="classic" transform="translate(598.296875, 47)"><rect class="basic label-container" style="" x="-83.1953125" y="-39" width="166.390625" height="78"/><g class="label" style="" transform="translate(-53.1953125, -24)"><rect/><foreignObject width="106.390625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>FTS5 keyword<br />BM25 — always</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-V-5" data-look="classic" transform="translate(598.296875, 175)"><rect class="basic label-container" style="" x="-94.328125" y="-39" width="188.65625" height="78"/><g class="label" style="" transform="translate(-64.328125, -24)"><rect/><foreignObject width="128.65625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Vector / semantic<br />chromem-go</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-R-7" data-look="classic" transform="translate(854.7578125, 111)"><rect class="basic label-container" style="" x="-112.1328125" y="-27" width="224.265625" height="54"/><g class="label" style="" transform="translate(-82.1328125, -12)"><rect/><foreignObject width="164.265625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Merged, ranked results</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><details class="wt-reveal"><summary>Offline on a plane with no API key — does search still work?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Yes. FTS5 keyword search runs entirely in local SQLite and is the always-on path. Semantic
+ranking is the optional augmentation gated on <code>OPENAI_API_KEY</code>. Offline you lose semantic
+re-ranking but keep full keyword search — that&#39;s the &quot;offline-first&quot; promise.</p></div></details>
+
+
+<h2 id="telemetry-the-four-step-rule">Telemetry: the four-step rule</h2>
+<p>Telemetry (<code>internal/telemetry/</code>) is anonymous PostHog, on by default, opt-out via
+<code>SKULTO_TELEMETRY_TRACKING_ENABLED=false</code>. It&#39;s also gated on a <code>PostHogAPIKey</code> compiled in
+via ldflags — so a dev build sends nothing regardless. As a contributor, the discipline that
+reviewers and the compiler enforce: to add an event you touch <strong>four</strong> places.</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1102.72px; background-color: transparent;" viewBox="0 0 1102.71875 118" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M178.766,59L182.932,59C187.099,59,195.432,59,203.099,59C210.766,59,217.766,59,221.266,59L224.766,59" id="my-svg-L_A_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_A_B_0" data-points="W3sieCI6MTc4Ljc2NTYyNSwieSI6NTl9LHsieCI6MjAzLjc2NTYyNSwieSI6NTl9LHsieCI6MjI4Ljc2NTYyNSwieSI6NTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M482.641,59L486.807,59C490.974,59,499.307,59,506.974,59C514.641,59,521.641,59,525.141,59L528.641,59" id="my-svg-L_B_C_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_B_C_0" data-points="W3sieCI6NDgyLjY0MDYyNSwieSI6NTl9LHsieCI6NTA3LjY0MDYyNSwieSI6NTl9LHsieCI6NTMyLjY0MDYyNSwieSI6NTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M784.719,59L788.885,59C793.052,59,801.385,59,809.052,59C816.719,59,823.719,59,827.219,59L830.719,59" id="my-svg-L_C_D_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_C_D_0" data-points="W3sieCI6Nzg0LjcxODc1LCJ5Ijo1OX0seyJ4Ijo4MDkuNzE4NzUsInkiOjU5fSx7IngiOjgzNC43MTg3NSwieSI6NTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_A_B_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_B_C_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_C_D_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-A-0" data-look="classic" transform="translate(93.3828125, 59)"><rect class="basic label-container" style="" x="-85.3828125" y="-39" width="170.765625" height="78"/><g class="label" style="" transform="translate(-55.3828125, -24)"><rect/><foreignObject width="110.765625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>1. Define event<br />events.go</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-B-1" data-look="classic" transform="translate(355.703125, 59)"><rect class="basic label-container" style="" x="-126.9375" y="-39" width="253.875" height="78"/><g class="label" style="" transform="translate(-96.9375, -24)"><rect/><foreignObject width="193.875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>2. Implement on BOTH<br />posthogClient + noopClient</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-C-3" data-look="classic" transform="translate(658.6796875, 59)"><rect class="basic label-container" style="" x="-126.0390625" y="-39" width="252.078125" height="78"/><g class="label" style="" transform="translate(-96.0390625, -24)"><rect/><foreignObject width="192.078125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>3. Add signature to<br />Client interface · client.go</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-D-5" data-look="classic" transform="translate(964.71875, 59)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>4. Call from CLI / TUI / MCP<br />where the feature lives</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><p>Miss the <code>noopClient</code> half and telemetry-disabled builds won&#39;t satisfy the <code>Client</code>
+interface — the most common slip. (<code>events.go</code> currently has 44 event methods mirrored
+exactly across both clients.)</p>
+<h2 id="contributing-without-tripping-a-gate">Contributing without tripping a gate</h2>
+<p>The <code>Makefile</code> is your pre-flight check; CI (<code>.github/workflows/ci.yml</code>) runs the same
+things on every push to <code>main</code> and every PR.</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">make</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> format</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">   # gofmt</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">make</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> lint</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">     # golangci-lint (5m timeout)</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">make</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> test</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">     # all tests + coverage → coverage.html</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">make</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> ship_it</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">  # build + lint + test, then push (the full pre-push gate)</span></span></code></pre><p>CI runs three jobs: <strong>lint</strong>, <strong>test</strong> (with coverage), and a <strong>build matrix</strong> that
+cross-compiles for linux/darwin on amd64/arm64. All three must be green to merge.</p>
+<p>Tests are <strong>co-located</strong> with source as <code>*_test.go</code>, in three flavors:</p>
+<ul>
+<li><code>foo_test.go</code> — ordinary unit tests next to <code>foo.go</code></li>
+<li><code>*_characterization_test.go</code> — snapshot-style tests that pin current behavior (great safety net for refactors)</li>
+<li><code>*_integration_test.go</code> — broader tests that may touch the network</li>
+</ul>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">go</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> test</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> ./internal/cli/...</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">        # one package</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">go</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> test</span><span style="--shiki-light:#005CC5;--shiki-dark:#82AAFF"> -v</span><span style="--shiki-light:#005CC5;--shiki-dark:#82AAFF"> -run</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> TestSearch</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> ./...</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">  # one test</span></span></code></pre><p>Commits follow <strong>Conventional Commits</strong> with project scopes:</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span>feat(scraper): add support for nested skill directories</span></span>
+<span class="line"><span>fix(tui): correct keybinding conflict for search</span></span>
+<span class="line"><span>test(db): add FTS5 ranking characterization tests</span></span></code></pre><p>Types: <code>feat fix docs style refactor test chore perf</code> ·
+Scopes: <code>cli tui mcp db installer scraper search security telemetry deps</code>.</p>
+<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p>The <code>AGENTS.md</code> &quot;Finish the Task&quot; checklist is the bar: linter clean, formatted, <strong>new code
+has tests</strong>, all tests pass, <strong>telemetry added for new user-facing features</strong>, and relevant
+docs (and <code>README.md</code>) updated.</p></div></div>
+
+
+<h2 id="a-worked-first-change">A worked first change</h2>
+<p>Task: <em>&quot;Add a <code>--json</code> flag to <code>skulto check</code> so scripts can parse installed skills.&quot;</em></p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 276px; background-color: transparent;" viewBox="0 0 276 862" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M138,86L138,90.167C138,94.333,138,102.667,138,110.333C138,118,138,125,138,128.5L138,132" id="my-svg-L_A_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_A_B_0" data-points="W3sieCI6MTM4LCJ5Ijo4Nn0seyJ4IjoxMzgsInkiOjExMX0seyJ4IjoxMzgsInkiOjEzNn1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M138,214L138,218.167C138,222.333,138,230.667,138,238.333C138,246,138,253,138,256.5L138,260" id="my-svg-L_B_C_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_B_C_0" data-points="W3sieCI6MTM4LCJ5IjoyMTR9LHsieCI6MTM4LCJ5IjoyMzl9LHsieCI6MTM4LCJ5IjoyNjR9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M138,342L138,346.167C138,350.333,138,358.667,138,366.333C138,374,138,381,138,384.5L138,388" id="my-svg-L_C_D_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_C_D_0" data-points="W3sieCI6MTM4LCJ5IjozNDJ9LHsieCI6MTM4LCJ5IjozNjd9LHsieCI6MTM4LCJ5IjozOTJ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M138,446L138,450.167C138,454.333,138,462.667,138,470.333C138,478,138,485,138,488.5L138,492" id="my-svg-L_D_E_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_D_E_0" data-points="W3sieCI6MTM4LCJ5Ijo0NDZ9LHsieCI6MTM4LCJ5Ijo0NzF9LHsieCI6MTM4LCJ5Ijo0OTZ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M138,622L138,626.167C138,630.333,138,638.667,138,646.333C138,654,138,661,138,664.5L138,668" id="my-svg-L_E_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_E_F_0" data-points="W3sieCI6MTM4LCJ5Ijo2MjJ9LHsieCI6MTM4LCJ5Ijo2NDd9LHsieCI6MTM4LCJ5Ijo2NzJ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M138,726L138,730.167C138,734.333,138,742.667,138,750.333C138,758,138,765,138,768.5L138,772" id="my-svg-L_F_G_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_F_G_0" data-points="W3sieCI6MTM4LCJ5Ijo3MjZ9LHsieCI6MTM4LCJ5Ijo3NTF9LHsieCI6MTM4LCJ5Ijo3NzZ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_A_B_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_B_C_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_C_D_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_D_E_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_E_F_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_F_G_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-A-0" data-look="classic" transform="translate(138, 47)"><rect class="basic label-container" style="" x="-130" y="-39" width="260" height="78"/><g class="label" style="" transform="translate(-100, -24)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>1. Read internal/cli/check.go</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-B-1" data-look="classic" transform="translate(138, 175)"><rect class="basic label-container" style="" x="-124.578125" y="-39" width="249.15625" height="78"/><g class="label" style="" transform="translate(-94.578125, -24)"><rect/><foreignObject width="189.15625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>2. It already calls<br />GetInstalledSkillsSummary</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-C-3" data-look="classic" transform="translate(138, 303)"><rect class="basic label-container" style="" x="-116.734375" y="-39" width="233.46875" height="78"/><g class="label" style="" transform="translate(-86.734375, -24)"><rect/><foreignObject width="173.46875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>3. Add --json flag<br />marshal the same struct</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-D-5" data-look="classic" transform="translate(138, 419)"><rect class="basic label-container" style="" x="-123.3984375" y="-27" width="246.796875" height="54"/><g class="label" style="" transform="translate(-93.3984375, -12)"><rect/><foreignObject width="186.796875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>4. Add check_test.go case</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-E-7" data-look="classic" transform="translate(138, 559)"><rect class="basic label-container" style="" x="-130" y="-63" width="260" height="126"/><g class="label" style="" transform="translate(-100, -48)"><rect/><foreignObject width="200" height="96"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>5. Flag usage already tracked<br />via hasFlags in PersistentPostRun</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-F-9" data-look="classic" transform="translate(138, 699)"><rect class="basic label-container" style="" x="-129.734375" y="-27" width="259.46875" height="54"/><g class="label" style="" transform="translate(-99.734375, -12)"><rect/><foreignObject width="199.46875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>6. make format / lint / test</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-G-11" data-look="classic" transform="translate(138, 815)"><rect class="basic label-container" style="" x="-130" y="-39" width="260" height="78"/><g class="label" style="" transform="translate(-100, -24)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>7. Commit: feat cli: add --json to check</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><p>Notice you <strong>didn&#39;t</strong> touch the TUI or MCP — a CLI-only output flag is <em>presentation</em>. The
+data already arrives shaped as <code>[]InstalledSkillSummary</code> from
+<code>InstallService.GetInstalledSkillsSummary(ctx)</code>; you&#39;re adding a marshal branch, not new
+logic. If the task were a new <em>capability</em> instead of a format, you&#39;d surface it in all three
+interfaces and add a telemetry event.</p>
+<details class="wt-reveal"><summary>What&#39;s the single judgment call that makes you fast in this codebase?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p><strong>Capability vs. presentation.</strong> A new capability lives in a service and is surfaced through
+CLI + TUI + MCP (plus telemetry + tests). A presentation change (an output format, a key
+binding, a banner) is local to one interface. Recognizing which one you&#39;re doing — by
+finding the service boundary first — tells you how wide the change is before you write a
+line.</p></div></details>
+
+
+<h2 id="where-to-go-deeper">Where to go deeper</h2>
+<ul>
+<li><code>context/architecture.md</code> — component interactions and data flow</li>
+<li><code>context/platforms.md</code> — the platform registry and detection</li>
+<li><code>context/database.md</code> — schema, FTS5 setup, migrations</li>
+<li><code>docs/adr/</code> — Architecture Decision Records (e.g. 0003, three-interfaces-shared-services)</li>
+<li><code>plans/</code> — in-flight work (security-scan-before-install, data-loss-prevention, unified storage)</li>
+</ul>
+<p>That&#39;s the whole map — overview, build, CLI, TUI, MCP, security, and internals. The fastest
+way to cement it: run the golden path (<code>add → install → check</code>), then open the service
+behind each step. The code is small, consistent, and now familiar.</p>
+
+    </article>
+    <footer class="wt-footer">
+      <span>Generated by the <strong>walkthrough</strong> skill · self-contained &amp; offline</span>
+      <button class="wt-reset" title="Clear saved progress">Reset progress</button>
+    </footer>
+  </main>
+</div>
+
+<script>/* walkthrough route runtime — inlined into every self-contained walkthrough.html.
+   No external dependencies. Handles: TOC scroll-spy, quiz feedback (non-gating),
+   reveal blocks, and optional localStorage progress. */
+(function () {
+  "use strict";
+
+  var KEY = "wt-progress:" + (document.body.getAttribute("data-wt-id") || location.pathname);
+
+  /* ---- Theme toggle (light default, persisted) ---- */
+  var THEME_KEY = "wt-theme";
+  var themeBtn = document.querySelector(".wt-theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Sidebar collapse / responsive drawer ---- */
+  var shell = document.querySelector(".wt-shell");
+  var navOpenBtn = document.querySelector(".wt-nav-open");
+  var navCollapseBtn = document.querySelector(".wt-nav-collapse");
+  var navScrim = document.querySelector(".wt-nav-scrim");
+  var navMq = window.matchMedia("(max-width: 860px)");
+  function setNav(open) {
+    if (!shell) return;
+    shell.classList.toggle("nav-collapsed", !open);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (navCollapseBtn) navCollapseBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  // Auto-collapse on narrow viewports; auto-open when it widens again.
+  function autoNav() { setNav(!navMq.matches); }
+  autoNav();
+  if (navMq.addEventListener) navMq.addEventListener("change", autoNav);
+  else if (navMq.addListener) navMq.addListener(autoNav);
+  if (navOpenBtn) navOpenBtn.addEventListener("click", function () { setNav(true); });
+  if (navCollapseBtn) navCollapseBtn.addEventListener("click", function () { setNav(false); });
+  if (navScrim) navScrim.addEventListener("click", function () { setNav(false); });
+
+  /* ---- TOC scroll-spy ---- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".wt-toc a"));
+  // On narrow screens, picking a TOC entry should close the overlay drawer.
+  tocLinks.forEach(function (a) {
+    a.addEventListener("click", function () { if (navMq.matches) setNav(false); });
+  });
+  var headings = tocLinks
+    .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+    .filter(Boolean);
+
+  function onScroll() {
+    var pos = window.scrollY + 120;
+    var current = headings[0];
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].offsetTop <= pos) current = headings[i];
+    }
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", current && a.getAttribute("href") === "#" + current.id);
+    });
+
+    /* progress bar = scroll completion */
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0;
+    var bar = document.getElementById("wt-progress");
+    if (bar) bar.style.width = pct.toFixed(1) + "%";
+    saveProgress(pct);
+  }
+
+  /* ---- Quiz (non-gating) ---- */
+  document.querySelectorAll(".wt-quiz").forEach(function (quiz) {
+    var explain = quiz.querySelector(".explain");
+    quiz.querySelectorAll(".opt").forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        var correct = opt.getAttribute("data-correct") === "1";
+        // clear previous state but never lock the user out — fully retryable
+        quiz.querySelectorAll(".opt").forEach(function (o) { o.classList.remove("correct", "wrong"); });
+        opt.classList.add(correct ? "correct" : "wrong");
+        if (correct) {
+          quiz.querySelectorAll(".opt").forEach(function (o) {
+            if (o.getAttribute("data-correct") === "1") o.classList.add("correct");
+          });
+        }
+        if (explain) explain.classList.add("show");
+      });
+    });
+  });
+
+  /* ---- localStorage progress (optional, non-blocking) ---- */
+  function saveProgress(pct) {
+    try { localStorage.setItem(KEY, JSON.stringify({ pct: Math.round(pct), at: Date.now() })); } catch (e) {}
+  }
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; }
+  }
+
+  var resetBtn = document.querySelector(".wt-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  /* restore scroll hint on load */
+  window.addEventListener("load", function () {
+    var saved = loadProgress();
+    if (saved && saved.pct > 5 && saved.pct < 95 && !location.hash) {
+      var note = document.querySelector(".wt-resume");
+      if (note) {
+        note.textContent = "Resume where you left off (" + saved.pct + "%)";
+        note.style.display = "inline";
+        note.addEventListener("click", function () {
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - doc.clientHeight;
+          window.scrollTo({ top: (saved.pct / 100) * max, behavior: "smooth" });
+        });
+      }
+    }
+    onScroll();
+  });
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+})();
+</script>
+</body>
+</html>

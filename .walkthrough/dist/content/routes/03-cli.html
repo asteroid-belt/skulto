@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>3 · The CLI</title>
+<meta name="description" content="The golden-path workflow (add → install → check), the complete command reference including list/discover/ingest, and how skulto.json makes a project&#39;s skills reproducible.">
+<script>!function(){try{var t=localStorage.getItem("wt-theme");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}}();</script>
+<style>/* walkthrough route theme — inlined into every self-contained walkthrough.html.
+   Ships BOTH palettes: light by default, dark via [data-theme="dark"] on <html>
+   (set by a persisted toggle). Readable, responsive, print-friendly. */
+:root {
+  /* Light palette (default) */
+  --wt-bg: #ffffff;
+  --wt-surface: #f6f8fa;
+  --wt-surface-2: #eceff3;
+  --wt-border: #d6dde4;
+  --wt-text: #1f2328;
+  --wt-muted: #5b6975;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #2563eb;
+  --wt-ok: #1a8f4c;
+  --wt-bad: #d23b3b;
+  --wt-warn: #b07d00;
+  --wt-diagram-bg: #ffffff;
+  --wt-radius: 10px;
+  --wt-maxw: 820px;
+}
+html[data-theme="dark"] {
+  /* Dark "night-owl"-adjacent palette */
+  --wt-bg: #011627;
+  --wt-surface: #0b2942;
+  --wt-surface-2: #0e3251;
+  --wt-border: #1d3b53;
+  --wt-text: #d6deeb;
+  --wt-muted: #8badc1;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #82aaff;
+  --wt-ok: #22da6e;
+  --wt-bad: #ef5350;
+  --wt-warn: #ffca28;
+  --wt-diagram-bg: #ffffff;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wt-bg);
+  color: var(--wt-text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--wt-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Progress bar (top, fixed) */
+#wt-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: linear-gradient(90deg, var(--wt-accent), var(--wt-accent-2)); z-index: 50; transition: width .15s ease; }
+
+/* Theme toggle (top-right, fixed) */
+.wt-theme-toggle {
+  position: fixed; top: 14px; right: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-text); border: 1px solid var(--wt-border);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.wt-theme-toggle:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-theme-toggle .ic-moon { display: none; }
+.wt-theme-toggle .ic-sun { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-moon { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-sun { display: none; }
+
+/* Sidebar toggles (open = floating, shown when collapsed; collapse = inside panel) */
+.wt-nav-open {
+  position: fixed; top: 14px; left: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  opacity: 0; visibility: hidden;
+  transition: opacity .18s ease, visibility .18s ease, border-color .12s, color .12s;
+}
+.wt-nav-open:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-shell.nav-collapsed .wt-nav-open { opacity: 1; visibility: visible; }
+.wt-sidebar-top { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+.wt-nav-collapse {
+  width: 28px; height: 28px; padding: 0; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-bg); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  transition: border-color .12s, color .12s;
+}
+.wt-nav-collapse:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+
+/* Backdrop for the mobile overlay drawer */
+.wt-nav-scrim {
+  position: fixed; inset: 0; z-index: 54; background: rgba(2,8,20,.45);
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease;
+}
+
+/* Layout */
+.wt-shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .22s ease; }
+.wt-shell.nav-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.wt-sidebar {
+  position: sticky; top: 0; align-self: start; height: 100vh; min-width: 0;
+  overflow: hidden auto;
+  background: var(--wt-surface); border-right: 1px solid var(--wt-border);
+  padding: 24px 18px;
+  transition: padding .22s ease, border-color .22s ease;
+}
+.wt-shell.nav-collapsed .wt-sidebar { padding-left: 0; padding-right: 0; border-right-color: transparent; pointer-events: none; }
+.wt-shell.nav-collapsed .wt-sidebar > * { opacity: 0; transition: opacity .12s ease; }
+.wt-sidebar .wt-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--wt-muted); margin: 0 0 6px; }
+.wt-sidebar h1 { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
+.wt-meta-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 18px; }
+.wt-badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--wt-surface-2); color: var(--wt-muted); border: 1px solid var(--wt-border); }
+.wt-badge.audience { color: var(--wt-accent-2); border-color: var(--wt-accent-2); }
+.wt-toc { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.wt-toc li { margin: 2px 0; }
+.wt-toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--wt-muted); border-left: 2px solid transparent; }
+.wt-toc a:hover { color: var(--wt-text); background: var(--wt-surface-2); text-decoration: none; }
+.wt-toc a.active { color: var(--wt-text); border-left-color: var(--wt-accent-2); background: var(--wt-surface-2); }
+.wt-toc .lvl-3 a { padding-left: 22px; font-size: 13px; }
+
+.wt-main { padding: 48px max(24px, 4vw); }
+.wt-content { max-width: var(--wt-maxw); margin: 0 auto; }
+.wt-content h1, .wt-content h2, .wt-content h3 { line-height: 1.25; scroll-margin-top: 20px; }
+.wt-content h1 { font-size: 2rem; margin: 0 0 .6em; }
+.wt-content h2 { font-size: 1.5rem; margin: 2em 0 .6em; padding-bottom: .3em; border-bottom: 1px solid var(--wt-border); }
+.wt-content h3 { font-size: 1.2rem; margin: 1.6em 0 .5em; }
+.wt-content p { margin: 0 0 1em; }
+.wt-content ul, .wt-content ol { margin: 0 0 1em; padding-left: 1.4em; }
+.wt-content li { margin: .3em 0; }
+.wt-content blockquote { margin: 0 0 1em; padding: .6em 1em; border-left: 3px solid var(--wt-accent); background: var(--wt-surface); border-radius: 0 var(--wt-radius) var(--wt-radius) 0; color: var(--wt-muted); }
+.wt-content table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 14px; }
+.wt-content th, .wt-content td { border: 1px solid var(--wt-border); padding: 8px 12px; text-align: left; }
+.wt-content th { background: var(--wt-surface); }
+.wt-content :not(pre) > code { background: var(--wt-surface-2); padding: .15em .4em; border-radius: 5px; font-size: .9em; font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+.wt-content pre { border-radius: var(--wt-radius); padding: 16px 18px; overflow-x: auto; margin: 0 0 1em; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--wt-border); }
+.wt-content pre code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+
+/* Shiki dual-theme: tokens carry --shiki-light/--shiki-dark (pre carries the -bg
+   variants). Light is the default; [data-theme="dark"] switches the whole block. */
+.wt-content pre.shiki,
+.wt-content pre.shiki span { color: var(--shiki-light); }
+.wt-content pre.shiki { background-color: var(--shiki-light-bg) !important; }
+html[data-theme="dark"] .wt-content pre.shiki,
+html[data-theme="dark"] .wt-content pre.shiki span { color: var(--shiki-dark); }
+html[data-theme="dark"] .wt-content pre.shiki { background-color: var(--shiki-dark-bg) !important; }
+
+/* Diagrams */
+.wt-diagram { margin: 0 0 1.4em; padding: 18px; background: var(--wt-diagram-bg); border-radius: var(--wt-radius); border: 1px solid var(--wt-border); overflow-x: auto; text-align: center; }
+.wt-diagram svg { max-width: 100%; height: auto; }
+.wt-diagram.fallback { background: var(--wt-surface); }
+.wt-diagram-note { font-size: 12px; color: var(--wt-muted); margin-top: 8px; }
+pre.mermaid { background: #fff; color: #111; }
+
+/* Callouts */
+.wt-callout { display: flex; gap: 12px; margin: 0 0 1.2em; padding: 14px 16px; border-radius: var(--wt-radius); border: 1px solid var(--wt-border); background: var(--wt-surface); }
+.wt-callout .ic { font-size: 18px; line-height: 1.4; }
+.wt-callout .body > :last-child { margin-bottom: 0; }
+.wt-callout.note { border-left: 3px solid var(--wt-accent-2); }
+.wt-callout.tip { border-left: 3px solid var(--wt-ok); }
+.wt-callout.warning { border-left: 3px solid var(--wt-warn); }
+.wt-callout.info { border-left: 3px solid var(--wt-muted); }
+
+/* Reveal (try-then-show) */
+.wt-reveal { margin: 0 0 1.2em; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); overflow: hidden; }
+.wt-reveal > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none; }
+.wt-reveal > summary::-webkit-details-marker { display: none; }
+.wt-reveal > summary::before { content: "▶"; font-size: 11px; color: var(--wt-accent-2); transition: transform .15s; }
+.wt-reveal[open] > summary::before { transform: rotate(90deg); }
+.wt-reveal > summary .hint { font-weight: 400; color: var(--wt-muted); font-size: 13px; }
+.wt-reveal .reveal-body { padding: 0 16px 12px; border-top: 1px solid var(--wt-border); }
+.wt-reveal .reveal-body > :first-child { margin-top: 12px; }
+.wt-reveal .reveal-body > :last-child { margin-bottom: 0; }
+
+/* Quiz (non-gating) */
+.wt-quiz { margin: 0 0 1.4em; padding: 18px 20px; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); }
+.wt-quiz .q { font-weight: 600; margin-bottom: 12px; }
+.wt-quiz .q::before { content: "Self-check"; display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--wt-accent); font-weight: 700; margin-bottom: 6px; }
+.wt-quiz .opts { display: flex; flex-direction: column; gap: 8px; }
+.wt-quiz .opt {
+  text-align: left; cursor: pointer; padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--wt-border); background: var(--wt-surface-2); color: var(--wt-text);
+  font: inherit; transition: border-color .12s, background .12s; display: flex; gap: 10px; align-items: center;
+}
+.wt-quiz .opt:hover { border-color: var(--wt-accent-2); }
+.wt-quiz .opt .mark { width: 18px; display: inline-block; text-align: center; opacity: 0; }
+.wt-quiz .opt.correct { border-color: var(--wt-ok); background: rgba(34,218,110,.12); }
+.wt-quiz .opt.correct .mark { opacity: 1; color: var(--wt-ok); }
+.wt-quiz .opt.wrong { border-color: var(--wt-bad); background: rgba(239,83,80,.12); }
+.wt-quiz .opt.wrong .mark { opacity: 1; color: var(--wt-bad); }
+.wt-quiz .explain { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--wt-surface-2); border: 1px dashed var(--wt-border); color: var(--wt-muted); display: none; }
+.wt-quiz .explain.show { display: block; }
+.wt-quiz .explain > :last-child { margin-bottom: 0; }
+
+/* Footer */
+.wt-footer { max-width: var(--wt-maxw); margin: 48px auto 0; padding-top: 18px; border-top: 1px solid var(--wt-border); color: var(--wt-muted); font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wt-reset { background: none; border: 1px solid var(--wt-border); color: var(--wt-muted); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.wt-reset:hover { color: var(--wt-text); border-color: var(--wt-muted); }
+
+/* Mobile — the sidebar becomes an overlay drawer */
+@media (max-width: 860px) {
+  .wt-shell, .wt-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .wt-sidebar {
+    position: fixed; top: 0; left: 0; z-index: 55;
+    width: min(86vw, 320px); height: 100vh; padding: 24px 18px;
+    border-right: 1px solid var(--wt-border);
+    transform: translateX(0); transition: transform .22s ease;
+  }
+  .wt-shell.nav-collapsed .wt-sidebar { transform: translateX(-100%); padding: 24px 18px; border-right-color: var(--wt-border); }
+  .wt-shell.nav-collapsed .wt-sidebar > * { opacity: 1; }
+  .wt-shell:not(.nav-collapsed) .wt-nav-scrim { opacity: 1; visibility: visible; }
+  .wt-main { padding-top: 64px; } /* clear the fixed open button */
+}
+
+/* Print — always print the light palette regardless of the active theme. */
+@media print {
+  .wt-sidebar, #wt-progress, .wt-reset, .wt-theme-toggle, .wt-nav-open, .wt-nav-scrim { display: none; }
+  .wt-shell { display: block; }
+  body { background: #fff; color: #111; }
+  .wt-reveal[open] .reveal-body, .wt-reveal .reveal-body { display: block !important; }
+  pre.shiki, pre.shiki span { color: var(--shiki-light) !important; }
+  pre.shiki { background-color: var(--shiki-light-bg) !important; }
+}
+</style>
+</head>
+<body data-wt-id="03-cli">
+<div id="wt-progress"></div>
+<button class="wt-theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light/dark"><span class="ic-sun" aria-hidden="true">☀</span><span class="ic-moon" aria-hidden="true">☾</span></button>
+<button class="wt-nav-open" type="button" aria-label="Open contents" title="Contents">☰</button>
+<div class="wt-nav-scrim" aria-hidden="true"></div>
+<div class="wt-shell">
+  <aside class="wt-sidebar">
+    <div class="wt-sidebar-top"><button class="wt-nav-collapse" type="button" aria-label="Collapse contents" title="Collapse">«</button></div>
+    <p class="wt-eyebrow">repo walkthrough</p>
+    <h1>3 · The CLI</h1>
+    <p style="color:var(--wt-muted);font-size:13px;margin:.2em 0 0">The golden-path workflow (add → install → check), the complete command reference including list/discover/ingest, and how skulto.json makes a project&#39;s skills reproducible.</p>
+    <div class="wt-meta-badges"><span class="wt-badge audience">new contributors &amp; power users</span><span class="wt-badge">onboarding</span><span class="wt-badge">cli</span><span class="wt-badge">workflow</span><span class="wt-badge">commands</span></div>
+    <a class="wt-resume" href="javascript:void 0" style="display:none;font-size:12px;color:var(--wt-accent-2)"></a>
+    <ul class="wt-toc"><li class="lvl-1"><a href="#the-cli">The CLI</a></li>
+<li class="lvl-2"><a href="#the-golden-path">The golden path</a></li>
+<li class="lvl-3"><a href="#update-the-safe-refresh">`update` — the safe refresh</a></li>
+<li class="lvl-2"><a href="#project-skills-save-and-sync">Project skills: `save` and `sync`</a></li>
+<li class="lvl-2"><a href="#install-is-flexible">`install` is flexible</a></li>
+<li class="lvl-2"><a href="#full-command-reference">Full command reference</a></li>
+<li class="lvl-2"><a href="#telemetry-errors-worth-knowing">Telemetry &amp; errors (worth knowing)</a></li></ul>
+  </aside>
+  <main class="wt-main">
+    <article class="wt-content">
+      <h1 id="the-cli">The CLI</h1>
+<p>The CLI is Skulto&#39;s scripting surface — Cobra commands with Fang for polished help/version
+output. Every subcommand is one file under <code>internal/cli/</code>. This part teaches the workflow
+first, then gives you the full reference.</p>
+<h2 id="the-golden-path">The golden path</h2>
+<p>Here&#39;s the sequence a new user actually runs:</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># 1. Add a repository of skills.</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">#    add clones it shallowly into ~/.agents/skulto/repositories AND</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">#    syncs + scans its skills immediately (unless you pass --no-sync).</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> add</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> anthropics/skills</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">          # alias: a</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># 2. Find something to install.</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> list</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">                            # configured source repos</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> info</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> brainstorming</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">              # detail on one skill</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># 3. Install a skill to your AI tools (prompts for platforms + scope).</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> install</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> brainstorming</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">           # alias: i</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># 4. See what's installed and where.</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> check</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">                           # alias: ck</span></span></code></pre><div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p>A common misconception: that you must run <code>pull</code> and <code>scan</code> right after <code>add</code>. You don&#39;t —
+<strong><code>add</code> already clones, syncs, and scans</strong> in one shot (<code>internal/cli/add.go</code>). You&#39;d run
+<code>pull</code>/<code>scan</code> later only to <em>refresh</em> an existing repo or re-scan. The one-command refresh
+for everything is <code>update</code>.</p></div></div>
+
+
+<h3 id="update-the-safe-refresh"><code>update</code> — the safe refresh</h3>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> update</span><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic">                          # alias: up</span></span></code></pre><p><code>update</code> does three phases in order (<code>internal/cli/update.go</code>): <strong>[1/3]</strong> pull all repos →
+<strong>[2/3]</strong> security-scan (pending skills by default, or everything with <code>--scan-all</code>) →
+<strong>[3/3]</strong> print a change report. Its help text describes it as <code>skulto pull</code> +
+<code>skulto scan --pending</code>.</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 646.359px; background-color: transparent;" viewBox="0 0 646.359375 94" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M172.063,47L176.229,47C180.396,47,188.729,47,196.396,47C204.063,47,211.063,47,214.563,47L218.063,47" id="my-svg-L_P_S_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P_S_0" data-points="W3sieCI6MTcyLjA2MjUsInkiOjQ3fSx7IngiOjE5Ny4wNjI1LCJ5Ijo0N30seyJ4IjoyMjIuMDYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M428.656,47L432.823,47C436.99,47,445.323,47,452.99,47C460.656,47,467.656,47,471.156,47L474.656,47" id="my-svg-L_S_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_S_R_0" data-points="W3sieCI6NDI4LjY1NjI1LCJ5Ijo0N30seyJ4Ijo0NTMuNjU2MjUsInkiOjQ3fSx7IngiOjQ3OC42NTYyNSwieSI6NDd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_P_S_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_S_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-P-0" data-look="classic" transform="translate(90.03125, 47)"><rect class="basic label-container" style="" x="-82.03125" y="-39" width="164.0625" height="78"/><g class="label" style="" transform="translate(-52.03125, -24)"><rect/><foreignObject width="104.0625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>[1/3] pull<br />fetch all repos</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-S-1" data-look="classic" transform="translate(325.359375, 47)"><rect class="basic label-container" style="" x="-103.296875" y="-39" width="206.59375" height="78"/><g class="label" style="" transform="translate(-73.296875, -24)"><rect/><foreignObject width="146.59375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>[2/3] scan<br />--pending by default</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-R-3" data-look="classic" transform="translate(558.5078125, 47)"><rect class="basic label-container" style="" x="-79.8515625" y="-39" width="159.703125" height="78"/><g class="label" style="" transform="translate(-49.8515625, -24)"><rect/><foreignObject width="99.703125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>[3/3] report<br />what changed</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><h2 id="project-skills-save-and-sync">Project skills: <code>save</code> and <code>sync</code></h2>
+<p>Skulto has a project manifest, <strong><code>skulto.json</code></strong>, read from and written to the current
+directory (<code>internal/manifest/manifest.go</code>). It&#39;s the lockfile-style mechanism for making a
+project&#39;s skill set reproducible.</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># Write your current project-scope installs into ./skulto.json</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> save</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-light-font-style:inherit;--shiki-dark:#637777;--shiki-dark-font-style:italic"># On a teammate's machine: install exactly what skulto.json declares</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-light-font-style:inherit;--shiki-dark:#82AAFF;--shiki-dark-font-style:italic">./build/skulto</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D"> sync</span></span></code></pre><p><code>save</code> records only project-scoped installs for the current dir (skipping local-only skills
+that have no source repo). <code>sync</code> reads <code>skulto.json</code> and installs each listed skill; if
+there&#39;s no manifest, it tells you to run <code>save</code> first. Running <code>install</code> with <strong>no
+arguments</strong> routes to the same <code>sync</code> behavior.</p>
+<details class="wt-reveal"><summary>A teammate adds three skills to `skulto.json` and pushes. You pull the repo. One command installs exactly those — which?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p><code>skulto sync</code>. It reads <code>skulto.json</code> from the working directory and installs the declared
+skills. It&#39;s the counterpart to <code>save</code>, which writes your installed project skills <em>into</em>
+<code>skulto.json</code>. Together they make a project&#39;s skill set reproducible.</p></div></details>
+
+
+<h2 id="install-is-flexible"><code>install</code> is flexible</h2>
+<p><code>install</code> takes 0 or 1 argument (<code>cobra.RangeArgs(0, 1)</code>) and routes by what you pass:</p>
+<table>
+<thead>
+<tr>
+<th>You run</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>skulto install</code></td>
+<td>No arg → behaves like <code>sync</code> (installs from <code>skulto.json</code>)</td>
+</tr>
+<tr>
+<td><code>skulto install brainstorming</code></td>
+<td>A slug → installs that indexed skill</td>
+</tr>
+<tr>
+<td><code>skulto install owner/repo</code></td>
+<td>A URL/<code>owner/repo</code> → installs directly from that GitHub repo, with per-skill conflict resolution</td>
+</tr>
+</tbody></table>
+<p>The URL detection (<code>isURL</code>) treats <code>http(s)://…</code> and any <code>owner/repo</code> (a <code>/</code> not starting
+with <code>.</code>) as a repository.</p>
+<h2 id="full-command-reference">Full command reference</h2>
+<p>Every subcommand registered on the root (<code>internal/cli/cli.go</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Command (alias)</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>add &lt;repo-url&gt;</code> (<code>a</code>)</td>
+<td>Add a skill repository (clones + syncs + scans unless <code>--no-sync</code>)</td>
+</tr>
+<tr>
+<td><code>list</code></td>
+<td><strong>List all configured source repositories</strong></td>
+</tr>
+<tr>
+<td><code>pull</code> (<code>p</code>)</td>
+<td>Pull and sync all skill repositories</td>
+</tr>
+<tr>
+<td><code>update</code> (<code>up</code>)</td>
+<td>Pull repos, scan for threats, and report changes</td>
+</tr>
+<tr>
+<td><code>install [slug|url]</code> (<code>i</code>)</td>
+<td>Install skill(s) to AI tool directories</td>
+</tr>
+<tr>
+<td><code>uninstall &lt;slug&gt;</code> (<code>ui</code>)</td>
+<td>Uninstall a skill from AI tool directories</td>
+</tr>
+<tr>
+<td><code>check</code> (<code>ck</code>)</td>
+<td>Show installed skills and their locations</td>
+</tr>
+<tr>
+<td><code>scan</code></td>
+<td>Scan skills for security threats (<code>--all</code>, <code>--skill</code>, <code>--source</code>, <code>--pending</code>)</td>
+</tr>
+<tr>
+<td><code>info &lt;slug&gt;</code></td>
+<td>Show detailed information about a skill</td>
+</tr>
+<tr>
+<td><code>discover</code></td>
+<td>Discover unmanaged skills already in platform dirs</td>
+</tr>
+<tr>
+<td><code>ingest [name]</code></td>
+<td>Import a discovered skill into Skulto management</td>
+</tr>
+<tr>
+<td><code>save</code></td>
+<td>Save project skills to <code>skulto.json</code></td>
+</tr>
+<tr>
+<td><code>sync</code></td>
+<td>Install skills from <code>skulto.json</code></td>
+</tr>
+<tr>
+<td><code>remove [repo]</code> (<code>rm</code>)</td>
+<td>Remove a skill repository</td>
+</tr>
+<tr>
+<td><code>favorites</code></td>
+<td>Manage favorites — subcommands <code>add</code> / <code>remove</code> / <code>list</code></td>
+</tr>
+<tr>
+<td><code>feedback</code></td>
+<td>Show how to provide feedback</td>
+</tr>
+<tr>
+<td><em>(no args)</em></td>
+<td>Launch the interactive TUI (Part 4)</td>
+</tr>
+</tbody></table>
+<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p><strong><code>list</code></strong> and the <strong><code>discover</code> → <code>ingest</code></strong> pair are the commands newcomers most often miss.
+<code>discover</code> finds skills already sitting in your AI tools&#39; directories that Skulto isn&#39;t
+managing yet; <code>ingest</code> pulls one of those under Skulto management so it shows up in search,
+scans, and <code>check</code>. That&#39;s how you adopt an existing setup instead of starting from scratch.</p></div></div>
+
+
+<h2 id="telemetry-amp-errors-worth-knowing">Telemetry &amp; errors (worth knowing)</h2>
+<p>The root command tracks each subcommand&#39;s execution time and whether flags were used
+(<code>PersistentPostRun</code> in <code>cli.go</code>), and CLI errors are classified into buckets
+(<code>config_error</code>, <code>network_error</code>, <code>not_found_error</code>, …) via <code>trackCLIError</code>. All anonymous;
+opt out with <code>SKULTO_TELEMETRY_TRACKING_ENABLED=false</code>. Part 7 covers the telemetry
+contract you must follow when adding a command.</p>
+<p>Next: <strong>Part 4 · The TUI</strong> — the same capabilities, but the interface most users live in.</p>
+
+    </article>
+    <footer class="wt-footer">
+      <span>Generated by the <strong>walkthrough</strong> skill · self-contained &amp; offline</span>
+      <button class="wt-reset" title="Clear saved progress">Reset progress</button>
+    </footer>
+  </main>
+</div>
+
+<script>/* walkthrough route runtime — inlined into every self-contained walkthrough.html.
+   No external dependencies. Handles: TOC scroll-spy, quiz feedback (non-gating),
+   reveal blocks, and optional localStorage progress. */
+(function () {
+  "use strict";
+
+  var KEY = "wt-progress:" + (document.body.getAttribute("data-wt-id") || location.pathname);
+
+  /* ---- Theme toggle (light default, persisted) ---- */
+  var THEME_KEY = "wt-theme";
+  var themeBtn = document.querySelector(".wt-theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Sidebar collapse / responsive drawer ---- */
+  var shell = document.querySelector(".wt-shell");
+  var navOpenBtn = document.querySelector(".wt-nav-open");
+  var navCollapseBtn = document.querySelector(".wt-nav-collapse");
+  var navScrim = document.querySelector(".wt-nav-scrim");
+  var navMq = window.matchMedia("(max-width: 860px)");
+  function setNav(open) {
+    if (!shell) return;
+    shell.classList.toggle("nav-collapsed", !open);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (navCollapseBtn) navCollapseBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  // Auto-collapse on narrow viewports; auto-open when it widens again.
+  function autoNav() { setNav(!navMq.matches); }
+  autoNav();
+  if (navMq.addEventListener) navMq.addEventListener("change", autoNav);
+  else if (navMq.addListener) navMq.addListener(autoNav);
+  if (navOpenBtn) navOpenBtn.addEventListener("click", function () { setNav(true); });
+  if (navCollapseBtn) navCollapseBtn.addEventListener("click", function () { setNav(false); });
+  if (navScrim) navScrim.addEventListener("click", function () { setNav(false); });
+
+  /* ---- TOC scroll-spy ---- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".wt-toc a"));
+  // On narrow screens, picking a TOC entry should close the overlay drawer.
+  tocLinks.forEach(function (a) {
+    a.addEventListener("click", function () { if (navMq.matches) setNav(false); });
+  });
+  var headings = tocLinks
+    .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+    .filter(Boolean);
+
+  function onScroll() {
+    var pos = window.scrollY + 120;
+    var current = headings[0];
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].offsetTop <= pos) current = headings[i];
+    }
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", current && a.getAttribute("href") === "#" + current.id);
+    });
+
+    /* progress bar = scroll completion */
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0;
+    var bar = document.getElementById("wt-progress");
+    if (bar) bar.style.width = pct.toFixed(1) + "%";
+    saveProgress(pct);
+  }
+
+  /* ---- Quiz (non-gating) ---- */
+  document.querySelectorAll(".wt-quiz").forEach(function (quiz) {
+    var explain = quiz.querySelector(".explain");
+    quiz.querySelectorAll(".opt").forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        var correct = opt.getAttribute("data-correct") === "1";
+        // clear previous state but never lock the user out — fully retryable
+        quiz.querySelectorAll(".opt").forEach(function (o) { o.classList.remove("correct", "wrong"); });
+        opt.classList.add(correct ? "correct" : "wrong");
+        if (correct) {
+          quiz.querySelectorAll(".opt").forEach(function (o) {
+            if (o.getAttribute("data-correct") === "1") o.classList.add("correct");
+          });
+        }
+        if (explain) explain.classList.add("show");
+      });
+    });
+  });
+
+  /* ---- localStorage progress (optional, non-blocking) ---- */
+  function saveProgress(pct) {
+    try { localStorage.setItem(KEY, JSON.stringify({ pct: Math.round(pct), at: Date.now() })); } catch (e) {}
+  }
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; }
+  }
+
+  var resetBtn = document.querySelector(".wt-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  /* restore scroll hint on load */
+  window.addEventListener("load", function () {
+    var saved = loadProgress();
+    if (saved && saved.pct > 5 && saved.pct < 95 && !location.hash) {
+      var note = document.querySelector(".wt-resume");
+      if (note) {
+        note.textContent = "Resume where you left off (" + saved.pct + "%)";
+        note.style.display = "inline";
+        note.addEventListener("click", function () {
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - doc.clientHeight;
+          window.scrollTo({ top: (saved.pct / 100) * max, behavior: "smooth" });
+        });
+      }
+    }
+    onScroll();
+  });
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+})();
+</script>
+</body>
+</html>
