@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Skulto v2 — The Skill Environment Manager</title>
+<meta name="description" content="Why skulto stops managing skills and starts managing environments — the evidence, the three capabilities, the architecture, and the one experiment that can kill the flagship feature.">
+<script>!function(){try{var t=localStorage.getItem("wt-theme");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}}();</script>
+<style>/* walkthrough route theme — inlined into every self-contained walkthrough.html.
+   Ships BOTH palettes: light by default, dark via [data-theme="dark"] on <html>
+   (set by a persisted toggle). Readable, responsive, print-friendly. */
+:root {
+  /* Light palette (default) */
+  --wt-bg: #ffffff;
+  --wt-surface: #f6f8fa;
+  --wt-surface-2: #eceff3;
+  --wt-border: #d6dde4;
+  --wt-text: #1f2328;
+  --wt-muted: #5b6975;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #2563eb;
+  --wt-ok: #1a8f4c;
+  --wt-bad: #d23b3b;
+  --wt-warn: #b07d00;
+  --wt-diagram-bg: #ffffff;
+  --wt-radius: 10px;
+  --wt-maxw: 820px;
+}
+html[data-theme="dark"] {
+  /* Dark "night-owl"-adjacent palette */
+  --wt-bg: #011627;
+  --wt-surface: #0b2942;
+  --wt-surface-2: #0e3251;
+  --wt-border: #1d3b53;
+  --wt-text: #d6deeb;
+  --wt-muted: #8badc1;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #82aaff;
+  --wt-ok: #22da6e;
+  --wt-bad: #ef5350;
+  --wt-warn: #ffca28;
+  --wt-diagram-bg: #ffffff;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wt-bg);
+  color: var(--wt-text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--wt-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Progress bar (top, fixed) */
+#wt-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: linear-gradient(90deg, var(--wt-accent), var(--wt-accent-2)); z-index: 50; transition: width .15s ease; }
+
+/* Theme toggle (top-right, fixed) */
+.wt-theme-toggle {
+  position: fixed; top: 14px; right: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-text); border: 1px solid var(--wt-border);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.wt-theme-toggle:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-theme-toggle .ic-moon { display: none; }
+.wt-theme-toggle .ic-sun { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-moon { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-sun { display: none; }
+
+/* Sidebar toggles (open = floating, shown when collapsed; collapse = inside panel) */
+.wt-nav-open {
+  position: fixed; top: 14px; left: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  opacity: 0; visibility: hidden;
+  transition: opacity .18s ease, visibility .18s ease, border-color .12s, color .12s;
+}
+.wt-nav-open:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-shell.nav-collapsed .wt-nav-open { opacity: 1; visibility: visible; }
+.wt-sidebar-top { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+.wt-nav-collapse {
+  width: 28px; height: 28px; padding: 0; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-bg); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  transition: border-color .12s, color .12s;
+}
+.wt-nav-collapse:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+
+/* Backdrop for the mobile overlay drawer */
+.wt-nav-scrim {
+  position: fixed; inset: 0; z-index: 54; background: rgba(2,8,20,.45);
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease;
+}
+
+/* Layout */
+.wt-shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .22s ease; }
+.wt-shell.nav-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.wt-sidebar {
+  position: sticky; top: 0; align-self: start; height: 100vh; min-width: 0;
+  overflow: hidden auto;
+  background: var(--wt-surface); border-right: 1px solid var(--wt-border);
+  padding: 24px 18px;
+  transition: padding .22s ease, border-color .22s ease;
+}
+.wt-shell.nav-collapsed .wt-sidebar { padding-left: 0; padding-right: 0; border-right-color: transparent; pointer-events: none; }
+.wt-shell.nav-collapsed .wt-sidebar > * { opacity: 0; transition: opacity .12s ease; }
+.wt-sidebar .wt-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--wt-muted); margin: 0 0 6px; }
+.wt-sidebar h1 { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
+.wt-meta-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 18px; }
+.wt-badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--wt-surface-2); color: var(--wt-muted); border: 1px solid var(--wt-border); }
+.wt-badge.audience { color: var(--wt-accent-2); border-color: var(--wt-accent-2); }
+.wt-toc { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.wt-toc li { margin: 2px 0; }
+.wt-toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--wt-muted); border-left: 2px solid transparent; }
+.wt-toc a:hover { color: var(--wt-text); background: var(--wt-surface-2); text-decoration: none; }
+.wt-toc a.active { color: var(--wt-text); border-left-color: var(--wt-accent-2); background: var(--wt-surface-2); }
+.wt-toc .lvl-3 a { padding-left: 22px; font-size: 13px; }
+
+.wt-main { padding: 48px max(24px, 4vw); }
+.wt-content { max-width: var(--wt-maxw); margin: 0 auto; }
+.wt-content h1, .wt-content h2, .wt-content h3 { line-height: 1.25; scroll-margin-top: 20px; }
+.wt-content h1 { font-size: 2rem; margin: 0 0 .6em; }
+.wt-content h2 { font-size: 1.5rem; margin: 2em 0 .6em; padding-bottom: .3em; border-bottom: 1px solid var(--wt-border); }
+.wt-content h3 { font-size: 1.2rem; margin: 1.6em 0 .5em; }
+.wt-content p { margin: 0 0 1em; }
+.wt-content ul, .wt-content ol { margin: 0 0 1em; padding-left: 1.4em; }
+.wt-content li { margin: .3em 0; }
+.wt-content blockquote { margin: 0 0 1em; padding: .6em 1em; border-left: 3px solid var(--wt-accent); background: var(--wt-surface); border-radius: 0 var(--wt-radius) var(--wt-radius) 0; color: var(--wt-muted); }
+.wt-content table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 14px; }
+.wt-content th, .wt-content td { border: 1px solid var(--wt-border); padding: 8px 12px; text-align: left; }
+.wt-content th { background: var(--wt-surface); }
+.wt-content :not(pre) > code { background: var(--wt-surface-2); padding: .15em .4em; border-radius: 5px; font-size: .9em; font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+.wt-content pre { border-radius: var(--wt-radius); padding: 16px 18px; overflow-x: auto; margin: 0 0 1em; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--wt-border); }
+.wt-content pre code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+
+/* Shiki dual-theme: tokens carry --shiki-light/--shiki-dark (pre carries the -bg
+   variants). Light is the default; [data-theme="dark"] switches the whole block. */
+.wt-content pre.shiki,
+.wt-content pre.shiki span { color: var(--shiki-light); }
+.wt-content pre.shiki { background-color: var(--shiki-light-bg) !important; }
+html[data-theme="dark"] .wt-content pre.shiki,
+html[data-theme="dark"] .wt-content pre.shiki span { color: var(--shiki-dark); }
+html[data-theme="dark"] .wt-content pre.shiki { background-color: var(--shiki-dark-bg) !important; }
+
+/* Diagrams */
+.wt-diagram { margin: 0 0 1.4em; padding: 18px; background: var(--wt-diagram-bg); border-radius: var(--wt-radius); border: 1px solid var(--wt-border); overflow-x: auto; text-align: center; }
+.wt-diagram svg { max-width: 100%; height: auto; }
+.wt-diagram.fallback { background: var(--wt-surface); }
+.wt-diagram-note { font-size: 12px; color: var(--wt-muted); margin-top: 8px; }
+pre.mermaid { background: #fff; color: #111; }
+
+/* Callouts */
+.wt-callout { display: flex; gap: 12px; margin: 0 0 1.2em; padding: 14px 16px; border-radius: var(--wt-radius); border: 1px solid var(--wt-border); background: var(--wt-surface); }
+.wt-callout .ic { font-size: 18px; line-height: 1.4; }
+.wt-callout .body > :last-child { margin-bottom: 0; }
+.wt-callout.note { border-left: 3px solid var(--wt-accent-2); }
+.wt-callout.tip { border-left: 3px solid var(--wt-ok); }
+.wt-callout.warning { border-left: 3px solid var(--wt-warn); }
+.wt-callout.info { border-left: 3px solid var(--wt-muted); }
+
+/* Reveal (try-then-show) */
+.wt-reveal { margin: 0 0 1.2em; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); overflow: hidden; }
+.wt-reveal > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none; }
+.wt-reveal > summary::-webkit-details-marker { display: none; }
+.wt-reveal > summary::before { content: "▶"; font-size: 11px; color: var(--wt-accent-2); transition: transform .15s; }
+.wt-reveal[open] > summary::before { transform: rotate(90deg); }
+.wt-reveal > summary .hint { font-weight: 400; color: var(--wt-muted); font-size: 13px; }
+.wt-reveal .reveal-body { padding: 0 16px 12px; border-top: 1px solid var(--wt-border); }
+.wt-reveal .reveal-body > :first-child { margin-top: 12px; }
+.wt-reveal .reveal-body > :last-child { margin-bottom: 0; }
+
+/* Quiz (non-gating) */
+.wt-quiz { margin: 0 0 1.4em; padding: 18px 20px; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); }
+.wt-quiz .q { font-weight: 600; margin-bottom: 12px; }
+.wt-quiz .q::before { content: "Self-check"; display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--wt-accent); font-weight: 700; margin-bottom: 6px; }
+.wt-quiz .opts { display: flex; flex-direction: column; gap: 8px; }
+.wt-quiz .opt {
+  text-align: left; cursor: pointer; padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--wt-border); background: var(--wt-surface-2); color: var(--wt-text);
+  font: inherit; transition: border-color .12s, background .12s; display: flex; gap: 10px; align-items: center;
+}
+.wt-quiz .opt:hover { border-color: var(--wt-accent-2); }
+.wt-quiz .opt .mark { width: 18px; display: inline-block; text-align: center; opacity: 0; }
+.wt-quiz .opt.correct { border-color: var(--wt-ok); background: rgba(34,218,110,.12); }
+.wt-quiz .opt.correct .mark { opacity: 1; color: var(--wt-ok); }
+.wt-quiz .opt.wrong { border-color: var(--wt-bad); background: rgba(239,83,80,.12); }
+.wt-quiz .opt.wrong .mark { opacity: 1; color: var(--wt-bad); }
+.wt-quiz .explain { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--wt-surface-2); border: 1px dashed var(--wt-border); color: var(--wt-muted); display: none; }
+.wt-quiz .explain.show { display: block; }
+.wt-quiz .explain > :last-child { margin-bottom: 0; }
+
+/* Footer */
+.wt-footer { max-width: var(--wt-maxw); margin: 48px auto 0; padding-top: 18px; border-top: 1px solid var(--wt-border); color: var(--wt-muted); font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wt-reset { background: none; border: 1px solid var(--wt-border); color: var(--wt-muted); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.wt-reset:hover { color: var(--wt-text); border-color: var(--wt-muted); }
+
+/* Mobile — the sidebar becomes an overlay drawer */
+@media (max-width: 860px) {
+  .wt-shell, .wt-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .wt-sidebar {
+    position: fixed; top: 0; left: 0; z-index: 55;
+    width: min(86vw, 320px); height: 100vh; padding: 24px 18px;
+    border-right: 1px solid var(--wt-border);
+    transform: translateX(0); transition: transform .22s ease;
+  }
+  .wt-shell.nav-collapsed .wt-sidebar { transform: translateX(-100%); padding: 24px 18px; border-right-color: var(--wt-border); }
+  .wt-shell.nav-collapsed .wt-sidebar > * { opacity: 1; }
+  .wt-shell:not(.nav-collapsed) .wt-nav-scrim { opacity: 1; visibility: visible; }
+  .wt-main { padding-top: 64px; } /* clear the fixed open button */
+}
+
+/* Print — always print the light palette regardless of the active theme. */
+@media print {
+  .wt-sidebar, #wt-progress, .wt-reset, .wt-theme-toggle, .wt-nav-open, .wt-nav-scrim { display: none; }
+  .wt-shell { display: block; }
+  body { background: #fff; color: #111; }
+  .wt-reveal[open] .reveal-body, .wt-reveal .reveal-body { display: block !important; }
+  pre.shiki, pre.shiki span { color: var(--shiki-light) !important; }
+  pre.shiki { background-color: var(--shiki-light-bg) !important; }
+}
+</style>
+</head>
+<body data-wt-id="skulto-v2">
+<div id="wt-progress"></div>
+<button class="wt-theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light/dark"><span class="ic-sun" aria-hidden="true">☀</span><span class="ic-moon" aria-hidden="true">☾</span></button>
+<button class="wt-nav-open" type="button" aria-label="Open contents" title="Contents">☰</button>
+<div class="wt-nav-scrim" aria-hidden="true"></div>
+<div class="wt-shell">
+  <aside class="wt-sidebar">
+    <div class="wt-sidebar-top"><button class="wt-nav-collapse" type="button" aria-label="Collapse contents" title="Collapse">«</button></div>
+    <p class="wt-eyebrow">design walkthrough</p>
+    <h1>Skulto v2 — The Skill Environment Manager</h1>
+    <p style="color:var(--wt-muted);font-size:13px;margin:.2em 0 0">Why skulto stops managing skills and starts managing environments — the evidence, the three capabilities, the architecture, and the one experiment that can kill the flagship feature.</p>
+    <div class="wt-meta-badges"><span class="wt-badge audience">technical co-founders</span><span class="wt-badge">product</span><span class="wt-badge">architecture</span><span class="wt-badge">security</span><span class="wt-badge">evals</span><span class="wt-badge">PRD</span></div>
+    <a class="wt-resume" href="javascript:void 0" style="display:none;font-size:12px;color:var(--wt-accent-2)"></a>
+    <ul class="wt-toc"><li class="lvl-2"><a href="#start-here-the-one-sentence-pivot">Start here: the one-sentence pivot</a></li>
+<li class="lvl-2"><a href="#why-now-the-market-is-complaining-about-too-much-not-too-little">Why now: the market is complaining about *too much*, not too little</a></li>
+<li class="lvl-3"><a href="#the-competitive-gap-is-real-and-empty-for-a-reason">The competitive gap is real — and empty *for a reason*</a></li>
+<li class="lvl-2"><a href="#the-experiment-that-already-ran-and-what-it-actually-proved">The experiment that already ran (and what it actually proved)</a></li>
+<li class="lvl-3"><a href="#the-discoverability-test-applied-to-skultos-own-repo">The discoverability test, applied to skulto&#39;s own repo</a></li>
+<li class="lvl-2"><a href="#the-three-capabilities-compose-verify-evolve">The three capabilities: Compose, Verify, Evolve</a></li>
+<li class="lvl-2"><a href="#the-architectural-spine-skulto-ships-tools-the-agent-supplies-intelligence">The architectural spine: skulto ships tools, the agent supplies intelligence</a></li>
+<li class="lvl-3"><a href="#capability-gated-not-parity-gated">Capability-gated, not parity-gated</a></li>
+<li class="lvl-2"><a href="#what-keeps-it-honest-the-invariants">What keeps it honest: the invariants</a></li>
+<li class="lvl-2"><a href="#verify-in-depth-turning-trust-into-something-reproducible">Verify in depth: turning trust into something reproducible</a></li>
+<li class="lvl-3"><a href="#the-identity-problem-underneath-it-all">The identity problem underneath it all</a></li>
+<li class="lvl-2"><a href="#the-falsifiable-claim-the-experiment-allowed-to-kill-compose">The falsifiable claim: the experiment allowed to kill Compose</a></li>
+<li class="lvl-2"><a href="#sequencing-and-the-risks-that-actually-kill-it">Sequencing and the risks that actually kill it</a></li>
+<li class="lvl-2"><a href="#putting-it-together">Putting it together</a></li></ul>
+  </aside>
+  <main class="wt-main">
+    <article class="wt-content">
+      <h2 id="start-here-the-one-sentence-pivot">Start here: the one-sentence pivot</h2>
+<p>Skulto v1 is a package manager for AI-agent skills. It scrapes them from GitHub, indexes
+them in SQLite, scans them for prompt injection, and symlinks them into 33 AI coding tools.
+<strong>The unit of management is a single skill</strong> — you find one, you install one.</p>
+<p>Skulto v2 changes the unit of management to <strong>the environment</strong>: the <em>whole set</em> of skills a
+repository runs on, taken together and held to a standard.</p>
+<p>That sounds like a small reframe. It is actually the entire bet, and it flips the product&#39;s
+value proposition upside down:</p>
+<div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p><strong>Headline value is subtraction, not addition.</strong> v1 helps you <em>add</em> the right skill. v2&#39;s
+core promise is to give you <em>fewer, provably-safe, provably-fitting</em> skills — and to prove
+the remainder is auditable and observed. The market is drowning in artifacts; v2 sells the
+bucket, not more water.</p></div></div>
+
+
+<p>Before we justify that bet, let&#39;s make sure the pivot itself is clear.</p>
+<div class="wt-quiz"><div class="q"><p>What is the &quot;unit of management&quot; in skulto v2?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>A single skill you search for and install</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>The complete set of skills a repository runs on, taken as a whole</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>A GitHub repository of skills</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>An AI coding tool (Claude, Codex, etc.)</span></button></div><div class="explain"><p>v1 manages one skill at a time. v2 manages the <em>environment</em> — the whole budgeted, audited,
+observed set — which is what lets it make claims about fit, safety, and what actually fires.</p></div></div>
+
+
+<p>By the end of this walkthrough you&#39;ll be able to explain why this pivot is defensible, how
+the three capabilities (Compose, Verify, Evolve) fit together, what keeps the system honest
+(the invariants and the security model), and — most importantly — the single experiment that
+is allowed to kill the flagship feature before we ever ship a claim about it.</p>
+<hr>
+<h2 id="why-now-the-market-is-complaining-about-too-much-not-too-little">Why now: the market is complaining about <em>too much</em>, not too little</h2>
+<p>Every product decision in v2 traces back to a table of practitioner pain, ranked by how
+strong the evidence is. This is worth internalizing, because it&#39;s what makes the pivot
+<em>evidence-led</em> rather than a hunch.</p>
+<table>
+<thead>
+<tr>
+<th>Pain</th>
+<th>Evidence</th>
+<th>Independent sources</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Context bloat; people actively <strong>deleting</strong> MCP servers and skills</td>
+<td><strong>STRONG</strong></td>
+<td>10+</td>
+</tr>
+<tr>
+<td>Skills silently truncated → never fire</td>
+<td><strong>STRONG</strong></td>
+<td>8+</td>
+</tr>
+<tr>
+<td>Trust: 36% of published skills contain injection flaws</td>
+<td><strong>STRONG</strong></td>
+<td>6+</td>
+</tr>
+<tr>
+<td>Agent ignores CLAUDE.md / repo conventions</td>
+<td><strong>STRONG</strong></td>
+<td>5+</td>
+</tr>
+<tr>
+<td><em>Generic skills need forking for my stack</em></td>
+<td><strong>WEAK — contradicted</strong></td>
+<td>~1</td>
+</tr>
+<tr>
+<td><em>Authoring a skill is hard</em></td>
+<td><strong>WEAK — contradicted</strong></td>
+<td>—</td>
+</tr>
+</tbody></table>
+<p>Look at the shape of that table. The <strong>strong</strong> pains are all about having <em>too much</em> and
+<em>trusting none of it</em>. The <strong>weak, contradicted</strong> ones are the &quot;help me make/customize more
+skills&quot; ideas — the intuitive product directions that the evidence actively argues against.</p>
+<p>The hard numbers behind the top rows are the part to remember in a pitch:</p>
+<ul>
+<li><strong>7 MCP servers ≈ 67,300 tokens ≈ 33.7%</strong> of a 200k window — spent <em>before the user types
+anything</em>.</li>
+<li>Tool-selection accuracy fell <strong>95% → 71%</strong> with a single large MCP server loaded.</li>
+<li>Claude Code injects skill descriptions under a <strong>~15,000-char budget</strong>. Exceed it and skills
+stay installed but become <strong>invisible</strong> — silently. One reported issue shows <em>&quot;Showing 60 of
+3218 skills&quot;</em> when only 169 existed.</li>
+<li>Passive skill trigger rate from descriptions alone: <strong>30–50%</strong>. Half your skills may never
+fire.</li>
+<li>Snyk&#39;s &quot;ToxicSkills&quot; audit of 3,984 skills: <strong>36% contain injection or security flaws,
+13.4% critical, 76 confirmed malicious payloads, 8 still live at publication.</strong></li>
+</ul>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p>The strategic read: <strong>a product that adds artifacts is fighting the current.</strong> A product that
+<em>removes</em> them, makes the remainder reproducibly auditable, and reports what actually ran is
+riding it. Every headline claim in v2 maps back to a STRONG row above.</p></div></div>
+
+
+
+<details class="wt-reveal"><summary>Before reading on — given this evidence, which capability should skulto ship *first*: the exciting &quot;compose my environment&quot; feature, or the &quot;audit my supply chain&quot; feature?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p><strong>Verify (audit) ships first.</strong> It attacks the #3 STRONG pain, it&#39;s half-built already, it
+depends on nothing else, and it&#39;s the <em>credibility wedge</em>: &quot;the skill manager that audits your
+supply chain&quot; earns the right to later say &quot;…and here&#39;s how it composes your environment.&quot; The
+reverse order asks strangers to trust an unevidenced thesis. (We&#39;ll return to this in Phasing.)</p></div></details>
+
+
+<h3 id="the-competitive-gap-is-real-and-empty-for-a-reason">The competitive gap is real — and empty <em>for a reason</em></h3>
+<p>No shipped product specializes a curated skill for a specific project. The near-misses all
+stop short: Vercel&#39;s <code>skills</code> (25,947★) never touches skill <em>content</em>; SkillKit <code>recommend</code>
+ranks skills and stops at ranking; Cursor, Kiro, Agent OS, and BMAD all <em>generate</em> guidance
+<strong>from the codebase</strong> or <strong>from installed modules</strong> — never from <em>what you are about to build</em>.</p>
+<p>So there&#39;s a clean, empty market slot. But here&#39;s the discipline the PRD insists on:</p>
+<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p><strong>The demand research found zero organic requests for project-specific skill composition, and
+zero willingness to pay.</strong> People don&#39;t fork generic skills — <em>they delete them</em>. An empty
+market slot with <strong>no demand signal</strong> is evidence <em>against</em> the idea, not for it. v2 treats
+&quot;compose from the spec&quot; as an <strong>unproven hypothesis</strong>, not as the product.</p></div></div>
+
+
+<p>That single sentence is why the whole design is structured to lead with Verify and to gate
+Compose behind a real experiment. Hold onto it.</p>
+<hr>
+<h2 id="the-experiment-that-already-ran-and-what-it-actually-proved">The experiment that already ran (and what it actually proved)</h2>
+<p>This is the intellectual spine of the entire design. If you remember one external result from
+this walkthrough, remember this one.</p>
+<p><strong>&quot;Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding Agents?&quot;</strong> (ETH
+Zurich SRI Lab + LogicStar, Feb 2026). 138 tasks from 12 real repos mined from 5,694 PRs, plus
+SWE-bench Lite, across four agents.</p>
+<p>What they found:</p>
+<ul>
+<li><strong>LLM-generated context files <em>reduced</em> task success</strong> (~-2%), worse in <strong>5 of 8 settings</strong>.</li>
+<li><strong>Cost rose regardless: +20–23% inference cost</strong>, +2.45–3.92 steps per task.</li>
+<li>Human-written context files helped, but only <strong>+4pp</strong>.</li>
+<li><strong>The ablation is the real finding:</strong> delete the repo&#39;s <em>other</em> documentation first, <em>then</em>
+generate a context file, and the generated file <strong>improves 2.7%</strong> and beats the human one.</li>
+</ul>
+<p>Sit with that ablation for a second — it explains the mechanism:</p>
+<div class="wt-callout info"><div class="ic">ℹ️</div><div class="body"><p><strong>Generated context is a lossy re-encoding of documentation the agent could read itself.</strong> Its
+value is <em>negative</em> when the source already exists, and <em>positive only when it doesn&#39;t</em>. That&#39;s
+why the generated file only wins <em>after</em> you delete the real docs.</p></div></div>
+
+
+<p>The corollary is skulto v2&#39;s central discipline, and it governs every artifact the product is
+allowed to write:</p>
+<blockquote>
+<p><strong>The only content worth writing down is content the agent cannot discover for itself.</strong></p>
+</blockquote>
+<p>The human-written files earned their +4pp on exactly this class of fact — things no <code>grep</code> or
+<code>tree</code> will ever reveal: <em>&quot;run tests with <code>--no-cache</code> or fixtures fail&quot;</em>, <em>&quot;use <code>uv</code> not
+<code>pip</code>&quot;</em>, <em>&quot;this deprecated module is load-bearing.&quot;</em></p>
+<div class="wt-quiz"><div class="q"><p>Per the ETH result, when does an LLM-generated context file actually <em>help</em> task success?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>Always — more context is always better</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>Never — generated context is always harmful</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>Only when the repository&#39;s other documentation has been removed first</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>Only for repositories larger than SWE-bench Lite</span></button></div><div class="explain"><p>The ablation is the finding: generated context only beats the baseline once the real docs
+it was re-encoding are deleted. When the source exists, the re-encoding is net-negative. This
+is <em>why</em> v2 refuses to generate prose and writes down only the non-discoverable.</p></div></div>
+
+
+<h3 id="the-discoverability-test-applied-to-skulto39s-own-repo">The discoverability test, applied to skulto&#39;s own repo</h3>
+<p>The PRD runs its own <code>AGENTS.md</code> through this test as a live demo. <strong>Discoverable</strong> content
+(net-negative by the ETH criterion — the agent reads it in a tool call or two): the Quick Facts
+table (it&#39;s all in <code>go.mod</code>/<code>Makefile</code>), the Repository Tour (that&#39;s <code>tree</code>), Build/Run/Test
+commands (a paraphrase of the Makefile), &quot;follow standard Go conventions.&quot;</p>
+<p><strong>Non-discoverable</strong> content (the +4pp class — no linter catches these, no generic skill
+contains them):</p>
+<ol>
+<li><strong>&quot;Three interfaces, one codebase.&quot;</strong> Every feature must land in CLI <em>and</em> TUI <em>and</em> MCP.
+The compiler will never tell you that you shipped a CLI command with no MCP handler.</li>
+<li><strong>The telemetry four-step ritual.</strong> Steps 1–3 are compiler-enforced; <strong>step 4 is not</strong>, and
+it&#39;s the one that silently breaks the product.</li>
+<li><strong><code>make dev</code>/<code>make test-race</code> need <code>CGO_ENABLED=1</code></strong>, even though the DB layer was chosen
+pure-Go to <em>avoid</em> CGO — so an agent hits a confusing race-detector failure it can&#39;t explain.</li>
+<li><strong>&quot;Every symlink points under <code>~/.agents/skulto/</code>&quot;</strong> — an invariant Go&#39;s type system can&#39;t
+express.</li>
+</ol>
+<div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p><strong>Roughly 85% of skulto&#39;s own <code>AGENTS.md</code> is content the paper says costs you success rate.</strong>
+That ratio <em>is</em> the product demo. The remaining 15% is precisely the material Compose is
+allowed to help capture — and only via human-approved deltas.</p></div></div>
+
+
+<hr>
+<h2 id="the-three-capabilities-compose-verify-evolve">The three capabilities: Compose, Verify, Evolve</h2>
+<p>With the &quot;why&quot; established, here is the &quot;what.&quot; v2 is three capabilities arranged as a
+lifecycle. Read the middle column as the <em>promise</em> and the right column as the <em>mechanism</em>.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Promise</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Compose</strong></td>
+<td>Propose a minimal, budgeted environment <em>intended to be sufficient</em> for the work at hand</td>
+<td>select → bind → prune → budget-verify</td>
+</tr>
+<tr>
+<td><strong>Verify</strong></td>
+<td>Produce <em>reproducible</em> results against a <em>named</em> security ruleset, and keep them current</td>
+<td>deterministic scan → signed, patchable rule feed</td>
+</tr>
+<tr>
+<td><strong>Evolve</strong></td>
+<td>Feed back what the agent learned by running — and <em>only</em> what it couldn&#39;t have read</td>
+<td>execution oracle → distil → delta-update</td>
+</tr>
+</tbody></table>
+<p>Two words in that table are doing careful, deliberate work, and technical co-founders should be
+precise about them:</p>
+<ul>
+<li><strong>&quot;minimal&quot;</strong> is the <em>composition objective</em>, not a proof of global minimality.</li>
+<li><strong>&quot;intended to be sufficient&quot;</strong> is an <em>agent proposal</em>, not a Skulto guarantee.</li>
+</ul>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p>This hedging is not timidity — it&#39;s the product&#39;s integrity model. Skulto makes <strong>deterministic</strong>
+claims (budget arithmetic, digests, scan verdicts) and refuses to dress up <strong>probabilistic</strong> agent
+proposals as guarantees. The moment it blurs that line, it becomes the thing it&#39;s replacing.</p></div></div>
+
+
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 588.5px; background-color: transparent;" viewBox="0 0 588.5 691" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"/><g class="edgeLabels"/><g class="nodes"><g class="root" transform="translate(0, 0)"><g class="clusters"><g class="cluster" id="my-svg-LIFECYCLE" data-look="classic"><rect style="" x="8" y="8" width="572.5" height="675"/><g class="cluster-label" transform="translate(237.3828125, 8)"><foreignObject width="113.734375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>The v2 lifecycle</p></span></div></foreignObject></g></g></g><g class="edgePaths"><path d="M217.167,195.5L209.806,201.75C202.444,208,187.722,220.5,180.361,232.333C173,244.167,173,255.333,173,260.917L173,266.5" id="my-svg-L_C_V_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_C_V_0" data-points="W3sieCI6MjE3LjE2NjY2NjY2NjY2NjY5LCJ5IjoxOTUuNX0seyJ4IjoxNzMsInkiOjIzM30seyJ4IjoxNzMsInkiOjI3MC41fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M173,420.5L173,426.75C173,433,173,445.5,179.853,457.569C186.706,469.637,200.412,481.274,207.265,487.093L214.117,492.911" id="my-svg-L_V_E_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_V_E_0" data-points="W3sieCI6MTczLCJ5Ijo0MjAuNX0seyJ4IjoxNzMsInkiOjQ1OH0seyJ4IjoyMTcuMTY2NjY2NjY2NjY2NjksInkiOjQ5NS41fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M393.833,495.5L401.194,489.25C408.556,483,423.278,470.5,430.639,445.5C438,420.5,438,383,438,345.5C438,308,438,270.5,431.147,245.931C424.294,221.363,410.588,209.726,403.735,203.907L396.883,198.089" id="my-svg-L_E_C_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_E_C_0" data-points="W3sieCI6MzkzLjgzMzMzMzMzMzMzMzMsInkiOjQ5NS41fSx7IngiOjQzOCwieSI6NDU4fSx7IngiOjQzOCwieSI6MzQ1LjV9LHsieCI6NDM4LCJ5IjoyMzN9LHsieCI6MzkzLjgzMzMzMzMzMzMzMzMsInkiOjE5NS41fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_C_V_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_V_E_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(438, 345.5)"><g class="label" data-id="L_E_C_0" transform="translate(-100, -24)"><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="edgeLabel"><p>learned facts feed the next compose</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-C-0" data-look="classic" transform="translate(305.5, 120.5)"><rect class="basic label-container" style="" x="-130" y="-75" width="260" height="150"/><g class="label" style="" transform="translate(-100, -60)"><rect/><foreignObject width="200" height="120"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>COMPOSE<br />select · bind · prune · budget-verify<br /><i>proposes a minimal environment</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-V-1" data-look="classic" transform="translate(173, 345.5)"><rect class="basic label-container" style="" x="-130" y="-75" width="260" height="150"/><g class="label" style="" transform="translate(-100, -60)"><rect/><foreignObject width="200" height="120"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>VERIFY<br />deterministic scan vs signed ruleset<br /><i>proves what's safe, reproducibly</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-E-2" data-look="classic" transform="translate(305.5, 570.5)"><rect class="basic label-container" style="" x="-130" y="-75" width="260" height="150"/><g class="label" style="" transform="translate(-100, -60)"><rect/><foreignObject width="200" height="120"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>EVOLVE<br />execution oracle → distil → delta<br /><i>captures only the non-discoverable</i></p></span></div></foreignObject></g></g></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><div class="wt-quiz"><div class="q"><p>Which of these is a claim skulto is willing to make <em>as a guarantee</em>?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>&quot;This is the globally minimal set of skills for your task&quot;</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>&quot;This environment is sufficient to complete the work&quot;</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>&quot;This environment&#39;s budget cost is exactly N tokens, and every skill&#39;s content hashes to this digest&quot;</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>&quot;This skill will definitely fire when relevant&quot;</span></button></div><div class="explain"><p>Skulto guarantees only what is deterministic: arithmetic, digests, and rule-driven scan
+verdicts. Minimality and sufficiency are <em>objectives and proposals</em> — labeled as such
+everywhere they appear.</p></div></div>
+
+
+<hr>
+<h2 id="the-architectural-spine-skulto-ships-tools-the-agent-supplies-intelligence">The architectural spine: skulto ships tools, the agent supplies intelligence</h2>
+<p>Here&#39;s the single most important architecture decision, and it&#39;s counterintuitive.</p>
+<p>Compose <em>needs</em> an LLM — to turn a PRD into search queries, to run the discoverability test,
+to classify a correction. And the repo already contains <code>internal/llm/</code>: a fully-built client
+(Anthropic/OpenAI/OpenRouter, streaming, tests). It is <strong>completely unimported.</strong></p>
+<p>The v2 decision: <strong>leave it dead — delete it.</strong></p>
+<details class="wt-reveal"><summary>Why would you delete a working, fully-tested LLM client instead of wiring it in? Think about who pays, what breaks determinism, and where the user already is.<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Deleting it buys four things:</p>
+<ol>
+<li><strong>No new skulto-managed model credential.</strong> Deterministic search, pinning, audit, and budget
+arithmetic stay offline-capable.</li>
+<li><strong>No skulto-operated inference bill.</strong> Agent-CLI usage is visible to and paid by the user under
+<em>their own</em> account.</li>
+<li><strong>The interview happens where the user already lives</strong> — conversationally, with the repo loaded.</li>
+<li><strong>No agent assertion becomes a skulto guarantee.</strong> Proposals can be wrong; budget, digest,
+ruleset, and apply results are deterministic and independently validated.</li>
+</ol></div></details>
+
+
+<p>So the spine is: <strong>skulto exposes deterministic primitives and orchestrates the user&#39;s own,
+locally-installed agent CLI when intelligence is needed.</strong> The agent <em>proposes</em>; skulto
+<em>probes, counts, scans, searches, validates, records approval, and writes.</em></p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1450.14px; background-color: transparent;" viewBox="0 0 1450.140625 498" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"><g class="cluster" id="my-svg-EVOLVE_ROW" data-look="classic"><rect style="" x="1045.1171875" y="8" width="383.90625" height="152"/><g class="cluster-label" transform="translate(1210.765625, 8)"><foreignObject width="52.609375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>EVOLVE</p></span></div></foreignObject></g></g><g class="cluster" id="my-svg-VERIFY_ROW" data-look="classic"><rect style="" x="746.86328125" y="8" width="255.6875" height="152"/><g class="cluster-label" transform="translate(850.07421875, 8)"><foreignObject width="49.265625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>VERIFY</p></span></div></foreignObject></g></g><g class="cluster" id="my-svg-COMPOSE_ROW" data-look="classic"><rect style="" x="8" y="234" width="950.58984375" height="128"/><g class="cluster-label" transform="translate(449.458984375, 234)"><foreignObject width="67.671875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>COMPOSE</p></span></div></foreignObject></g></g></g><g class="edgePaths"><path d="M312.723,115.959L282.865,123.299C253.008,130.639,193.293,145.32,163.436,158.827C133.578,172.333,133.578,184.667,133.578,197C133.578,209.333,133.578,221.667,133.578,231.333C133.578,241,133.578,248,133.578,251.5L133.578,255" id="my-svg-L_AGENT_P_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_AGENT_P_0" data-points="W3sieCI6MzEyLjcyMjY1NjI1LCJ5IjoxMTUuOTU5MTYxNDk2NTY5NDF9LHsieCI6MTMzLjU3ODEyNSwieSI6MTYwfSx7IngiOjEzMy41NzgxMjUsInkiOjE5N30seyJ4IjoxMzMuNTc4MTI1LCJ5IjoyMzR9LHsieCI6MTMzLjU3ODEyNSwieSI6MjU5fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M378.425,135L373.172,139.167C367.919,143.333,357.412,151.667,352.159,162C346.906,172.333,346.906,184.667,346.906,197C346.906,209.333,346.906,221.667,346.906,231.333C346.906,241,346.906,248,346.906,251.5L346.906,255" id="my-svg-L_AGENT_S_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_AGENT_S_0" data-points="W3sieCI6Mzc4LjQyNDgwNDY4NzUsInkiOjEzNX0seyJ4IjozNDYuOTA2MjUsInkiOjE2MH0seyJ4IjozNDYuOTA2MjUsInkiOjE5N30seyJ4IjozNDYuOTA2MjUsInkiOjIzNH0seyJ4IjozNDYuOTA2MjUsInkiOjI1OX1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M507.021,135L512.274,139.167C517.527,143.333,528.033,151.667,533.286,162C538.539,172.333,538.539,184.667,538.539,197C538.539,209.333,538.539,221.667,538.539,231.333C538.539,241,538.539,248,538.539,251.5L538.539,255" id="my-svg-L_AGENT_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_AGENT_B_0" data-points="W3sieCI6NTA3LjAyMDUwNzgxMjUsInkiOjEzNX0seyJ4Ijo1MzguNTM5MDYyNSwieSI6MTYwfSx7IngiOjUzOC41MzkwNjI1LCJ5IjoxOTd9LHsieCI6NTM4LjUzOTA2MjUsInkiOjIzNH0seyJ4Ijo1MzguNTM5MDYyNSwieSI6MjU5fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M572.723,128.577L587.996,133.814C603.27,139.051,633.816,149.526,649.09,160.929C664.363,172.333,664.363,184.667,664.363,197C664.363,209.333,664.363,221.667,672.641,231.717C680.919,241.767,697.476,249.534,705.754,253.418L714.032,257.301" id="my-svg-L_AGENT_ENV_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_AGENT_ENV_0" data-points="W3sieCI6NTcyLjcyMjY1NjI1LCJ5IjoxMjguNTc2NjY1NDkxNzE2Nn0seyJ4Ijo2NjQuMzYzMjgxMjUsInkiOjE2MH0seyJ4Ijo2NjQuMzYzMjgxMjUsInkiOjE5N30seyJ4Ijo2NjQuMzYzMjgxMjUsInkiOjIzNH0seyJ4Ijo3MTcuNjUzMDc2MTcxODc1LCJ5IjoyNTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M874.707,123L874.707,129.167C874.707,135.333,874.707,147.667,874.707,160C874.707,172.333,874.707,184.667,874.707,197C874.707,209.333,874.707,221.667,870.398,231.564C866.09,241.461,857.473,248.921,853.164,252.652L848.855,256.382" id="my-svg-L_R_ENV_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_R_ENV_0" data-points="W3sieCI6ODc0LjcwNzAzMTI1LCJ5IjoxMjN9LHsieCI6ODc0LjcwNzAzMTI1LCJ5IjoxNjB9LHsieCI6ODc0LjcwNzAzMTI1LCJ5IjoxOTd9LHsieCI6ODc0LjcwNzAzMTI1LCJ5IjoyMzR9LHsieCI6ODQ1LjgzMTI5ODgyODEyNSwieSI6MjU5fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1190.706,123L1182.585,129.167C1174.463,135.333,1158.22,147.667,1150.098,160C1141.977,172.333,1141.977,184.667,1141.977,197C1141.977,209.333,1141.977,221.667,1141.977,231.799C1141.977,241.931,1141.977,249.863,1141.977,253.829L1141.977,257.794" id="my-svg-L_O_LOCAL_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_O_LOCAL_0" data-points="W3sieCI6MTE5MC43MDY0MTQ0NzM2ODQyLCJ5IjoxMjN9LHsieCI6MTE0MS45NzY1NjI1LCJ5IjoxNjB9LHsieCI6MTE0MS45NzY1NjI1LCJ5IjoxOTd9LHsieCI6MTE0MS45NzY1NjI1LCJ5IjoyMzR9LHsieCI6MTE0MS45NzY1NjI1LCJ5IjoyNjEuNzk0MzQyMDQxMDE1Nn1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1293.434,123L1301.556,129.167C1309.677,135.333,1325.921,147.667,1334.042,160C1342.164,172.333,1342.164,184.667,1342.164,197C1342.164,209.333,1342.164,221.667,1342.164,233.333C1342.164,245,1342.164,256,1342.164,261.5L1342.164,267" id="my-svg-L_O_CTX_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_O_CTX_0" data-points="W3sieCI6MTI5My40MzQyMTA1MjYzMTU4LCJ5IjoxMjN9LHsieCI6MTM0Mi4xNjQwNjI1LCJ5IjoxNjB9LHsieCI6MTM0Mi4xNjQwNjI1LCJ5IjoxOTd9LHsieCI6MTM0Mi4xNjQwNjI1LCJ5IjoyMzR9LHsieCI6MTM0Mi4xNjQwNjI1LCJ5IjoyNzF9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M800.785,337L800.785,341.167C800.785,345.333,800.785,353.667,800.785,364C800.785,374.333,800.785,386.667,800.785,398.333C800.785,410,800.785,421,800.785,426.5L800.785,432" id="my-svg-L_ENV_HIST_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_ENV_HIST_0" data-points="W3sieCI6ODAwLjc4NTE1NjI1LCJ5IjozMzd9LHsieCI6ODAwLjc4NTE1NjI1LCJ5IjozNjJ9LHsieCI6ODAwLjc4NTE1NjI1LCJ5IjozOTl9LHsieCI6ODAwLjc4NTE1NjI1LCJ5Ijo0MzZ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_AGENT_P_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_AGENT_S_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_AGENT_B_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_AGENT_ENV_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(874.70703125, 197)"><g class="label" data-id="L_R_ENV_0" transform="translate(-35.8984375, -12)"><foreignObject width="71.796875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>scan + pin</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(1141.9765625, 197)"><g class="label" data-id="L_O_LOCAL_0" transform="translate(-50.21875, -12)"><foreignObject width="100.4375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>derived cache</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(1342.1640625, 197)"><g class="label" data-id="L_O_CTX_0" transform="translate(-57.4609375, -12)"><foreignObject width="114.921875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>approved deltas</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(800.78515625, 399)"><g class="label" data-id="L_ENV_HIST_0" transform="translate(-71.4140625, -12)"><foreignObject width="142.828125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>approved mutations</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-AGENT-0" data-look="classic" transform="translate(442.72265625, 84)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>The user's agent (the LLM)<br />drives everything below via the skulto skill</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P-1" data-look="classic" transform="translate(133.578125, 298)"><rect class="basic label-container" style="" x="-90.578125" y="-39" width="181.15625" height="78"/><g class="label" style="" transform="translate(-60.578125, -24)"><rect/><foreignObject width="121.15625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>probe<br /><i>stack fingerprint</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-S-2" data-look="classic" transform="translate(346.90625, 298)"><rect class="basic label-container" style="" x="-72.75" y="-39" width="145.5" height="78"/><g class="label" style="" transform="translate(-42.75, -24)"><rect/><foreignObject width="85.5" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>search<br /><i>FTS5 corpus</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-B-3" data-look="classic" transform="translate(538.5390625, 298)"><rect class="basic label-container" style="" x="-68.8828125" y="-39" width="137.765625" height="78"/><g class="label" style="" transform="translate(-38.8828125, -24)"><rect/><foreignObject width="77.765625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>budget<br /><i>does it fit?</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-ENV-4" data-look="classic" transform="translate(800.78515625, 298)"><rect class="basic label-container" style="" x="-112.765625" y="-39" width="225.53125" height="78"/><g class="label" style="" transform="translate(-82.765625, -24)"><rect/><foreignObject width="165.53125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>environment<br /><i>manifest / diff / apply</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-R-5" data-look="classic" transform="translate(874.70703125, 84)"><rect class="basic label-container" style="" x="-92.84375" y="-39" width="185.6875" height="78"/><g class="label" style="" transform="translate(-62.84375, -24)"><rect/><foreignObject width="125.6875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>ruleset (git feed)<br /><i>scan · pin version</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-O-6" data-look="classic" transform="translate(1242.0703125, 84)"><rect class="basic label-container" style="" x="-118.71875" y="-39" width="237.4375" height="78"/><g class="label" style="" transform="translate(-88.71875, -24)"><rect/><foreignObject width="177.4375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>observe (transcripts)<br /><i>invocations · corrections</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-LOCAL-15" data-look="classic" transform="translate(1141.9765625, 298)"><path d="M0,11.137104041034174 a50.2109375,11.137104041034174 0,0,0 100.421875,0 a50.2109375,11.137104041034174 0,0,0 -100.421875,0 l0,50.13710404103418 a50.2109375,11.137104041034174 0,0,0 100.421875,0 l0,-50.13710404103418" class="basic label-container outer-path" style="" transform="translate(-50.2109375, -36.20565606155127)"/><g class="label" style="" transform="translate(-42.7109375, -2)"><rect/><foreignObject width="85.421875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>local SQLite</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-CTX-17" data-look="classic" transform="translate(1342.1640625, 298)"><rect class="basic label-container" style="" x="-99.9765625" y="-27" width="199.953125" height="54"/><g class="label" style="" transform="translate(-69.9765625, -12)"><rect/><foreignObject width="139.953125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>.skulto/context.md</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-HIST-19" data-look="classic" transform="translate(800.78515625, 463)"><rect class="basic label-container" style="" x="-102.171875" y="-27" width="204.34375" height="54"/><g class="label" style="" transform="translate(-72.171875, -12)"><rect/><foreignObject width="144.34375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>.skulto/history.jsonl</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><p>There are <strong>two bodies of the same one skill</strong>, branching by environment. In a coding agent
+with a shell, it runs <code>skulto compose prepare --json</code> and the read-only analysis commands. In
+Claude/Codex <em>Desktop</em> (no repo, no shell), it falls back to three MCP tools. Crucially:</p>
+<div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p><strong>You never pay for both.</strong> In a coding agent: CLI + one skill ≈ <strong>120 tokens</strong>, MCP not
+connected. In Desktop: MCP + the same skill ≈ <strong>420 tokens</strong>, and nothing else competes for
+that budget. Connecting both is a misconfiguration — and <code>skulto doctor</code> says so out loud.</p></div></div>
+
+
+<h3 id="capability-gated-not-parity-gated">Capability-gated, not parity-gated</h3>
+<p>This supersedes the old ADR that demanded all three interfaces (CLI/TUI/MCP) be at parity.
+Desktop clients have no project cwd, no repo shell, no transcripts — they <em>cannot</em> compose,
+audit, or observe. So the surfaces are gated by <em>capability</em>, not held to feature parity.</p>
+<p>The MCP server drops from <strong>12 tools to 3</strong>: <code>skulto_search</code>, <code>skulto_get_skill</code>,
+<code>skulto_install</code> — about <strong>300 tokens, down from ~1,200.</strong> The membership rule (destined for
+the ADR) is worth quoting:</p>
+<blockquote>
+<p>A tool earns permanent MCP residency only if <strong>(1)</strong> the environment cannot reach the CLI,
+<strong>and (2)</strong> the need arises spontaneously mid-conversation.</p>
+</blockquote>
+<p>Search passes both. <code>skulto_get_stats</code> passes neither — and never did.</p>
+<div class="wt-quiz"><div class="q"><p>Why is <code>internal/llm/</code> deleted rather than wired into Compose?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>It has bugs that would take too long to fix</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>It only supports OpenAI, not Anthropic</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>Orchestrating the user&#39;s own agent CLI avoids a new credential/bill, keeps skulto deterministic, and puts the interview where the user already works</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>MCP tools already provide LLM access</span></button></div><div class="explain"><p>The spine of v2 is &quot;skulto ships deterministic tools; the user&#39;s agent supplies the
+intelligence.&quot; An embedded LLM client would add a credential, a bill, and — worst — the
+temptation to let an agent assertion masquerade as a skulto guarantee.</p></div></div>
+
+
+<hr>
+<h2 id="what-keeps-it-honest-the-invariants">What keeps it honest: the invariants</h2>
+<p>There are 17 invariants in the PRD. They are called &quot;the constitution&quot; — <em>violating one is a
+bug, not a trade-off.</em> You don&#39;t need all 17 memorized, but a technical co-founder should be
+able to name the load-bearing ones and say why each exists.</p>
+<div class="wt-callout info"><div class="ic">ℹ️</div><div class="body"><p>The invariants exist because every one of them, if violated, turns skulto into either (a) the
+bloat it&#39;s curing, (b) a tool that silently corrupts the user&#39;s files, or (c) a &quot;trust product&quot;
+that leaked trust. They&#39;re the guardrails around the product&#39;s entire reason to exist.</p></div></div>
+
+
+<p>The ones to know:</p>
+<ul>
+<li><strong>#1 — Skulto never authors a capability claim.</strong> It selects, binds, prunes, orchestrates.
+Generation is confined to non-discoverable facts <em>elicited from a human</em> or <em>extracted from a
+verified execution trace</em> — never invented from reading a repo. (This is the ETH result, made
+into law.)</li>
+<li><strong>#2 — Skulto never writes a file it does not own.</strong> Two narrow, opt-in, additive, idempotent
+exceptions: one delimited reference line in <code>AGENTS.md</code> pointing at <code>.skulto/context.md</code>, and a
+minimal set of <em>read-only</em> command patterns appended to the Bash allowlist. Nothing else. Ever.</li>
+<li><strong>#3 — <code>.skulto/context.md</code> changes by entry-level delta only, never whole-file regeneration.</strong>
+(See the ACE &quot;context collapse&quot; result below — this one has teeth.)</li>
+<li><strong>#5 — Every write passes a human approval gate.</strong> Skulto proposes; the human disposes.</li>
+<li><strong>#7 — Skulto&#39;s own always-on context footprint is a published, enforced budget (~120 tokens).</strong>
+<code>skulto doctor</code> <em>fails</em> if it grows. (The product cannot become the disease.)</li>
+<li><strong>#8 — Transcript content never leaves the machine.</strong> No transcript text, no correction span,
+no file path, no skill body, no search query in any telemetry event. Enforced by test.</li>
+<li><strong>#9 — Flag, never delete or disable automatically.</strong> A skill that newly fails audit stays
+active but is marked; new install/upgrade is blocked until it&#39;s fixed or explicitly accepted.</li>
+</ul>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p><strong>The ACE &quot;context collapse&quot; result</strong> is why invariant #3 is absolute. In ACE, a single wholesale
+regeneration took an accumulated context from <strong>18,282 tokens @ 66.7% accuracy</strong> down to <strong>122
+tokens @ 57.1%</strong> — <em>below the no-adaptation baseline of 63.7%.</em> One bad rewrite erased everything.
+The lesson: <strong>delta updates, never rewrites.</strong></p></div></div>
+
+
+
+<details class="wt-reveal"><summary>Invariant #9 says a newly-failing skill is *flagged, not disabled*. Why not just auto-disable something that fails a security scan — isn&#39;t that safer?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Auto-disabling is a <em>destructive, automatic</em> action on the user&#39;s working environment, taken on
+the say-so of a ruleset that itself changes over time. A new rule landing shouldn&#39;t silently break
+someone&#39;s working setup mid-task. So skulto <strong>flags and reports</strong>, blocks <em>new</em> installs/upgrades
+of the failing content, and requires a human to fix it or explicitly accept the exact findings for
+the exact content digest. Safety <em>and</em> the human-approval invariant, both preserved.</p></div></details>
+
+
+
+<div class="wt-quiz"><div class="q"><p><code>.skulto/context.md</code> must be updated by entry-level delta only. What real-world result makes whole-file regeneration forbidden?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>It&#39;s slower to regenerate the whole file</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>ACE&#39;s &quot;context collapse&quot; — one wholesale rewrite dropped accuracy below the no-adaptation baseline</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>Git can&#39;t diff a fully-rewritten file</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>The file would exceed the token budget</span></button></div><div class="explain"><p>ACE showed a single regeneration collapsing 18,282 tokens @ 66.7% to 122 tokens @ 57.1%,
+below the 63.7% baseline. Delta-only updates make that failure mode structurally impossible.</p></div></div>
+
+
+<hr>
+<h2 id="verify-in-depth-turning-trust-into-something-reproducible">Verify in depth: turning trust into something reproducible</h2>
+<p>Verify is the capability that ships first, so it deserves the closest look. Its job: <strong>produce
+a scan result that anyone can reproduce, against a specifically-identified, signed ruleset — and
+re-run it as new detection rules land.</strong></p>
+<p>Three design moves make that real.</p>
+<p><strong>1. Rules become data, not code.</strong> Today the scanner&#39;s rules are regex compiled into the binary
+with &quot;context-mitigation scoring that is effectively unfalsifiable.&quot; In v2 a rule is a YAML record:</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">version</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#82AAFF">2026-07-01</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">rules</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">:</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">id</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">SKL-0012</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    category</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">instruction_override</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    severity</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">high</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    pattern</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#032F62;--shiki-dark:#D9F5DD">'</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">(?i)ignore\s+(all\s+)?previous\s+instructions</span><span style="--shiki-light:#032F62;--shiki-dark:#D9F5DD">'</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    mitigations</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: [</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">educational_context</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">, </span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">quoted_example</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">]</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    added</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#82AAFF">2026-03-11</span></span>
+<span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#7FDBCA">    references</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">: [</span><span style="--shiki-light:#032F62;--shiki-dark:#D9F5DD">"</span><span style="--shiki-light:#032F62;--shiki-dark:#ECC48D">https://snyk.io/blog/toxicskills-...</span><span style="--shiki-light:#032F62;--shiki-dark:#D9F5DD">"</span><span style="--shiki-light:#24292E;--shiki-dark:#D6DEEB">]</span></span></code></pre><p>Rules are <em>constrained</em> data: strict YAML parsing, unique immutable IDs, bounded sizes, and
+patterns that compile through Go&#39;s RE2-class engine — so a rule <strong>cannot run code, read files,
+fetch references, or hit the network.</strong></p>
+<p><strong>2. The feed is a signed git repo — no backend, no accounts.</strong> A baseline ruleset ships embedded
+(<code>go:embed</code>) so offline audit works on day one. Updates come from a git repo pulled through the
+<em>existing, already-tested</em> scraper. Every accepted remote ruleset carries an <strong>Ed25519-signed
+release manifest</strong>; the public verification key ships in the binary, the private key stays offline.
+Rollback, freeze, and mix-and-match are explicit states — skulto persists the highest accepted
+sequence and rejects any lower one, labeling expired content <strong><code>ruleset stale</code></strong> rather than
+calling it current.</p>
+<p><strong>3. Coverage is part of the verdict.</strong> The scanner inventories every canonical artifact file
+<em>before</em> applying rules and records file/byte counts and complete/incomplete coverage. Unsupported
+binary content, size limits, or read errors create <strong>synthetic findings</strong> bound to the file digest —
+they can <em>never</em> yield <code>passed</code>. This closes the &quot;a nominal pass hid the files we skipped&quot; hole.</p>
+<div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p><strong>Determinism is a tested property:</strong> <em>same skill digest + same ruleset digest + same scanner
+version ⇒ byte-identical verdict and score.</em> Golden tests enforce it. That&#39;s what makes &quot;this
+was scanned against 2026-07-01; 14 rules have landed since&quot; a checkable statement instead of a
+vibe.</p></div></div>
+
+
+
+<details class="wt-reveal"><summary>What does a *passing* audit actually certify? Be precise — this matters for how we talk about it publicly.<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Only this: <strong>the exact content produced the recorded result under the exact scanner and signed
+ruleset.</strong> It is <em>not</em> a malware-free, safe, or functional certification. An accepted risk is an
+explicit policy exception, <em>not</em> a changed scan result. Overclaiming here would turn a
+reproducibility tool into a false safety guarantee — precisely the trust failure the product exists
+to avoid.</p></div></details>
+
+
+<h3 id="the-identity-problem-underneath-it-all">The identity problem underneath it all</h3>
+<p>Verify only means something if &quot;the skill I scanned&quot; and &quot;the skill that&#39;s installed&quot; are provably
+the <em>same bytes</em>. v1 has <strong>no</strong> content identity: <code>skulto sync</code> resolves a slug against whatever
+<code>HEAD</code> happens to be, and symlinks point into a <em>mutable</em> checkout. Schema 2 fixes this with a
+<strong>canonical artifact digest</strong>: resolve the exact repo path at a full commit, hash the complete skill
+directory (domain-separated, path-ordered, mode-and-bytes only, symlinks rejected), materialize the
+verified bytes under <code>~/.agents/skulto/objects/sha256/&lt;digest&gt;/</code> as a <strong>write-protected,
+tamper-evident</strong> object, and point platform symlinks at <em>that</em>.</p>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p>The digest is the identity — <strong>the local object is a cache, not a trust root.</strong> Every operation
+that treats cached bytes as the pinned artifact <em>recomputes</em> the digest first; a mismatch fails
+closed. &quot;A source commit without a freshly verified object is not an installed pin.&quot;</p></div></div>
+
+
+<hr>
+<h2 id="the-falsifiable-claim-the-experiment-allowed-to-kill-compose">The falsifiable claim: the experiment allowed to kill Compose</h2>
+<p>This is the part that separates this PRD from a normal product doc, and it&#39;s the part to show a
+skeptical co-founder. <strong>Skulto commits, in advance, to an experiment that can kill its own
+flagship feature — and defines exactly what result does it.</strong></p>
+<p>The reasoning: the ETH result is the standard skulto will be judged against. So <em>we measure
+ourselves against it before someone else does.</em></p>
+<p>The setup is a developer-only harness under <code>eval/</code> (not a shipped command, not a runtime
+dependency). It shells the <em>same</em> agent CLI across conditions in isolated disposable checkouts and
+scores success <em>only</em> through each benchmark&#39;s deterministic test oracle — <strong>the agent never judges
+its own result.</strong> The primary controlled pair, run paired at the task level:</p>
+<ol>
+<li><strong>v1-agent-managed</strong> — the agent gets today&#39;s v1 search/get/install tools and picks skills the
+realistic current way. No Compose.</li>
+<li><strong>composed</strong> — same agent and tools, <em>plus</em> the budgeted/pruned Compose workflow and
+<code>.skulto/context.md</code>.</li>
+</ol>
+<p>The pre-registered claim is deliberately a <strong>subtraction</strong> claim — the one the evidence supports
+and the easier one to win:</p>
+<blockquote>
+<p>A skulto-composed environment is <strong>non-inferior</strong> to the v1-agent-managed environment on task
+success (within a pre-registered margin of <strong>2 percentage points</strong>), while spending <strong>≥20% fewer
+tokens</strong> on skill and tool definitions.</p>
+</blockquote>
+<p>Everything about the method is designed to prevent fooling ourselves: the task set, power analysis,
+exclusion rules, and statistical procedure are <strong>frozen under a signed preregistration tag before
+any outcome is inspected.</strong> No early stopping. No swapping out failed repos. All negative results
+stay in the report. &quot;Won 2 of 3 repositories&quot; is explicitly <em>not</em> valid evidence.</p>
+<div class="wt-callout info"><div class="ic">ℹ️</div><div class="body"><p><strong>The decision rule is pre-registered — before anyone is attached to the answer:</strong></p>
+<ul>
+<li><strong>Pass</strong> → both bounds clear (non-inferior on success <em>and</em> ≥20% token reduction). Compose
+advances; the claim ships <em>with</em> its measured effect sizes and intervals.</li>
+<li><strong>Inferior</strong> → the interval establishes a success loss &gt; 2pp, or token reduction &lt; 20%.
+<strong>Compose is dead.</strong> Skulto becomes the trust layer (Verify) + observability layer (Observe),
+and says so publicly.</li>
+<li><strong>Inconclusive</strong> → an interval crosses its boundary. The gate stays closed; no claim, no gated
+downstream investment. This is <em>uncertainty</em> — not evidence of equality.</li>
+</ul></div></div>
+
+
+
+<details class="wt-reveal"><summary>If the eval comes back &quot;inferior,&quot; what exactly happens to the company&#39;s roadmap? Be honest about it.<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Compose — the exciting, differentiating feature — is <strong>killed</strong>, publicly. Skulto retreats to what
+the evidence <em>does</em> support: Verify (reproducible supply-chain audit) and Observe (what actually
+fired). That&#39;s not a failure of the process; it <em>is</em> the process working. The whole point of
+pre-registering the kill condition is that the product survives being wrong about its own thesis.</p></div></details>
+
+
+
+<div class="wt-quiz"><div class="q"><p>Which outcome would let skulto publicly claim Compose works?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>The point estimate for composed success is higher than v1-agent-managed</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>Composed won on 2 of 3 repositories</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>The 95% lower bound shows non-inferiority within 2pp AND ≥20% fewer definition tokens, on the pre-registered task set</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>The eval was inconclusive but trending positive</span></button></div><div class="explain"><p>Only the conjunctive, pre-registered bound counts. Point estimates, per-repo vote counts, and
+&quot;trending positive&quot; are explicitly ruled out as valid evidence — that&#39;s the anti-self-deception
+machinery doing its job.</p></div></div>
+
+
+<hr>
+<h2 id="sequencing-and-the-risks-that-actually-kill-it">Sequencing and the risks that actually kill it</h2>
+<p>The build order falls directly out of the evidence, and it front-loads a hard prerequisite.</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1030.33px; background-color: transparent;" viewBox="0 0 1030.328125 234" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M268,123L272.167,123C276.333,123,284.667,123,292.333,123C300,123,307,123,310.5,123L314,123" id="my-svg-L_P0_P1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P0_P1_0" data-points="W3sieCI6MjY4LCJ5IjoxMjN9LHsieCI6MjkzLCJ5IjoxMjN9LHsieCI6MzE4LCJ5IjoxMjN9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M449.703,76.611L453.87,73.676C458.036,70.741,466.37,64.87,477.474,61.935C488.578,59,502.453,59,509.391,59L516.328,59" id="my-svg-L_P1_P2_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P1_P2_0" data-points="W3sieCI6NDQ5LjcwMzEyNSwieSI6NzYuNjExMTQ0NTUyNDEyMDd9LHsieCI6NDc0LjcwMzEyNSwieSI6NTl9LHsieCI6NTIwLjMyODEyNSwieSI6NTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M648,59L655.604,59C663.208,59,678.417,59,689.521,59C700.625,59,707.625,59,711.125,59L714.625,59" id="my-svg-L_P2_P25_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P2_P25_0" data-points="W3sieCI6NjQ4LCJ5Ijo1OX0seyJ4Ijo2OTMuNjI1LCJ5Ijo1OX0seyJ4Ijo3MTguNjI1LCJ5Ijo1OX1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M849.672,59L853.839,59C858.005,59,866.339,59,874.005,59C881.672,59,888.672,59,892.172,59L895.672,59" id="my-svg-L_P25_P3_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P25_P3_0" data-points="W3sieCI6ODQ5LjY3MTg3NSwieSI6NTl9LHsieCI6ODc0LjY3MTg3NSwieSI6NTl9LHsieCI6ODk5LjY3MTg3NSwieSI6NTl9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M449.703,169.389L453.87,172.324C458.036,175.259,466.37,181.13,474.036,184.065C481.703,187,488.703,187,492.203,187L495.703,187" id="my-svg-L_P1_P4_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_P1_P4_0" data-points="W3sieCI6NDQ5LjcwMzEyNSwieSI6MTY5LjM4ODg1NTQ0NzU4NzkzfSx7IngiOjQ3NC43MDMxMjUsInkiOjE4N30seyJ4Ijo0OTkuNzAzMTI1LCJ5IjoxODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_P0_P1_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_P1_P2_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_P2_P25_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_P25_P3_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_P1_P4_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-P0-0" data-look="classic" transform="translate(138, 123)"><rect class="basic label-container" style="" x="-130" y="-87" width="260" height="174"/><g class="label" style="" transform="translate(-100, -72)"><rect/><foreignObject width="200" height="144"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Phase 0<br />Unified local storage<br />+ schema 2 / artifact identity<br /><b>exit gate — blocks everything</b></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P1-1" data-look="classic" transform="translate(383.8515625, 123)"><rect class="basic label-container" style="" x="-65.8515625" y="-51" width="131.703125" height="102"/><g class="label" style="" transform="translate(-35.8515625, -36)"><rect/><foreignObject width="71.703125" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Phase 1<br />VERIFY<br /><i>ships first</i></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P2-2" data-look="classic" transform="translate(584.1640625, 59)"><rect class="basic label-container" style="" x="-63.8359375" y="-39" width="127.671875" height="78"/><g class="label" style="" transform="translate(-33.8359375, -24)"><rect/><foreignObject width="67.671875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Phase 2<br />COMPOSE</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P25-3" data-look="classic" transform="translate(784.1484375, 59)"><rect class="basic label-container" style="" x="-65.5234375" y="-51" width="131.046875" height="102"/><g class="label" style="" transform="translate(-35.5234375, -36)"><rect/><foreignObject width="71.046875" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Phase 2.5<br />EVAL<br /><b>hard gate</b></p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P3-4" data-look="classic" transform="translate(961, 59)"><rect class="basic label-container" style="" x="-61.328125" y="-39" width="122.65625" height="78"/><g class="label" style="" transform="translate(-31.328125, -24)"><rect/><foreignObject width="62.65625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Phase 3<br />OBSERVE</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-P4-5" data-look="classic" transform="translate(584.1640625, 187)"><rect class="basic label-container" style="" x="-84.4609375" y="-39" width="168.921875" height="78"/><g class="label" style="" transform="translate(-54.4609375, -24)"><rect/><foreignObject width="108.921875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Phase 4<br />MCP diet 12→3</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><ul>
+<li><strong>Phase 0 is a showstopper, not a workstream.</strong> Unified local skill storage must fully land and
+pass certification first — because pinning, auditing, and environment application can&#39;t be
+trustworthy while a local skill might resolve to a stray file or arbitrary project directory.</li>
+<li><strong>Phase 1 (Verify) ships first</strong> for the reasons we already covered: strongest evidenced pain,
+half-built, standalone, and the credibility wedge.</li>
+<li><strong>Phase 2.5 (Eval) is the hard gate.</strong> <em>No public claim about Compose is made before it passes.</em></li>
+<li><strong>Phase 4 (MCP diet)</strong> can proceed off Verify — 12→3 tools, deprecate in 2.0, remove in 2.1.</li>
+</ul>
+<p>Now the risks, ranked by what actually kills the product:</p>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p><strong>Risk #1 — There is no demand.</strong> Zero people asked for project-specific composition; zero
+willing to pay. <em>Mitigation:</em> lead with Verify (screaming, evidenced pain); Compose rides in
+behind it. <strong>If Verify doesn&#39;t get adoption, Compose never will.</strong></p></div></div>
+
+
+<ul>
+<li><strong>#2 — The ETH result generalizes and <code>.skulto/context.md</code> is net-negative too.</strong> <em>Mitigation:</em>
+generate almost nothing; pointer-only routing + genuinely undocumented facts; delta-only;
+lint rejects duplicated claims and broken pointers. Phase 2.5 settles it empirically.</li>
+<li><strong>#3 — The budget numbers are folklore.</strong> 15,000 chars (Claude) and 2%-of-window (Codex) are
+reverse-engineered from blog posts, <em>not vendor-documented.</em> <em>Mitigation:</em> discover the limit
+dynamically per adapter; fall back to a versioned embedded registry labeled <strong><code>estimated</code></strong>;
+when neither is defensible, status is <strong><code>unknown</code></strong> and no fit claim is made.</li>
+<li><strong>#4 — Kiro or Agent OS closes the gap with one feature.</strong> They can, fast. <em>Mitigation:</em> the
+<em>idea</em> isn&#39;t the moat — <strong>the corpus, the scanner, the ruleset feed, and the trigger data are.</strong></li>
+<li><strong>#5 — Skulto becomes the bloat it cures.</strong> <em>Mitigation:</em> the ~120-token footprint is enforced;
+<code>doctor</code> fails if it grows.</li>
+<li><strong>#7 — Someone un-pauses skill generation</strong> because it&#39;s a fun afternoon. <em>Mitigation:</em> the ADR
+forbids authoring capability claims without an execution oracle, in writing. <strong>Generation isn&#39;t
+&quot;later&quot; — it&#39;s &quot;not without an oracle.&quot;</strong></li>
+</ul>
+<div class="wt-quiz"><div class="q"><p>Why does Verify ship before Compose, even though Compose is the more exciting feature?</p></div><div class="opts"><button class="opt" data-correct="0"><span class="mark">✕</span><span>Compose is technically harder to build</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>Verify generates more revenue</span></button><button class="opt" data-correct="1"><span class="mark">✓</span><span>Verify attacks a strongly-evidenced pain, is half-built and standalone, and is the credibility wedge that earns the right to pitch Compose</span></button><button class="opt" data-correct="0"><span class="mark">✕</span><span>MCP tools require Verify as a dependency</span></button></div><div class="explain"><p>Sequencing follows the evidence. Verify hits the #3 STRONG pain and can stand alone as a v1.5
+capability; leading with the unevidenced Compose thesis would ask strangers to trust it cold.
+And Risk #1 makes the dependency explicit: no Verify adoption → no Compose future.</p></div></div>
+
+
+<hr>
+<h2 id="putting-it-together">Putting it together</h2>
+<p>You should now be able to walk a skeptical engineer through the whole argument:</p>
+<ul>
+<li><strong>The pivot:</strong> manage the <em>environment</em>, not the skill. Value is <strong>subtraction</strong> — fewer,
+safer, provably-fitting skills.</li>
+<li><strong>The evidence:</strong> the market&#39;s loudest pain is <em>too many artifacts, trusted by none</em>. The ETH
+result proves generated context is net-negative unless it captures the <em>non-discoverable</em>.</li>
+<li><strong>The three capabilities:</strong> Compose (propose minimal, budgeted), Verify (reproducible scan vs
+signed ruleset), Evolve (delta-update only the non-discoverable).</li>
+<li><strong>The spine:</strong> skulto ships <em>deterministic</em> tools; the user&#39;s own agent CLI supplies the
+<em>intelligence</em>. Delete the dead LLM client rather than blur that line.</li>
+<li><strong>The guardrails:</strong> 17 invariants — never author a claim, never write a file you don&#39;t own,
+delta-only, human-approval gate, enforced ~120-token footprint, transcripts never leave the box.</li>
+<li><strong>The honesty:</strong> a pre-registered experiment that is <em>allowed to kill Compose</em>, with the kill
+condition defined before anyone sees a result.</li>
+</ul>
+<details class="wt-reveal"><summary>One last synthesis question to check the whole mental model: if you had to defend this design in one sentence to an investor who says &quot;isn&#39;t this just another skills tool?&quot; — what do you say?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>Something like: <em>&quot;Every other tool helps you add or generate more agent context; the evidence says
+that&#39;s net-negative and the market is actively deleting artifacts — so skulto does the opposite: it
+subtracts down to a minimal, budget-verified set, proves the remainder is safe against a signed,
+reproducible ruleset, and it&#39;s honest enough to pre-register an experiment that kills its own
+flagship feature if the data doesn&#39;t back it.&quot;</em> The moat isn&#39;t the idea — it&#39;s the corpus, the
+scanner, the signed ruleset feed, and the execution-trace data.</p></div></details>
+
+
+
+<div class="wt-callout tip"><div class="ic">💡</div><div class="body"><p><strong>The through-line:</strong> skulto v2 wins by being the tool that&#39;s <em>disciplined about what it refuses
+to claim.</em> Determinism where it acts, humility where it proposes, and a pre-registered willingness
+to be proven wrong. That discipline is the product.</p></div></div>
+
+
+    </article>
+    <footer class="wt-footer">
+      <span>Generated by the <strong>walkthrough</strong> skill · self-contained &amp; offline</span>
+      <button class="wt-reset" title="Clear saved progress">Reset progress</button>
+    </footer>
+  </main>
+</div>
+
+<script>/* walkthrough route runtime — inlined into every self-contained walkthrough.html.
+   No external dependencies. Handles: TOC scroll-spy, quiz feedback (non-gating),
+   reveal blocks, and optional localStorage progress. */
+(function () {
+  "use strict";
+
+  var KEY = "wt-progress:" + (document.body.getAttribute("data-wt-id") || location.pathname);
+
+  /* ---- Theme toggle (light default, persisted) ---- */
+  var THEME_KEY = "wt-theme";
+  var themeBtn = document.querySelector(".wt-theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Sidebar collapse / responsive drawer ---- */
+  var shell = document.querySelector(".wt-shell");
+  var navOpenBtn = document.querySelector(".wt-nav-open");
+  var navCollapseBtn = document.querySelector(".wt-nav-collapse");
+  var navScrim = document.querySelector(".wt-nav-scrim");
+  var navMq = window.matchMedia("(max-width: 860px)");
+  function setNav(open) {
+    if (!shell) return;
+    shell.classList.toggle("nav-collapsed", !open);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (navCollapseBtn) navCollapseBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  // Auto-collapse on narrow viewports; auto-open when it widens again.
+  function autoNav() { setNav(!navMq.matches); }
+  autoNav();
+  if (navMq.addEventListener) navMq.addEventListener("change", autoNav);
+  else if (navMq.addListener) navMq.addListener(autoNav);
+  if (navOpenBtn) navOpenBtn.addEventListener("click", function () { setNav(true); });
+  if (navCollapseBtn) navCollapseBtn.addEventListener("click", function () { setNav(false); });
+  if (navScrim) navScrim.addEventListener("click", function () { setNav(false); });
+
+  /* ---- TOC scroll-spy ---- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".wt-toc a"));
+  // On narrow screens, picking a TOC entry should close the overlay drawer.
+  tocLinks.forEach(function (a) {
+    a.addEventListener("click", function () { if (navMq.matches) setNav(false); });
+  });
+  var headings = tocLinks
+    .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+    .filter(Boolean);
+
+  function onScroll() {
+    var pos = window.scrollY + 120;
+    var current = headings[0];
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].offsetTop <= pos) current = headings[i];
+    }
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", current && a.getAttribute("href") === "#" + current.id);
+    });
+
+    /* progress bar = scroll completion */
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0;
+    var bar = document.getElementById("wt-progress");
+    if (bar) bar.style.width = pct.toFixed(1) + "%";
+    saveProgress(pct);
+  }
+
+  /* ---- Quiz (non-gating) ---- */
+  document.querySelectorAll(".wt-quiz").forEach(function (quiz) {
+    var explain = quiz.querySelector(".explain");
+    quiz.querySelectorAll(".opt").forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        var correct = opt.getAttribute("data-correct") === "1";
+        // clear previous state but never lock the user out — fully retryable
+        quiz.querySelectorAll(".opt").forEach(function (o) { o.classList.remove("correct", "wrong"); });
+        opt.classList.add(correct ? "correct" : "wrong");
+        if (correct) {
+          quiz.querySelectorAll(".opt").forEach(function (o) {
+            if (o.getAttribute("data-correct") === "1") o.classList.add("correct");
+          });
+        }
+        if (explain) explain.classList.add("show");
+      });
+    });
+  });
+
+  /* ---- localStorage progress (optional, non-blocking) ---- */
+  function saveProgress(pct) {
+    try { localStorage.setItem(KEY, JSON.stringify({ pct: Math.round(pct), at: Date.now() })); } catch (e) {}
+  }
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; }
+  }
+
+  var resetBtn = document.querySelector(".wt-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  /* restore scroll hint on load */
+  window.addEventListener("load", function () {
+    var saved = loadProgress();
+    if (saved && saved.pct > 5 && saved.pct < 95 && !location.hash) {
+      var note = document.querySelector(".wt-resume");
+      if (note) {
+        note.textContent = "Resume where you left off (" + saved.pct + "%)";
+        note.style.display = "inline";
+        note.addEventListener("click", function () {
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - doc.clientHeight;
+          window.scrollTo({ top: (saved.pct / 100) * max, behavior: "smooth" });
+        });
+      }
+    }
+    onScroll();
+  });
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+})();
+</script>
+</body>
+</html>
