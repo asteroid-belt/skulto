@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "UTC",
+  "schedule": ["before 5am on Monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 4,
+  "automerge": false,
+  "packageRules": [
+    {
+      "description": "Group routine Go module updates",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["digest", "patch", "minor"],
+      "groupName": "Go dependencies"
+    },
+    {
+      "description": "Group routine GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["digest", "patch", "minor"],
+      "groupName": "GitHub Actions dependencies"
+    }
+  ]
+}
