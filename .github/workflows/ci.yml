@@ -103,4 +103,4 @@ jobs:
           GOOS=linux GOARCH=arm64 VERSION=v0.0.0-ci make release
 
       - name: Verify Linux packages
-        run: sh scripts/test-linux-packages.sh
+        run: bash scripts/test-linux-packages.sh

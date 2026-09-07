@@ -175,7 +175,7 @@ assert_workflow_contract() {
   assert_workflow_contains "CI" "GOOS=linux GOARCH=amd64 VERSION=v0.0.0-ci make release" "$ci_workflow"
   assert_workflow_contains "CI" "GOOS=linux GOARCH=arm64 VERSION=v0.0.0-ci make release" "$ci_workflow"
   assert_workflow_contains "CI" "SKULTO_POSTHOG_API_KEY: test" "$ci_workflow"
-  assert_workflow_contains "CI" "scripts/test-linux-packages.sh" "$ci_workflow"
+  assert_workflow_contains "CI" "bash scripts/test-linux-packages.sh" "$ci_workflow"
   printf 'PASS: release and CI workflow package contract\n'
 }
 
