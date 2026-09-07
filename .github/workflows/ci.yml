@@ -72,3 +72,35 @@ jobs:
 
       - name: Build
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build
+
+  linux-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install package inspection tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Install nFPM
+        run: |
+          NFPM_VERSION=2.47.0
+          NFPM_BIN_DIR="$RUNNER_TEMP/nfpm/bin"
+          mkdir -p "$NFPM_BIN_DIR"
+          GOBIN="$NFPM_BIN_DIR" GOTOOLCHAIN=go1.26.8 \
+            go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@v${NFPM_VERSION}"
+          echo "$NFPM_BIN_DIR" >> "$GITHUB_PATH"
+
+      - name: Build Linux package fixtures
+        env:
+          SKULTO_POSTHOG_API_KEY: test
+        run: |
+          GOOS=linux GOARCH=amd64 VERSION=v0.0.0-ci make release
+          GOOS=linux GOARCH=arm64 VERSION=v0.0.0-ci make release
+
+      - name: Verify Linux packages
+        run: sh scripts/test-linux-packages.sh

@@ -1,4 +1,4 @@
-.PHONY: all build fresh test test-integration test-race test-race-integration test-coverage lint clean install dev run help deps fmt scrape ship-it release release-all
+.PHONY: all build fresh test test-integration test-race test-race-integration test-coverage lint clean install dev run help deps fmt scrape ship-it release
 
 # Variables
 BINARY_NAME=skulto
@@ -54,10 +54,10 @@ fresh:
 ## release: Build all artifacts for specified platform (GOOS=linux|darwin GOARCH=amd64|arm64)
 release:
 ifndef GOOS
-	$(error GOOS is required. Usage: make release-all GOOS=linux GOARCH=amd64)
+	$(error GOOS is required. Usage: make release GOOS=linux GOARCH=amd64)
 endif
 ifndef GOARCH
-	$(error GOARCH is required. Usage: make release-all GOOS=linux GOARCH=amd64)
+	$(error GOARCH is required. Usage: make release GOOS=linux GOARCH=amd64)
 endif
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) ./scripts/release.sh skulto-mcp

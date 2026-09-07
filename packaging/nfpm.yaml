@@ -1,0 +1,22 @@
+name: skulto
+arch: ${SKULTO_PACKAGE_ARCH}
+platform: linux
+version: ${SKULTO_PACKAGE_VERSION}
+release: "1"
+section: default
+priority: optional
+maintainer: Skulto Contributors <hello@skulto.dev>
+description: Discover, install, and manage AI agent skills.
+homepage: https://github.com/asteroid-belt/skulto
+license: MIT
+contents:
+  - src: ${SKULTO_PACKAGE_SOURCE_DIR}/skulto
+    dst: /usr/bin/skulto
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${SKULTO_PACKAGE_SOURCE_DIR}/skulto-mcp
+    dst: /usr/bin/skulto-mcp
+    expand: true
+    file_info:
+      mode: 0755

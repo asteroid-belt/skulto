@@ -1,3 +1,5 @@
 brew "mise"
+brew "dpkg"
+brew "rpm"
 tap "git-duet/tap"
 brew "git-duet"

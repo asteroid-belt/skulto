@@ -108,6 +108,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+
+      - name: Install package inspection tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Install nFPM
+        run: |
+          NFPM_VERSION=2.47.0
+          NFPM_BIN_DIR="$RUNNER_TEMP/nfpm/bin"
+          mkdir -p "$NFPM_BIN_DIR"
+          GOBIN="$NFPM_BIN_DIR" GOTOOLCHAIN=go1.26.8 \
+            go install "github.com/goreleaser/nfpm/v2/cmd/nfpm@v${NFPM_VERSION}"
+          echo "$NFPM_BIN_DIR" >> "$GITHUB_PATH"
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -115,44 +135,24 @@ jobs:
 
       - name: Organize release structure
         run: |
-          echo "=== Downloaded artifacts ==="
-          find artifacts -type f | head -50
-
           mkdir -p release
 
           for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             mkdir -p "release/${suffix}"
 
             artifact_dir="artifacts/skulto-${suffix}"
-            echo "Looking for: $artifact_dir"
-            if [ -d "$artifact_dir" ]; then
-              echo "  Found directory"
-
-              # Process skulto binary
-              binary=$(find "$artifact_dir" -name 'skulto' -type f ! -name 'skulto-mcp' | head -1)
-              if [ -n "$binary" ]; then
-                echo "  Found skulto binary: $binary"
-                cp "$binary" "release/${suffix}/skulto"
-                chmod +x "release/${suffix}/skulto"
-              else
-                echo "  ERROR: No skulto binary found in $artifact_dir"
+            for binary in skulto skulto-mcp; do
+              source="$artifact_dir/$binary"
+              destination="release/${suffix}/$binary"
+              if [ ! -f "$source" ]; then
+                echo "FATAL: Missing expected artifact $source"
+                exit 1
               fi
-
-              # Process skulto-mcp binary
-              mcp_binary=$(find "$artifact_dir" -name 'skulto-mcp' -type f | head -1)
-              if [ -n "$mcp_binary" ]; then
-                echo "  Found skulto-mcp binary: $mcp_binary"
-                cp "$mcp_binary" "release/${suffix}/skulto-mcp"
-                chmod +x "release/${suffix}/skulto-mcp"
-              else
-                echo "  ERROR: No skulto-mcp binary found in $artifact_dir"
-              fi
-            else
-              echo "  ERROR: Directory not found"
-            fi
+              cp "$source" "$destination"
+              chmod +x "$destination"
+            done
           done
 
-          echo ""
           echo "=== Final release structure ==="
           find release -type f -exec ls -la {} \;
 
@@ -178,16 +178,35 @@ jobs:
             TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
             echo "Creating ${TARBALL} with skulto and skulto-mcp..."
             tar -czvf "dist/${TARBALL}" -C "release/${suffix}" skulto skulto-mcp
+            tar -tzf "dist/${TARBALL}" | grep -Fx 'skulto'
+            tar -tzf "dist/${TARBALL}" | grep -Fx 'skulto-mcp'
           done
 
           echo "=== Created tarballs ==="
           ls -la dist/
 
-      - name: Create release
+      - name: Create Linux packages
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          PACKAGE_VERSION="${VERSION#v}"
+
+          scripts/package-linux.sh deb "$PACKAGE_VERSION" amd64 release/linux-amd64 dist
+          scripts/package-linux.sh deb "$PACKAGE_VERSION" arm64 release/linux-arm64 dist
+          scripts/package-linux.sh rpm "$PACKAGE_VERSION" amd64 release/linux-amd64 dist
+          scripts/package-linux.sh rpm "$PACKAGE_VERSION" arm64 release/linux-arm64 dist
+
+          scripts/validate-linux-packages.sh \
+            "dist/skulto_${PACKAGE_VERSION}_linux_amd64.deb" \
+            "dist/skulto_${PACKAGE_VERSION}_linux_arm64.deb" \
+            "dist/skulto-${PACKAGE_VERSION}-1.x86_64.rpm" \
+            "dist/skulto-${PACKAGE_VERSION}-1.aarch64.rpm"
+
+      - name: Create and publish release
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
+          PACKAGE_VERSION="${VERSION#v}"
 
           PRERELEASE_FLAG=""
           if echo "$VERSION" | grep -qE '\-'; then
@@ -195,12 +214,25 @@ jobs:
             echo "This is a pre-release version"
           fi
 
-          # Generate checksums for tarballs
           echo "Generating checksums..."
-          cd dist
-          sha256sum *.tar.gz > checksums.txt
-          CHECKSUMS=$(cat checksums.txt)
-          cd ..
+          release_assets=(
+            "dist/skulto-${VERSION}-linux-amd64.tar.gz"
+            "dist/skulto-${VERSION}-linux-arm64.tar.gz"
+            "dist/skulto-${VERSION}-darwin-amd64.tar.gz"
+            "dist/skulto-${VERSION}-darwin-arm64.tar.gz"
+            "dist/skulto_${PACKAGE_VERSION}_linux_amd64.deb"
+            "dist/skulto_${PACKAGE_VERSION}_linux_arm64.deb"
+            "dist/skulto-${PACKAGE_VERSION}-1.x86_64.rpm"
+            "dist/skulto-${PACKAGE_VERSION}-1.aarch64.rpm"
+          )
+          for release_asset in "${release_assets[@]}"; do
+            if [ ! -f "$release_asset" ]; then
+              echo "FATAL: Missing release asset $release_asset"
+              exit 1
+            fi
+          done
+          sha256sum "${release_assets[@]}" > dist/checksums.txt
+          CHECKSUMS=$(cat dist/checksums.txt)
           echo "Checksums:"
           echo "$CHECKSUMS"
 
@@ -219,6 +251,9 @@ jobs:
           | Linux (ARM64) | skulto-${VERSION}-linux-arm64.tar.gz |
           | macOS (Intel) | skulto-${VERSION}-darwin-amd64.tar.gz |
           | macOS (Apple Silicon) | skulto-${VERSION}-darwin-arm64.tar.gz |
+
+          Linux package downloads are also available as \`.deb\` and \`.rpm\`
+          assets for amd64 and arm64.
 
           ### Quick Install
 
@@ -260,26 +295,31 @@ jobs:
             --repo "asteroid-belt/skulto" \
             --title "skulto ${VERSION}" \
             --notes "$NOTES" \
+            --draft \
             $PRERELEASE_FLAG
 
-          echo "Release created, now uploading assets..."
-
-          # Upload tarballs
-          for suffix in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
-            TARBALL="skulto-${VERSION}-${suffix}.tar.gz"
-            echo "Uploading ${TARBALL}..."
-            gh release upload "$VERSION" \
-              --repo "asteroid-belt/skulto" \
-              "dist/${TARBALL}"
-          done
-
-          # Upload checksums file
-          echo "Uploading checksums.txt..."
           gh release upload "$VERSION" \
             --repo "asteroid-belt/skulto" \
+            "${release_assets[@]}" \
             "dist/checksums.txt"
 
-          echo "All assets uploaded successfully!"
+          uploaded_assets=$(gh release view "$VERSION" --repo "asteroid-belt/skulto" --json assets --jq '.assets[].name')
+          EXPECTED_ASSET_COUNT=9
+          uploaded_asset_count=$(printf '%s\n' "$uploaded_assets" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [ "$uploaded_asset_count" -ne "$EXPECTED_ASSET_COUNT" ]; then
+            echo "FATAL: Release draft has $uploaded_asset_count assets; expected $EXPECTED_ASSET_COUNT"
+            exit 1
+          fi
+          for release_asset in "${release_assets[@]}" dist/checksums.txt; do
+            asset_name=$(basename "$release_asset")
+            if ! printf '%s\n' "$uploaded_assets" | grep -Fx "$asset_name" >/dev/null; then
+              echo "FATAL: Release draft is missing uploaded asset $asset_name"
+              exit 1
+            fi
+          done
+
+          gh release edit "$VERSION" --repo "asteroid-belt/skulto" --draft=false
+          echo "Release published with all verified assets."
 
   # homebrew:
   #   needs: release

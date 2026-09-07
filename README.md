@@ -82,6 +82,39 @@ To upgrade:
 brew upgrade asteroid-belt/tap/skulto
 ```
 
+### Linux Packages
+
+GitHub Releases provide `.deb` and `.rpm` downloads for both `amd64` and
+`arm64`. Choose the package format for your distribution and replace the
+version below with a release tag:
+
+```bash
+VERSION=vX.Y.Z
+ARCH=amd64 # or arm64
+
+# Debian/Ubuntu
+curl -LO "https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/skulto_${VERSION#v}_linux_${ARCH}.deb"
+
+# Fedora/RHEL/openSUSE
+curl -LO "https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/skulto-${VERSION#v}-1.$([ "$ARCH" = amd64 ] && echo x86_64 || echo aarch64).rpm"
+
+# Download the release checksums, then verify the downloaded asset.
+curl -LO "https://github.com/asteroid-belt/skulto/releases/download/${VERSION}/checksums.txt"
+sha256sum -c checksums.txt --ignore-missing
+```
+
+Install the local file with your distribution's package manager:
+
+```bash
+sudo apt install ./skulto_*.deb
+sudo dnf install ./skulto-*.rpm
+sudo zypper install ./skulto-*.rpm
+```
+
+Each package installs `skulto` and `skulto-mcp` at `/usr/bin/skulto` and
+`/usr/bin/skulto-mcp`. Skulto does not require system Git at runtime. These are
+GitHub Release downloads, not a configured package repository.
+
 ### From Source
 
 ```bash

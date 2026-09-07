@@ -170,7 +170,7 @@ Version, commit hash, and build date are injected via ldflags. The PostHog API k
 | Stage | Trigger | What It Does |
 |-------|---------|-------------|
 | **CI** | Push to `main`, all PRs | Lint (`make lint`), test with coverage (`make test`), cross-compile build matrix (linux/darwin, amd64/arm64) |
-| **Release** | Version tag (`v*`) or manual dispatch | Validate semver, run tests, build all platforms, create GitHub Release with tarballs and checksums |
+| **Release** | Version tag (`v*`) or manual dispatch | Validate semver, run tests, build all platforms, package Linux binaries with nFPM, and publish a GitHub Release with inspected assets and checksums |
 
 ### CI Pipeline (`.github/workflows/ci.yml`)
 
@@ -188,13 +188,19 @@ Version, commit hash, and build date are injected via ldflags. The PostHog API k
 2. Run full test suite
 3. Build for all 4 platform targets
 4. Create tarballs with both `skulto` and `skulto-mcp`
-5. Generate SHA256 checksums
-6. Create GitHub Release with release notes and assets
+5. Use nFPM to create Linux Debian and RPM packages for amd64 and arm64
+6. Run package inspection before release publication
+7. Generate SHA256 checksums for every tarball and package
+8. Create a draft GitHub Release, upload and verify its assets, then publish it
 
 ### Distribution
 
 - **Homebrew**: `brew install asteroid-belt/tap/skulto`
-- **GitHub Releases**: Tarballs for linux-amd64, linux-arm64, darwin-amd64, darwin-arm64
+- **GitHub Releases**: Tarballs for linux-amd64, linux-arm64, darwin-amd64, and darwin-arm64; Linux `.deb` and `.rpm` packages for amd64 and arm64
+
+Linux packages are GitHub Release downloads rather than a hosted Apt, DNF, or
+Zypper repository. They install both binaries in `/usr/bin` and require no
+system Git dependency at runtime.
 
 ## Pre-Push Validation
 
