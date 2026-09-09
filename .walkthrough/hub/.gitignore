@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# Copied in at build time by build-hub.mjs / CI:
+public/content/
+public/walkthrough.config.json

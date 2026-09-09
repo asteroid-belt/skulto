@@ -1,0 +1,4 @@
+dist/
+hub/node_modules/
+hub/public/content/
+hub/public/walkthrough.config.json

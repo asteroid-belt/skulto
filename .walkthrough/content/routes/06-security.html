@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>6 · Security Scanner</title>
+<meta name="description" content="How the scanner really works — 9 categories, per-pattern severity, score-with-context-mitigation, the warning threshold, and what &quot;scan before install&quot; does today (runs at install, informational and non-blocking).">
+<script>!function(){try{var t=localStorage.getItem("wt-theme");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}}();</script>
+<style>/* walkthrough route theme — inlined into every self-contained walkthrough.html.
+   Ships BOTH palettes: light by default, dark via [data-theme="dark"] on <html>
+   (set by a persisted toggle). Readable, responsive, print-friendly. */
+:root {
+  /* Light palette (default) */
+  --wt-bg: #ffffff;
+  --wt-surface: #f6f8fa;
+  --wt-surface-2: #eceff3;
+  --wt-border: #d6dde4;
+  --wt-text: #1f2328;
+  --wt-muted: #5b6975;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #2563eb;
+  --wt-ok: #1a8f4c;
+  --wt-bad: #d23b3b;
+  --wt-warn: #b07d00;
+  --wt-diagram-bg: #ffffff;
+  --wt-radius: 10px;
+  --wt-maxw: 820px;
+}
+html[data-theme="dark"] {
+  /* Dark "night-owl"-adjacent palette */
+  --wt-bg: #011627;
+  --wt-surface: #0b2942;
+  --wt-surface-2: #0e3251;
+  --wt-border: #1d3b53;
+  --wt-text: #d6deeb;
+  --wt-muted: #8badc1;
+  --wt-accent: #7e57c2;
+  --wt-accent-2: #82aaff;
+  --wt-ok: #22da6e;
+  --wt-bad: #ef5350;
+  --wt-warn: #ffca28;
+  --wt-diagram-bg: #ffffff;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--wt-bg);
+  color: var(--wt-text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--wt-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Progress bar (top, fixed) */
+#wt-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0%; background: linear-gradient(90deg, var(--wt-accent), var(--wt-accent-2)); z-index: 50; transition: width .15s ease; }
+
+/* Theme toggle (top-right, fixed) */
+.wt-theme-toggle {
+  position: fixed; top: 14px; right: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-text); border: 1px solid var(--wt-border);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.wt-theme-toggle:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-theme-toggle .ic-moon { display: none; }
+.wt-theme-toggle .ic-sun { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-moon { display: inline; }
+html[data-theme="dark"] .wt-theme-toggle .ic-sun { display: none; }
+
+/* Sidebar toggles (open = floating, shown when collapsed; collapse = inside panel) */
+.wt-nav-open {
+  position: fixed; top: 14px; left: 16px; z-index: 60;
+  width: 34px; height: 34px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1;
+  background: var(--wt-surface); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  opacity: 0; visibility: hidden;
+  transition: opacity .18s ease, visibility .18s ease, border-color .12s, color .12s;
+}
+.wt-nav-open:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+.wt-shell.nav-collapsed .wt-nav-open { opacity: 1; visibility: visible; }
+.wt-sidebar-top { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+.wt-nav-collapse {
+  width: 28px; height: 28px; padding: 0; border-radius: 7px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;
+  background: var(--wt-bg); color: var(--wt-muted); border: 1px solid var(--wt-border);
+  transition: border-color .12s, color .12s;
+}
+.wt-nav-collapse:hover { border-color: var(--wt-accent-2); color: var(--wt-accent-2); }
+
+/* Backdrop for the mobile overlay drawer */
+.wt-nav-scrim {
+  position: fixed; inset: 0; z-index: 54; background: rgba(2,8,20,.45);
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease;
+}
+
+/* Layout */
+.wt-shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .22s ease; }
+.wt-shell.nav-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.wt-sidebar {
+  position: sticky; top: 0; align-self: start; height: 100vh; min-width: 0;
+  overflow: hidden auto;
+  background: var(--wt-surface); border-right: 1px solid var(--wt-border);
+  padding: 24px 18px;
+  transition: padding .22s ease, border-color .22s ease;
+}
+.wt-shell.nav-collapsed .wt-sidebar { padding-left: 0; padding-right: 0; border-right-color: transparent; pointer-events: none; }
+.wt-shell.nav-collapsed .wt-sidebar > * { opacity: 0; transition: opacity .12s ease; }
+.wt-sidebar .wt-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--wt-muted); margin: 0 0 6px; }
+.wt-sidebar h1 { font-size: 18px; margin: 0 0 4px; line-height: 1.3; }
+.wt-meta-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 18px; }
+.wt-badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--wt-surface-2); color: var(--wt-muted); border: 1px solid var(--wt-border); }
+.wt-badge.audience { color: var(--wt-accent-2); border-color: var(--wt-accent-2); }
+.wt-toc { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.wt-toc li { margin: 2px 0; }
+.wt-toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--wt-muted); border-left: 2px solid transparent; }
+.wt-toc a:hover { color: var(--wt-text); background: var(--wt-surface-2); text-decoration: none; }
+.wt-toc a.active { color: var(--wt-text); border-left-color: var(--wt-accent-2); background: var(--wt-surface-2); }
+.wt-toc .lvl-3 a { padding-left: 22px; font-size: 13px; }
+
+.wt-main { padding: 48px max(24px, 4vw); }
+.wt-content { max-width: var(--wt-maxw); margin: 0 auto; }
+.wt-content h1, .wt-content h2, .wt-content h3 { line-height: 1.25; scroll-margin-top: 20px; }
+.wt-content h1 { font-size: 2rem; margin: 0 0 .6em; }
+.wt-content h2 { font-size: 1.5rem; margin: 2em 0 .6em; padding-bottom: .3em; border-bottom: 1px solid var(--wt-border); }
+.wt-content h3 { font-size: 1.2rem; margin: 1.6em 0 .5em; }
+.wt-content p { margin: 0 0 1em; }
+.wt-content ul, .wt-content ol { margin: 0 0 1em; padding-left: 1.4em; }
+.wt-content li { margin: .3em 0; }
+.wt-content blockquote { margin: 0 0 1em; padding: .6em 1em; border-left: 3px solid var(--wt-accent); background: var(--wt-surface); border-radius: 0 var(--wt-radius) var(--wt-radius) 0; color: var(--wt-muted); }
+.wt-content table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 14px; }
+.wt-content th, .wt-content td { border: 1px solid var(--wt-border); padding: 8px 12px; text-align: left; }
+.wt-content th { background: var(--wt-surface); }
+.wt-content :not(pre) > code { background: var(--wt-surface-2); padding: .15em .4em; border-radius: 5px; font-size: .9em; font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+.wt-content pre { border-radius: var(--wt-radius); padding: 16px 18px; overflow-x: auto; margin: 0 0 1em; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--wt-border); }
+.wt-content pre code { font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace; }
+
+/* Shiki dual-theme: tokens carry --shiki-light/--shiki-dark (pre carries the -bg
+   variants). Light is the default; [data-theme="dark"] switches the whole block. */
+.wt-content pre.shiki,
+.wt-content pre.shiki span { color: var(--shiki-light); }
+.wt-content pre.shiki { background-color: var(--shiki-light-bg) !important; }
+html[data-theme="dark"] .wt-content pre.shiki,
+html[data-theme="dark"] .wt-content pre.shiki span { color: var(--shiki-dark); }
+html[data-theme="dark"] .wt-content pre.shiki { background-color: var(--shiki-dark-bg) !important; }
+
+/* Diagrams */
+.wt-diagram { margin: 0 0 1.4em; padding: 18px; background: var(--wt-diagram-bg); border-radius: var(--wt-radius); border: 1px solid var(--wt-border); overflow-x: auto; text-align: center; }
+.wt-diagram svg { max-width: 100%; height: auto; }
+.wt-diagram.fallback { background: var(--wt-surface); }
+.wt-diagram-note { font-size: 12px; color: var(--wt-muted); margin-top: 8px; }
+pre.mermaid { background: #fff; color: #111; }
+
+/* Callouts */
+.wt-callout { display: flex; gap: 12px; margin: 0 0 1.2em; padding: 14px 16px; border-radius: var(--wt-radius); border: 1px solid var(--wt-border); background: var(--wt-surface); }
+.wt-callout .ic { font-size: 18px; line-height: 1.4; }
+.wt-callout .body > :last-child { margin-bottom: 0; }
+.wt-callout.note { border-left: 3px solid var(--wt-accent-2); }
+.wt-callout.tip { border-left: 3px solid var(--wt-ok); }
+.wt-callout.warning { border-left: 3px solid var(--wt-warn); }
+.wt-callout.info { border-left: 3px solid var(--wt-muted); }
+
+/* Reveal (try-then-show) */
+.wt-reveal { margin: 0 0 1.2em; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); overflow: hidden; }
+.wt-reveal > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none; }
+.wt-reveal > summary::-webkit-details-marker { display: none; }
+.wt-reveal > summary::before { content: "▶"; font-size: 11px; color: var(--wt-accent-2); transition: transform .15s; }
+.wt-reveal[open] > summary::before { transform: rotate(90deg); }
+.wt-reveal > summary .hint { font-weight: 400; color: var(--wt-muted); font-size: 13px; }
+.wt-reveal .reveal-body { padding: 0 16px 12px; border-top: 1px solid var(--wt-border); }
+.wt-reveal .reveal-body > :first-child { margin-top: 12px; }
+.wt-reveal .reveal-body > :last-child { margin-bottom: 0; }
+
+/* Quiz (non-gating) */
+.wt-quiz { margin: 0 0 1.4em; padding: 18px 20px; border: 1px solid var(--wt-border); border-radius: var(--wt-radius); background: var(--wt-surface); }
+.wt-quiz .q { font-weight: 600; margin-bottom: 12px; }
+.wt-quiz .q::before { content: "Self-check"; display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--wt-accent); font-weight: 700; margin-bottom: 6px; }
+.wt-quiz .opts { display: flex; flex-direction: column; gap: 8px; }
+.wt-quiz .opt {
+  text-align: left; cursor: pointer; padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--wt-border); background: var(--wt-surface-2); color: var(--wt-text);
+  font: inherit; transition: border-color .12s, background .12s; display: flex; gap: 10px; align-items: center;
+}
+.wt-quiz .opt:hover { border-color: var(--wt-accent-2); }
+.wt-quiz .opt .mark { width: 18px; display: inline-block; text-align: center; opacity: 0; }
+.wt-quiz .opt.correct { border-color: var(--wt-ok); background: rgba(34,218,110,.12); }
+.wt-quiz .opt.correct .mark { opacity: 1; color: var(--wt-ok); }
+.wt-quiz .opt.wrong { border-color: var(--wt-bad); background: rgba(239,83,80,.12); }
+.wt-quiz .opt.wrong .mark { opacity: 1; color: var(--wt-bad); }
+.wt-quiz .explain { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--wt-surface-2); border: 1px dashed var(--wt-border); color: var(--wt-muted); display: none; }
+.wt-quiz .explain.show { display: block; }
+.wt-quiz .explain > :last-child { margin-bottom: 0; }
+
+/* Footer */
+.wt-footer { max-width: var(--wt-maxw); margin: 48px auto 0; padding-top: 18px; border-top: 1px solid var(--wt-border); color: var(--wt-muted); font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wt-reset { background: none; border: 1px solid var(--wt-border); color: var(--wt-muted); border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+.wt-reset:hover { color: var(--wt-text); border-color: var(--wt-muted); }
+
+/* Mobile — the sidebar becomes an overlay drawer */
+@media (max-width: 860px) {
+  .wt-shell, .wt-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .wt-sidebar {
+    position: fixed; top: 0; left: 0; z-index: 55;
+    width: min(86vw, 320px); height: 100vh; padding: 24px 18px;
+    border-right: 1px solid var(--wt-border);
+    transform: translateX(0); transition: transform .22s ease;
+  }
+  .wt-shell.nav-collapsed .wt-sidebar { transform: translateX(-100%); padding: 24px 18px; border-right-color: var(--wt-border); }
+  .wt-shell.nav-collapsed .wt-sidebar > * { opacity: 1; }
+  .wt-shell:not(.nav-collapsed) .wt-nav-scrim { opacity: 1; visibility: visible; }
+  .wt-main { padding-top: 64px; } /* clear the fixed open button */
+}
+
+/* Print — always print the light palette regardless of the active theme. */
+@media print {
+  .wt-sidebar, #wt-progress, .wt-reset, .wt-theme-toggle, .wt-nav-open, .wt-nav-scrim { display: none; }
+  .wt-shell { display: block; }
+  body { background: #fff; color: #111; }
+  .wt-reveal[open] .reveal-body, .wt-reveal .reveal-body { display: block !important; }
+  pre.shiki, pre.shiki span { color: var(--shiki-light) !important; }
+  pre.shiki { background-color: var(--shiki-light-bg) !important; }
+}
+</style>
+</head>
+<body data-wt-id="06-security">
+<div id="wt-progress"></div>
+<button class="wt-theme-toggle" type="button" aria-label="Toggle light or dark theme" title="Toggle light/dark"><span class="ic-sun" aria-hidden="true">☀</span><span class="ic-moon" aria-hidden="true">☾</span></button>
+<button class="wt-nav-open" type="button" aria-label="Open contents" title="Contents">☰</button>
+<div class="wt-nav-scrim" aria-hidden="true"></div>
+<div class="wt-shell">
+  <aside class="wt-sidebar">
+    <div class="wt-sidebar-top"><button class="wt-nav-collapse" type="button" aria-label="Collapse contents" title="Collapse">«</button></div>
+    <p class="wt-eyebrow">repo walkthrough</p>
+    <h1>6 · Security Scanner</h1>
+    <p style="color:var(--wt-muted);font-size:13px;margin:.2em 0 0">How the scanner really works — 9 categories, per-pattern severity, score-with-context-mitigation, the warning threshold, and what &quot;scan before install&quot; does today (runs at install, informational and non-blocking).</p>
+    <div class="wt-meta-badges"><span class="wt-badge audience">new contributors &amp; power users</span><span class="wt-badge">onboarding</span><span class="wt-badge">security</span><span class="wt-badge">scanner</span><span class="wt-badge">prompt-injection</span></div>
+    <a class="wt-resume" href="javascript:void 0" style="display:none;font-size:12px;color:var(--wt-accent-2)"></a>
+    <ul class="wt-toc"><li class="lvl-1"><a href="#security-scanner">Security Scanner</a></li>
+<li class="lvl-2"><a href="#the-nine-categories">The nine categories</a></li>
+<li class="lvl-2"><a href="#severity-is-per-pattern">Severity is per pattern</a></li>
+<li class="lvl-2"><a href="#scoring-base-minus-context-mitigation">Scoring: base minus context mitigation</a></li>
+<li class="lvl-2"><a href="#verdict-threshold-and-overall-level">Verdict: threshold and overall level</a></li>
+<li class="lvl-2"><a href="#what-actually-gets-scanned">What actually gets scanned</a></li>
+<li class="lvl-2"><a href="#scan-before-install-implemented-but-non-blocking">&quot;Scan before install&quot; — implemented, but non-blocking</a></li>
+<li class="lvl-2"><a href="#using-it-directly">Using it directly</a></li></ul>
+  </aside>
+  <main class="wt-main">
+    <article class="wt-content">
+      <h1 id="security-scanner">Security Scanner</h1>
+<p>This is Skulto&#39;s reason to exist, so it&#39;s worth getting exactly right. The scanner lives in
+<code>internal/security/</code>, and everything below describes what that code actually does.</p>
+<div class="wt-callout warning"><div class="ic">⚠️</div><div class="body"><p>A natural assumption is that each category has a single severity. It doesn&#39;t — <strong>severity
+is assigned per <em>pattern</em>, not per category.</strong> One category (e.g. dangerous scripts)
+contains patterns ranging from MEDIUM all the way to CRITICAL. Keep the unit of severity in
+mind: it&#39;s the individual pattern, not the bucket it sits in.</p></div></div>
+
+
+<h2 id="the-nine-categories">The nine categories</h2>
+<p><code>ThreatCategory</code> constants (<code>internal/security/result.go</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Catches</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>instruction_override</code></td>
+<td>&quot;ignore previous instructions&quot;, &quot;disregard your rules&quot;</td>
+</tr>
+<tr>
+<td><code>jailbreak</code></td>
+<td>DAN, &quot;developer mode&quot;, &quot;unrestricted AI&quot;</td>
+</tr>
+<tr>
+<td><code>system_spoofing</code></td>
+<td>Fake system/role markers to impersonate the platform</td>
+</tr>
+<tr>
+<td><code>data_exfiltration</code></td>
+<td>Attempts to leak the system prompt or context</td>
+</tr>
+<tr>
+<td><code>obfuscation</code></td>
+<td>Encodings/tricks that hide intent from a reader</td>
+</tr>
+<tr>
+<td><code>agent_manipulation</code></td>
+<td>Steering the agent&#39;s behavior covertly</td>
+</tr>
+<tr>
+<td><code>privilege_escalation</code></td>
+<td>Gaining capabilities/permissions it shouldn&#39;t have</td>
+</tr>
+<tr>
+<td><code>multi_turn_erosion</code></td>
+<td>Slow boundary-wearing across turns</td>
+</tr>
+<tr>
+<td><code>script_danger</code></td>
+<td>Dangerous shell/Python/JS in scripts (reverse shells, <code>rm -rf</code>, eval)</td>
+</tr>
+</tbody></table>
+<h2 id="severity-is-per-pattern">Severity is per pattern</h2>
+<p>Each pattern (IDs like <code>IO-001</code>, <code>JB-004</code>, <code>DE-003</code>, <code>SH-008</code>, <code>PY-001</code>) carries its own
+severity. The levels are <code>NONE, LOW, MEDIUM, HIGH, CRITICAL</code> (<code>internal/models/security.go</code>;
+<code>LOW</code> is defined but currently unused by any pattern).</p>
+<p>A few real examples so the spread is concrete:</p>
+<ul>
+<li><code>instruction_override</code> patterns (<code>IO-001…005</code>) are uniformly <strong>HIGH</strong>.</li>
+<li><code>jailbreak</code> is mostly <strong>CRITICAL</strong> (<code>JB-001…004</code>), but <code>JB-005</code> is <strong>HIGH</strong> — so &quot;jailbreak = always critical&quot; is imprecise.</li>
+<li><code>data_exfiltration</code> is mixed: <code>DE-001/002</code> <strong>HIGH</strong>, <code>DE-003</code> <strong>CRITICAL</strong>, and script-side exfil patterns <strong>MEDIUM</strong>.</li>
+<li><code>script_danger</code> spans <strong>MEDIUM → CRITICAL</strong>: a reverse shell (<code>SH-008</code>) or disk overwrite (<code>SH-003</code>) is CRITICAL; a <code>chmod</code> (<code>SH-002</code>) is MEDIUM; Python <code>eval/exec</code> (<code>PY-001</code>) is HIGH.</li>
+</ul>
+<h2 id="scoring-base-minus-context-mitigation">Scoring: base minus context mitigation</h2>
+<p>The scanner doesn&#39;t just count hits. The <code>Scorer</code> computes:</p>
+<pre class="shiki shiki-themes github-light night-owl" style="--shiki-light:#24292e;--shiki-dark:#d6deeb;--shiki-light-bg:#fff;--shiki-dark-bg:#011627" tabindex="0"><code><span class="line"><span>FinalScore = BaseScore − MitigationScore</span></span></code></pre><p><code>BaseScore</code> comes from the matched patterns&#39; severities. <code>MitigationScore</code> comes from a
+<code>ContextAnalyzer</code> that looks for <strong>allowlist</strong> phrases within a ~200-character proximity
+window of each match, weighted by context type:</p>
+<table>
+<thead>
+<tr>
+<th>Context type</th>
+<th>Weight</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>defensive</td>
+<td>3</td>
+<td>&quot;to defend against…&quot;, security tooling</td>
+</tr>
+<tr>
+<td>educational</td>
+<td>2</td>
+<td>&quot;understanding/learning about this threat&quot;, OWASP/CVE references</td>
+</tr>
+<tr>
+<td>documentation</td>
+<td>1</td>
+<td>descriptive prose around the term</td>
+</tr>
+</tbody></table>
+<p>So a security <em>tutorial</em> that quotes <code>&quot;ignore previous instructions&quot;</code> to <em>explain</em> the
+attack gets its score reduced and isn&#39;t flagged as committing one. That nuance is exactly
+what separates a useful scanner from a noisy one.</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1319.7px; background-color: transparent;" viewBox="0 0 1319.703125 222" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M125.188,84L134.823,77.833C144.458,71.667,163.729,59.333,178.37,53.167C193.01,47,203.021,47,208.026,47L213.031,47" id="my-svg-L_C_M_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_C_M_0" data-points="W3sieCI6MTI1LjE4NzUsInkiOjg0fSx7IngiOjE4MywieSI6NDd9LHsieCI6MjE3LjAzMTI1LCJ5Ijo0N31d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M384.797,47L390.469,47C396.141,47,407.484,47,418.033,47C428.581,47,438.333,47,443.21,47L448.086,47" id="my-svg-L_M_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_M_B_0" data-points="W3sieCI6Mzg0Ljc5Njg3NSwieSI6NDd9LHsieCI6NDE4LjgyODEyNSwieSI6NDd9LHsieCI6NDUyLjA4NTkzNzUsInkiOjQ3fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M125.188,138L134.823,144.167C144.458,150.333,163.729,162.667,176.865,168.833C190,175,197,175,200.5,175L204,175" id="my-svg-L_C_X_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_C_X_0" data-points="W3sieCI6MTI1LjE4NzUsInkiOjEzOH0seyJ4IjoxODMsInkiOjE3NX0seyJ4IjoyMDgsInkiOjE3NX1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M393.828,175L397.995,175C402.161,175,410.495,175,418.161,175C425.828,175,432.828,175,436.328,175L439.828,175" id="my-svg-L_X_Mit_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_X_Mit_0" data-points="W3sieCI6MzkzLjgyODEyNSwieSI6MTc1fSx7IngiOjQxOC44MjgxMjUsInkiOjE3NX0seyJ4Ijo0NDMuODI4MTI1LCJ5IjoxNzV9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M639.258,47L644.801,47C650.344,47,661.43,47,673.947,50.845C686.464,54.69,700.413,62.379,707.387,66.224L714.362,70.069" id="my-svg-L_B_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_B_F_0" data-points="W3sieCI6NjM5LjI1NzgxMjUsInkiOjQ3fSx7IngiOjY3Mi41MTU2MjUsInkiOjQ3fSx7IngiOjcxNy44NjQ3NDYwOTM3NSwieSI6NzJ9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M647.516,175L651.682,175C655.849,175,664.182,175,675.323,171.155C686.464,167.31,700.413,159.621,707.387,155.776L714.362,151.931" id="my-svg-L_Mit_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_Mit_F_0" data-points="W3sieCI6NjQ3LjUxNTYyNSwieSI6MTc1fSx7IngiOjY3Mi41MTU2MjUsInkiOjE3NX0seyJ4Ijo3MTcuODY0NzQ2MDkzNzUsInkiOjE1MH1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M879.703,111L883.87,111C888.036,111,896.37,111,904.036,111C911.703,111,918.703,111,922.203,111L925.703,111" id="my-svg-L_F_T_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_F_T_0" data-points="W3sieCI6ODc5LjcwMzEyNSwieSI6MTExfSx7IngiOjkwNC43MDMxMjUsInkiOjExMX0seyJ4Ijo5MjkuNzAzMTI1LCJ5IjoxMTF9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1063.376,84.392L1073.902,79.16C1084.428,73.928,1105.479,63.464,1121.43,58.232C1137.38,53,1148.229,53,1153.654,53L1159.078,53" id="my-svg-L_T_W_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_T_W_0" data-points="W3sieCI6MTA2My4zNzU5NjcxMjg4MDE0LCJ5Ijo4NC4zOTE1OTIxMjg4MDE0M30seyJ4IjoxMTI2LjUzMTI1LCJ5Ijo1M30seyJ4IjoxMTYzLjA3ODEyNSwieSI6NTN9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1063.376,137.608L1073.902,142.84C1084.428,148.072,1105.479,158.536,1125.468,163.768C1145.456,169,1164.38,169,1173.842,169L1183.305,169" id="my-svg-L_T_OK_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_T_OK_0" data-points="W3sieCI6MTA2My4zNzU5NjcxMjg4MDE0LCJ5IjoxMzcuNjA4NDA3ODcxMTk4NTh9LHsieCI6MTEyNi41MzEyNSwieSI6MTY5fSx7IngiOjExODcuMzA0Njg3NSwieSI6MTY5fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_C_M_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_M_B_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_C_X_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_X_Mit_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_B_F_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_Mit_F_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_F_T_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(1126.53125, 53)"><g class="label" data-id="L_T_W_0" transform="translate(-11.546875, -12)"><foreignObject width="23.09375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>yes</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(1126.53125, 169)"><g class="label" data-id="L_T_OK_0" transform="translate(-8.6640625, -12)"><foreignObject width="17.328125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>no</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-C-0" data-look="classic" transform="translate(83, 111)"><rect class="basic label-container" style="" x="-75" y="-27" width="150" height="54"/><g class="label" style="" transform="translate(-45, -12)"><rect/><foreignObject width="90" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Skill content</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-M-1" data-look="classic" transform="translate(300.9140625, 47)"><rect class="basic label-container" style="" x="-83.8828125" y="-39" width="167.765625" height="78"/><g class="label" style="" transform="translate(-53.8828125, -24)"><rect/><foreignObject width="107.765625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Match patterns<br />per category</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-B-3" data-look="classic" transform="translate(545.671875, 47)"><rect class="basic label-container" style="" x="-93.5859375" y="-39" width="187.171875" height="78"/><g class="label" style="" transform="translate(-63.5859375, -24)"><rect/><foreignObject width="127.171875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>BaseScore from<br />pattern severities</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-X-5" data-look="classic" transform="translate(300.9140625, 175)"><rect class="basic label-container" style="" x="-92.9140625" y="-39" width="185.828125" height="78"/><g class="label" style="" transform="translate(-62.9140625, -24)"><rect/><foreignObject width="125.828125" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Context allowlist<br />within ~200 chars</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-Mit-7" data-look="classic" transform="translate(545.671875, 175)"><rect class="basic label-container" style="" x="-101.84375" y="-39" width="203.6875" height="78"/><g class="label" style="" transform="translate(-71.84375, -24)"><rect/><foreignObject width="143.6875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>MitigationScore<br />defensive/edu/docs</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-F-9" data-look="classic" transform="translate(788.609375, 111)"><rect class="basic label-container" style="" x="-91.09375" y="-39" width="182.1875" height="78"/><g class="label" style="" transform="translate(-61.09375, -24)"><rect/><foreignObject width="122.1875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>FinalScore =<br />Base − Mitigation</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-T-13" data-look="classic" transform="translate(1009.84375, 111)"><polygon points="80.140625,0 160.28125,-80.140625 80.140625,-160.28125 0,-80.140625" class="label-container" transform="translate(-79.640625, 80.140625)"/><g class="label" style="" transform="translate(-53.140625, -12)"><rect/><foreignObject width="106.28125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>FinalScore ≥ 3?</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-W-15" data-look="classic" transform="translate(1237.390625, 53)"><rect class="basic label-container" style="" x="-74.3125" y="-39" width="148.625" height="78"/><g class="label" style="" transform="translate(-44.3125, -24)"><rect/><foreignObject width="88.625" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Warning →<br />Quarantined</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-OK-17" data-look="classic" transform="translate(1237.390625, 169)"><rect class="basic label-container" style="" x="-50.0859375" y="-27" width="100.171875" height="54"/><g class="label" style="" transform="translate(-20.0859375, -12)"><rect/><foreignObject width="40.171875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Clean</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><h2 id="verdict-threshold-and-overall-level">Verdict: threshold and overall level</h2>
+<ul>
+<li>A match counts toward the verdict only if its <strong>FinalScore is positive</strong> (it survived mitigation).</li>
+<li>The overall <strong>threat level</strong> is the highest severity among surviving matches.</li>
+<li>The binary warning fires when <code>FinalScore ≥ ThresholdWarning (3)</code> → <code>ConfidenceWarning</code> → <code>HasWarning = true</code>.</li>
+<li><code>ScanAndClassify</code> then maps <code>HasWarning</code> → <code>SecurityStatusQuarantined</code>, otherwise <code>SecurityStatusClean</code>.</li>
+</ul>
+<h2 id="what-actually-gets-scanned">What actually gets scanned</h2>
+<p><code>ScanSkill</code> scans <code>skill.Content</code> — the <strong><code>SKILL.md</code> body, including its frontmatter, as one
+string.</strong> That&#39;s the always-on path.</p>
+<p>Auxiliary files (scripts, references) are <strong>not</strong> automatically scanned by <code>ScanSkill</code>,
+because their content isn&#39;t stored on the skill model — <code>scanAuxiliaryFile</code> returns empty.
+Script/aux scanning happens only when a caller explicitly passes content to the separate
+<code>ScanAuxiliaryContent(file, content)</code> method, which selects patterns by file type (shell vs
+Python vs JS, gated on extension / <code>SKILL.md</code>).</p>
+<div class="wt-callout note"><div class="ic">📝</div><div class="body"><p>Practical takeaway: today the strong guarantee is on <code>SKILL.md</code> content. Deep per-script
+scanning exists in the engine but is opt-in at the call site. If you&#39;re hardening this,
+that&#39;s the seam to wire up.</p></div></div>
+
+
+<h2 id="quotscan-before-installquot-implemented-but-non-blocking">&quot;Scan before install&quot; — implemented, but non-blocking</h2>
+<p>The headline promise is real <em>and</em> has an asterisk. <code>InstallService.Install</code> calls
+<code>security.NewScanner().ScanAndClassify(skill)</code> <strong>before performing the install</strong>
+(<code>internal/installer/service.go:192-202</code>) — so every install is scanned. <strong>But</strong> the inline
+comment says it plainly: <em>&quot;informational — does not block.&quot;</em> A warning/quarantine result is
+surfaced; it does <strong>not</strong> abort the install today.</p>
+<figure class="wt-diagram"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1118.72px; background-color: transparent;" viewBox="0 0 1118.71875 198" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#333333;stroke:#333333;}#my-svg .marker.cross{stroke:#333333;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#333;color:#333;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#333333!important;stroke-width:0;stroke:#333333;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#333333;stroke-width:1px;}#my-svg .flowchart-link{stroke:#333333;fill:none;}#my-svg .edgeLabel{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .edgeLabel p{background-color:rgba(232,232,232, 0.8);}#my-svg .edgeLabel rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#my-svg .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:rgba(232,232,232, 0.8);text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:rgba(232,232,232, 0.8);padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:rgba(232,232,232, 0.8);fill:rgba(232,232,232, 0.8);}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#9370DB;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node path{stroke:#9370DB;stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#9370DB;filter:none;}#my-svg [data-look="neo"].node circle{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:#9370DB;filter:drop-shadow(1px 2px 2px rgba(185, 185, 185, 1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M188.469,105L192.635,105C196.802,105,205.135,105,212.802,105C220.469,105,227.469,105,230.969,105L234.469,105" id="my-svg-L_I_S_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_I_S_0" data-points="W3sieCI6MTg4LjQ2ODc1LCJ5IjoxMDV9LHsieCI6MjEzLjQ2ODc1LCJ5IjoxMDV9LHsieCI6MjM4LjQ2ODc1LCJ5IjoxMDV9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M412.344,105L416.51,105C420.677,105,429.01,105,436.677,105C444.344,105,451.344,105,454.844,105L458.344,105" id="my-svg-L_S_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_S_R_0" data-points="W3sieCI6NDEyLjM0Mzc1LCJ5IjoxMDV9LHsieCI6NDM3LjM0Mzc1LCJ5IjoxMDV9LHsieCI6NDYyLjM0Mzc1LCJ5IjoxMDV9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M580.073,80.058L590.322,74.548C600.57,69.039,621.066,58.019,636.739,52.51C652.411,47,663.26,47,668.685,47L674.109,47" id="my-svg-L_R_Warn_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_R_Warn_0" data-points="W3sieCI6NTgwLjA3MzQxMjQwNjM5NTcsInkiOjgwLjA1Nzc4NzQwNjM5NTd9LHsieCI6NjQxLjU2MjUsInkiOjQ3fSx7IngiOjY3OC4xMDkzNzUsInkiOjQ3fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M580.073,129.942L590.322,135.452C600.57,140.961,621.066,151.981,640.777,157.49C660.487,163,679.411,163,688.874,163L698.336,163" id="my-svg-L_R_Clean_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_R_Clean_0" data-points="W3sieCI6NTgwLjA3MzQxMjQwNjM5NTcsInkiOjEyOS45NDIyMTI1OTM2MDQzfSx7IngiOjY0MS41NjI1LCJ5IjoxNjN9LHsieCI6NzAyLjMzNTkzNzUsInkiOjE2M31d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M887.547,47L891.714,47C895.88,47,904.214,47,917.729,51.859C931.244,56.718,949.941,66.437,959.29,71.296L968.638,76.155" id="my-svg-L_Warn_Do_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_Warn_Do_0" data-points="W3sieCI6ODg3LjU0Njg3NSwieSI6NDd9LHsieCI6OTEyLjU0Njg3NSwieSI6NDd9LHsieCI6OTcyLjE4NzYzNDY5ODI3NTgsInkiOjc4fV0=" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M863.32,163L871.525,163C879.729,163,896.138,163,913.691,158.141C931.244,153.282,949.941,143.563,959.29,138.704L968.638,133.845" id="my-svg-L_Clean_Do_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_Clean_Do_0" data-points="W3sieCI6ODYzLjMyMDMxMjUsInkiOjE2M30seyJ4Ijo5MTIuNTQ2ODc1LCJ5IjoxNjN9LHsieCI6OTcyLjE4NzYzNDY5ODI3NTgsInkiOjEzMn1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_I_S_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_S_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(641.5625, 47)"><g class="label" data-id="L_R_Warn_0" transform="translate(-11.546875, -12)"><foreignObject width="23.09375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>yes</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(641.5625, 163)"><g class="label" data-id="L_R_Clean_0" transform="translate(-8.6640625, -12)"><foreignObject width="17.328125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>no</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_Warn_Do_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_Clean_Do_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-I-0" data-look="classic" transform="translate(98.234375, 105)"><rect class="basic label-container" style="" x="-90.234375" y="-27" width="180.46875" height="54"/><g class="label" style="" transform="translate(-60.234375, -12)"><rect/><foreignObject width="120.46875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Install requested</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-S-1" data-look="classic" transform="translate(325.40625, 105)"><rect class="basic label-container" style="" x="-86.9375" y="-27" width="173.875" height="54"/><g class="label" style="" transform="translate(-56.9375, -12)"><rect/><foreignObject width="113.875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>ScanAndClassify</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-R-3" data-look="classic" transform="translate(533.6796875, 105)"><polygon points="71.3359375,0 142.671875,-71.3359375 71.3359375,-142.671875 0,-71.3359375" class="label-container" transform="translate(-70.8359375, 71.3359375)"/><g class="label" style="" transform="translate(-44.3359375, -12)"><rect/><foreignObject width="88.671875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>HasWarning?</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-Warn-5" data-look="classic" transform="translate(782.828125, 47)"><rect class="basic label-container" style="" x="-104.71875" y="-39" width="209.4375" height="78"/><g class="label" style="" transform="translate(-74.71875, -24)"><rect/><foreignObject width="149.4375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Surface warning<br />status = Quarantined</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-Clean-7" data-look="classic" transform="translate(782.828125, 163)"><rect class="basic label-container" style="" x="-80.4921875" y="-27" width="160.984375" height="54"/><g class="label" style="" transform="translate(-50.4921875, -12)"><rect/><foreignObject width="100.984375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>status = Clean</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-Do-9" data-look="classic" transform="translate(1024.1328125, 105)"><rect class="basic label-container" style="" x="-86.5859375" y="-27" width="173.171875" height="54"/><g class="label" style="" transform="translate(-56.5859375, -12)"><rect/><foreignObject width="113.171875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Install proceeds</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs></svg></figure><details class="wt-reveal"><summary>So is the README&#39;s &quot;scan before you install&quot; a lie?<span class="hint">— try it yourself first</span></summary><div class="reveal-body"><p>No — but read it precisely. The scan genuinely runs <em>before</em> the symlink is created, so you
+are <em>informed</em> before install. What&#39;s not yet wired is <strong>blocking</strong>: refusing to install a
+high-threat skill. That&#39;s the gap the <code>plans/006-security-scan-before-install</code> work targets.
+In one line: scanned at install and reported today; blocking is on the roadmap.</p></div></details>
+
+
+<h2 id="using-it-directly">Using it directly</h2>
+<ul>
+<li><strong>CLI:</strong> <code>skulto scan</code> with <code>--all</code>, <code>--skill &lt;slug&gt;</code>, <code>--source &lt;repo&gt;</code>, or <code>--pending</code>. It runs the same <code>ScanAndClassify</code>.</li>
+<li><strong>TUI:</strong> press <code>S</code> on a skill&#39;s Detail view; a banner shows on any non-clean skill.</li>
+<li><strong>MCP:</strong> scanning is folded into the install path; there&#39;s no standalone scan tool.</li>
+<li><strong>Standalone:</strong> <code>InstallService.ScanSkill(slug)</code> scans without installing.</li>
+</ul>
+<p>Next: <strong>Part 7 · Data, search &amp; contributing</strong> — the storage engine and how to land a change
+that passes CI.</p>
+
+    </article>
+    <footer class="wt-footer">
+      <span>Generated by the <strong>walkthrough</strong> skill · self-contained &amp; offline</span>
+      <button class="wt-reset" title="Clear saved progress">Reset progress</button>
+    </footer>
+  </main>
+</div>
+
+<script>/* walkthrough route runtime — inlined into every self-contained walkthrough.html.
+   No external dependencies. Handles: TOC scroll-spy, quiz feedback (non-gating),
+   reveal blocks, and optional localStorage progress. */
+(function () {
+  "use strict";
+
+  var KEY = "wt-progress:" + (document.body.getAttribute("data-wt-id") || location.pathname);
+
+  /* ---- Theme toggle (light default, persisted) ---- */
+  var THEME_KEY = "wt-theme";
+  var themeBtn = document.querySelector(".wt-theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Sidebar collapse / responsive drawer ---- */
+  var shell = document.querySelector(".wt-shell");
+  var navOpenBtn = document.querySelector(".wt-nav-open");
+  var navCollapseBtn = document.querySelector(".wt-nav-collapse");
+  var navScrim = document.querySelector(".wt-nav-scrim");
+  var navMq = window.matchMedia("(max-width: 860px)");
+  function setNav(open) {
+    if (!shell) return;
+    shell.classList.toggle("nav-collapsed", !open);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (navCollapseBtn) navCollapseBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  // Auto-collapse on narrow viewports; auto-open when it widens again.
+  function autoNav() { setNav(!navMq.matches); }
+  autoNav();
+  if (navMq.addEventListener) navMq.addEventListener("change", autoNav);
+  else if (navMq.addListener) navMq.addListener(autoNav);
+  if (navOpenBtn) navOpenBtn.addEventListener("click", function () { setNav(true); });
+  if (navCollapseBtn) navCollapseBtn.addEventListener("click", function () { setNav(false); });
+  if (navScrim) navScrim.addEventListener("click", function () { setNav(false); });
+
+  /* ---- TOC scroll-spy ---- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".wt-toc a"));
+  // On narrow screens, picking a TOC entry should close the overlay drawer.
+  tocLinks.forEach(function (a) {
+    a.addEventListener("click", function () { if (navMq.matches) setNav(false); });
+  });
+  var headings = tocLinks
+    .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+    .filter(Boolean);
+
+  function onScroll() {
+    var pos = window.scrollY + 120;
+    var current = headings[0];
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].offsetTop <= pos) current = headings[i];
+    }
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", current && a.getAttribute("href") === "#" + current.id);
+    });
+
+    /* progress bar = scroll completion */
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0;
+    var bar = document.getElementById("wt-progress");
+    if (bar) bar.style.width = pct.toFixed(1) + "%";
+    saveProgress(pct);
+  }
+
+  /* ---- Quiz (non-gating) ---- */
+  document.querySelectorAll(".wt-quiz").forEach(function (quiz) {
+    var explain = quiz.querySelector(".explain");
+    quiz.querySelectorAll(".opt").forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        var correct = opt.getAttribute("data-correct") === "1";
+        // clear previous state but never lock the user out — fully retryable
+        quiz.querySelectorAll(".opt").forEach(function (o) { o.classList.remove("correct", "wrong"); });
+        opt.classList.add(correct ? "correct" : "wrong");
+        if (correct) {
+          quiz.querySelectorAll(".opt").forEach(function (o) {
+            if (o.getAttribute("data-correct") === "1") o.classList.add("correct");
+          });
+        }
+        if (explain) explain.classList.add("show");
+      });
+    });
+  });
+
+  /* ---- localStorage progress (optional, non-blocking) ---- */
+  function saveProgress(pct) {
+    try { localStorage.setItem(KEY, JSON.stringify({ pct: Math.round(pct), at: Date.now() })); } catch (e) {}
+  }
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; }
+  }
+
+  var resetBtn = document.querySelector(".wt-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  /* restore scroll hint on load */
+  window.addEventListener("load", function () {
+    var saved = loadProgress();
+    if (saved && saved.pct > 5 && saved.pct < 95 && !location.hash) {
+      var note = document.querySelector(".wt-resume");
+      if (note) {
+        note.textContent = "Resume where you left off (" + saved.pct + "%)";
+        note.style.display = "inline";
+        note.addEventListener("click", function () {
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - doc.clientHeight;
+          window.scrollTo({ top: (saved.pct / 100) * max, behavior: "smooth" });
+        });
+      }
+    }
+    onScroll();
+  });
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+})();
+</script>
+</body>
+</html>
